@@ -76,6 +76,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **阶段 4 A2 ②：`#include` 真实实现 + 渲染剪枝**（2026-10-17，循环 #17）：核心发现 = 内容**本来就在流里**
+  （`include.py` 的 `_inject_lines.extend`），真缺口是"缺文件只 `print` / 无深度上限 / 渲染面会**内联**头文件内容"。
+  - **诊断策略声明面**（引擎只执行策略，语言知识在语言包）：`[directive_handlers.include] on_missing =
+    "warn"|"error"`（默认 warn）、`max_depth`（默认不限）。**verilog 不声明 ⇒ 打印原样、A/B 0/144**；
+    **C 包声明 `on_missing="error"` + `max_depth=32`** ⇒ 缺文件/循环/深度超限记结构化
+    `result["preprocessor_errors"]`（`kind=missing|cycle|depth`）+ 硬错误时 `result["error"]` 受控非空
+    （**不抛异常**）。嵌套 include 的子诊断并入宿主；`silent` 语义保留。
+  - **渲染前剪枝**（`_prune_include_regions`）：分析面（lint/analyze/transform）照常消费被包含内容；
+    **analyze/transform 之后、render 之前**摘掉完整落在 include 内容区间内的 AST 节点 ⇒ 渲染/格式化
+    只出 `#include` 原行、**不内联**头文件内容、两遍幂等。区间无法被完整顶层节点覆盖（如 `#include` 在
+    函数体内）⇒ **退化整文件原文输出**（`_verbatim_text` 挂根，幂等、绝不内联）。
+  - **顺带修**：`_stage_expand` 原先"宏表为空就不展开"⇒ 不含任何宏的 include 内容拿不到区间（会内联）；
+    改为"有 include 内容也算"，`parse_raw` 分支保持不展开宏但仍算区间。
+  - **验证**：新增 `tests/engine/preprocessor/test_c_include_e2e.py` **10 条**（`""` 相对本目录 / `<>` 只走
+    `-I` / `relative_first` 优先级 / 嵌套两层 / 头文件 `#define` 生效 / 缺文件 / 循环 / 深度 / 渲染不内联 +
+    幂等 / 函数体内退化）；`c_acceptance` **42/0**、A/B verilog CLI **0/144**、受影响面（preprocessor +
+    pipeline + languages-c + languages-verilog）全绿、pyright **0**。
+  - **边界**：**CLI 用户可见**尚未接（`tpc lint` 直连 scanner 不过预处理、`tpc check` 未读
+    `preprocessor_errors`）⇒ 归 A2「两路径统一」；include 内容行排在 marker 前的顺序偏差未改（已 TODO）。
+
 - **⚠ 更正：A1 交付结论撤回（2026-10-17 同日，独立对抗审计）**：下条"A1 已交付"的判据面**不成立**——独立审计对 A1
   判 **`failed`**，实测 **15 条合法 C99 反例**（GCC 16.1.0 对照），其中 **10 条 P0**：`#`/`##` **两侧有空格即失效**
   （`#define C(a,b) a ## b` + `C(x,y)` → `x  y`；`#define S(s) # s` + `S(hi)` → `# hi`）；调用点实参切分

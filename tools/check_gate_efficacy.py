@@ -751,6 +751,28 @@ _MUTATIONS: list[dict[str, str]] = [
                "    seq_box[0] = seq + 1\n",
         "test": "tests/engine/preprocessor/test_primitives.py",
     },
+    {
+        # ── A2 ②：#include 真实实现的三个关键行为 ──
+        "why": "渲染前剪枝若被跳过，include 内容会**内联**进格式化输出（保真破坏 + 不幂等）",
+        "file": "pipeline/__init__.py",
+        "old": "    if not regions or ast is None:\n        return ast\n",
+        "new": "    if True:  # 变异：不剪枝（内联 include 内容）\n        return ast\n",
+        "test": "tests/engine/preprocessor/test_c_include_e2e.py",
+    },
+    {
+        "why": "`on_missing` 策略失效 ⇒ C 包缺头文件退回打印/静默，用户看不到受控诊断",
+        "file": "preprocessor/primitives/include.py",
+        "old": '    if cfg.get("on_missing") == "error":\n',
+        "new": "    if False:  # 变异：策略失效（始终 warn）\n",
+        "test": "tests/engine/preprocessor/test_c_include_e2e.py",
+    },
+    {
+        "why": "`max_depth` 检查失效 ⇒ 病态包含链不再给 `depth` 诊断（无限递归风险）",
+        "file": "preprocessor/primitives/include.py",
+        "old": '    if max_depth is not None and len(ctx["_include_stack"]) >= int(max_depth):\n',
+        "new": "    if False:  # 变异：不检深度\n",
+        "test": "tests/engine/preprocessor/test_c_include_e2e.py",
+    },
 ]
 
 

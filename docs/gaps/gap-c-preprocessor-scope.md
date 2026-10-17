@@ -165,7 +165,17 @@ pipeline + languages-c + policy）**1561 passed**；A/B **0/144**；pyright stri
 （原 A1 判据全打在内部函数 ⇒ 端到端 10 项错而全绿）；③ 边界用**守卫断言**锁住，不用 xfail（xfail 会被当
 "待修"忽略，守卫断言逼后来者显式改）。
 
-## 诚实边界（统一"待抽检"，不得当实测结论用）
+⑱ **A2 ② 落档（2026-10-17，循环 #17）**：`#include` 从"被消费但内容不进流"→ **机制已真实**——内容本就
+在流里（`include.py` 的 `_inject_lines`），本次补齐：**① 诊断策略声明面**（`[directive_handlers.include]`
+的 `on_missing = warn|error` / `max_depth`；C 包声明 `error` + 32，verilog 不声明 ⇒ 默认 warn、打印原样、
+A/B 0/144）**② 渲染前剪枝**（分析面见内容 / 渲染面只出 `#include` 原行，不内联；区间无法被完整顶层节点
+覆盖 ⇒ 整文件原文退化）**③ 无宏定义的 include 也计算渲染区间**（原先 `_stage_expand` 在宏表为空时跳过）。
+**仍未做（A2 剩余）**：**CLI 两路径可见**——`tpc lint` 直连 `LinterScanner` 不过预处理、`tpc check` 未读
+`preprocessor_errors` ⇒ 同一输入两条 CLI 路径诊断不一致；**顺序偏差**（include 内容排在 marker 前，修则
+verilog A/B 0→2/144，待与两路径同批评估）。证据：`tests/engine/preprocessor/test_c_include_e2e.py` **10 条**、
+`c_acceptance` **42/0**、A/B verilog CLI **0/144**。
+
+
 
 - ISO C 条款号（§6.10.x）为**记忆级**；**C23 子条编号未核实**（本机无标准正文；`cppreference`、`gcc.gnu.org` 均 403）。
 - 编译器**静默接受**的项（`#pragma once` / `__COUNTER__` / `__has_include` / `#elifdef` / `__has_c_attribute`）属**引用级** ⇒ 归位待抽检（方法局限见上文）。

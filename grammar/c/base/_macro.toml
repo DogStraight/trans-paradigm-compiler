@@ -45,3 +45,7 @@ max_iterations = 128
 [directive_handlers]
 define = { op = "define", enabled = true }
 undef = { op = "undef", enabled = true }
+# include：**缺文件/循环/深度超限 = 诊断**（C 是真实预处理，缺头文件必须报错；
+# 对比 verilog 不声明 ⇒ 默认 warn 保持既有打印，A/B 零变化）。
+# `max_depth` = 嵌套深度上限（防止病态包含链，非标准语义常量）。
+include = { op = "include", enabled = true, on_missing = "error", max_depth = 32 }

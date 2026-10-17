@@ -104,6 +104,10 @@ class _PipelineContext:
     """保真度分级（ADR-0006 阶段 5）：full 完全重排 / keep_blank 保留空行。"""
     macro_regions: list[dict] = field(default_factory=list)
     """宏区间表（ADR-0017 决策 3）：值体宏在展开文本里的字符区间 + 源区间。"""
+    include_regions: list[dict] = field(default_factory=list)
+    """include 内容区间（展开文本字符区间）：只供**渲染前剪枝**——分析面照常消费。"""
+    raw_source: str = ""
+    """预处理**前**的原始源文本（渲染剪枝退化路径用：整文件原文输出）。"""
     # lint 专用展开文本（铺宏体）：linter 是反向解析器，
     # 它要看的是**真语法结构**——宏体铺进去有没有破坏语法只有展开态能判
     # （锚形态在结构位是普通标识符：`input <锚> d` 无产生式可匹配）。
@@ -442,6 +446,8 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
     """宏指令扫描（仅提取宏表，不展开字符串）。"""
     if not ctx.expand_macros:
         return
+    ctx.raw_source = ctx.source  # 剪枝退化路径要原文（宏展开会改写 ctx.source）
+    include_diags: list[dict] = []
     (
         ctx.macro_table,
         ctx.func_macros,
@@ -457,7 +463,18 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
         search_dirs=ctx.include_dirs,
         predefined=ctx.predefined,
         undefine=ctx.undefine,
+        out_diags=include_diags,
     )
+    if include_diags:
+        # include 问题（语言包按 `on_missing` 策略决定记录方式）：结构化暴露；
+        # 硬错误（缺文件/循环/深度）同时写成受控 `error`（非异常，`tpc check` 可见）。
+        ctx.result["preprocessor_errors"] = include_diags
+        hard = [
+            d for d in include_diags
+            if d.get("kind") in ("missing", "cycle", "depth")
+        ]
+        if hard:
+            ctx.result["error"] = f"preprocessor: {hard[0]['message']}"
     ctx.log(f"[preprocessor] macros defined: {len(ctx.macro_table)}")
     # 扫描 clean_source 中整行占位 marker 的源行号（restore_line_comments 对被吞
     # marker 用已渲染 marker 分段线性插值定位，需要源行号锚点）——占位形态
@@ -479,33 +496,42 @@ def _stage_expand(ctx: _PipelineContext) -> None:
     整行宏 / 空体宏 / 指令行走 line/inline 锚（语言包策略定，见
     grammar/verilog/plugins/macro_policy），由 `restore_anchors` 原位还原。
     """
-    if ctx.expand_macros and ctx.macro_table:
-        # lint 输入 = **展开态**：linter 是反向解析器，要验的是
-        # "宏体铺进去之后语法是否成立"；锚形态只有表达式位可匹配，结构位（类型/关键
-        # 字位）无产生式可对（实测 `input `NT d` 在锚形态下 1 条误报、展开态通过）。
-        if not ctx.lint_source:
-            (
-                ctx.lint_source,
-                _,
-                _,
-                ctx.line_map,
-            ) = expand_tokens(
-                ctx.source,
-                ctx.macro_table,
-                rules_dir=ctx.rules_dir,
-                func_macros=ctx.func_macros,
-            )
-        if ctx.parse_raw:
-            # raw 解析模式：不做替身替换——ctx.source 保持扫指令后的
-            # 原文（宏调用可见），解析器见 `macro.call` 走通配/占位。
-            ctx.log("[preprocessor] macros kept raw (parse_raw)")
-            return
-        ctx.source, ctx.restore_stack, ctx.macro_regions, _ = expand_tokens(
+    has_include_content = any(m is None for m in ctx.clean_line_map)
+    if not (ctx.expand_macros and (ctx.macro_table or has_include_content)):
+        return
+    # lint 输入 = **展开态**：linter 是反向解析器，要验的是
+    # "宏体铺进去之后语法是否成立"；锚形态只有表达式位可匹配，结构位（类型/关键
+    # 字位）无产生式可对（实测 `input `NT d` 在锚形态下 1 条误报、展开态通过）。
+    if ctx.macro_table and not ctx.lint_source:
+        (
+            ctx.lint_source,
+            _,
+            _,
+            ctx.line_map,
+        ) = expand_tokens(
             ctx.source,
             ctx.macro_table,
             rules_dir=ctx.rules_dir,
             func_macros=ctx.func_macros,
         )
+    if ctx.parse_raw:
+        # raw 解析模式：不做替身替换——ctx.source 保持扫指令后的
+        # 原文（宏调用可见），解析器见 `macro.call` 走通配/占位。
+        ctx.log("[preprocessor] macros kept raw (parse_raw)")
+        macro_defs = {}
+    else:
+        macro_defs = ctx.macro_table
+    # include 内容 → 展开文本区间（渲染前剪枝用；无宏定义时也要算：
+    # 被包含内容可能不含任何宏，但渲染面同样不能内联它）
+    ctx.source, ctx.restore_stack, ctx.macro_regions, _ = expand_tokens(
+        ctx.source,
+        macro_defs,
+        rules_dir=ctx.rules_dir,
+        func_macros=ctx.func_macros,
+        include_line_flags=[m is None for m in ctx.clean_line_map],
+        out_include_regions=ctx.include_regions,
+    )
+    if not ctx.parse_raw:
         ctx.log("[preprocessor] macros expanded")
 
 
@@ -1106,6 +1132,9 @@ def run_pipeline_on_source(
 
     # 宏扫描 + 展开
     _stage_macro_scan(ctx)
+    if ctx.result.get("error"):
+        # include 硬错误（缺文件/循环/深度）：内容未进流，继续跑只会得到次生错误
+        return ctx.result
     _stage_expand(ctx)
 
     # 词法
@@ -1131,7 +1160,7 @@ def run_pipeline_on_source(
     if ctx.stage == "parse":
         return _succeed(ctx, ast)
 
-    return _run_post_parse(ctx, ast, schedule, cfg)
+    return _run_post_parse(ctx, ast, schedule, cfg, tokens)
 
 
 def _succeed(ctx: _PipelineContext, ast: Any = None) -> dict[str, Any]:
@@ -1244,9 +1273,13 @@ def _build_pipeline_ctx(
 
 
 def _run_post_parse(
-    ctx: _PipelineContext, ast: Any, schedule: str | None, cfg: dict
+    ctx: _PipelineContext,
+    ast: Any,
+    schedule: str | None,
+    cfg: dict,
+    tokens: list,
 ) -> dict[str, Any]:
-    """解析之后的收尾：归一化 → 编排调度 → trace 落盘 → 渲染。"""
+    """解析之后的收尾：归一化 → 编排调度 → trace 落盘 → include 剪枝 → 渲染。"""
     # 归一化
     ast = normalize_ast(ast)
     if not ctx.quiet and ctx.ast_json:
@@ -1280,6 +1313,68 @@ def _run_post_parse(
     if ctx.stage in _LEGACY_PASS_STAGES:
         return _succeed(ctx, ast)
 
+    # include 剪枝（渲染面）：分析面（lint/analyze/transform）已消费被包含内容；
+    # 渲染面只该出 `#include` 原行 ⇒ 摘掉完整落在 include 内容区间内的节点。
+    ast = _prune_include_regions(ctx, ast, tokens)
+
     # 渲染
     _stage_render(ctx, ast, ctx.result.get("parser"))
     return ctx.result
+
+
+def _prune_include_regions(
+    ctx: _PipelineContext, ast: Any, tokens: list
+) -> Any:
+    """把 include 内容区间内的 AST 节点从树里摘掉（**只影响渲染**）。
+
+    为什么在渲染前剪：`#include` 被真实展开后内容进流，分析面（lint/analyze）必须
+    看到它；但渲染/格式化**不能内联**头文件内容（保真破坏 + 幂等风险）。剪枝放在
+    analyze/transform 之后 ⇒ 分析结果不变，渲染面看不到内容。
+
+    退化路径：若某区间**无法被完整顶层节点覆盖**（如 `#include` 出现在函数体内，
+    内容 token 落在语句中间），不硬剪——整文件退化为**原文输出**（`_verbatim_text`
+    挂在根节点），保证幂等且绝不内联。
+    """
+    regions = ctx.include_regions
+    if not regions or ast is None:
+        return ast
+    offsets = _token_offsets(ctx.source, tokens)
+    spans = _node_spans(ast)
+    span_by_node: dict[int, tuple[int, int]] = {
+        id(n): (a, b) for n, a, b in spans
+    }
+    ranges = [(r["offset"], r["end_offset"]) for r in regions]
+
+    def _inside(lo: int, hi: int) -> bool:
+        start = offsets[lo]
+        end = offsets[hi - 1] + len(tokens[hi - 1].content)
+        return any(rs <= start and end <= re_ for rs, re_ in ranges)
+
+    dropped: list[tuple[int, int]] = []
+
+    def _walk(node: Any) -> None:
+        children = getattr(node, "sub_node", None) or []
+        kept: list[Any] = []
+        for child in children:
+            span = span_by_node.get(id(child))
+            if span is not None and _inside(span[0], span[1]):
+                dropped.append(span)
+                continue
+            _walk(child)
+            kept.append(child)
+        if children:
+            node.sub_node = kept
+
+    _walk(ast)
+
+    # 覆盖检查：区间内每个 token 都必须归属某个被摘节点（否则内容会漏进渲染面）
+    for rs, re_ in ranges:
+        for i, off in enumerate(offsets):
+            if rs <= off < re_ and not any(
+                d0 <= i < d1 for d0, d1 in dropped
+            ):
+                if ctx.raw_source:
+                    ctx.log("[preprocessor] include 剪枝不完整 ⇒ 整文件原文输出")
+                    ast._verbatim_text = ctx.raw_source
+                return ast
+    return ast

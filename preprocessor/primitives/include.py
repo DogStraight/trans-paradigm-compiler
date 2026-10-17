@@ -99,6 +99,26 @@ def _resolve_path(
     return None
 
 
+# ── include 问题处置（按语言包策略；引擎只执行策略） ──
+
+
+def _report_problem(ctx: dict, kind: str, message: str) -> None:
+    """缺失/循环/深度超限的处置。
+
+    `on_missing = "warn"`（默认，verilog 不声明 ⇒ 行为与既有逐字一致）⇒ 打印；
+    `"error"`（C 包声明）⇒ 不打印，记结构化诊断 `ctx["_include_diags"]`，由管线
+    转成 `preprocessor_errors` / 受控 `error`。**不抛异常**（tpc 惯例：输入问题给
+    诊断，非异常）。
+    """
+    cfg = ctx.get("_include_config", {})
+    if cfg.get("on_missing") == "error":
+        ctx.setdefault("_include_diags", []).append(
+            {"kind": kind, "message": message}
+        )
+        return
+    print(f"⚠️ [preprocessor] {message}")
+
+
 @register("include")
 def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理包含指令（路径形态由声明给出，关键字拼写不写死）。
@@ -117,14 +137,23 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         raw_path, ctx["source_dir"], ctx["inc_dirs"], form["relative_first"]
     )
     if inc_path is None:
-        silent = cfg.get("silent", False)
-        if not silent:
-            print(f"⚠️ [preprocessor] include 文件未找到: {raw_path}")
+        if cfg.get("silent", False):
+            return
+        _report_problem(ctx, "missing", f"include 文件未找到: {raw_path}")
         return
 
     norm = os.path.normcase(inc_path)
     if norm in ctx["_include_stack"]:
-        print(f"⚠️ [preprocessor] 循环 include 检测: {inc_path}，跳过")
+        _report_problem(ctx, "cycle", f"循环 include 检测: {inc_path}，跳过")
+        return
+
+    max_depth = cfg.get("max_depth")
+    if max_depth is not None and len(ctx["_include_stack"]) >= int(max_depth):
+        _report_problem(
+            ctx,
+            "depth",
+            f"include 递归深度超限（max_depth={max_depth}）: {inc_path}，跳过",
+        )
         return
 
     ctx["_include_stack"].add(norm)
@@ -133,6 +162,7 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
             inc_source = f.read()
         from .._expand import scan_directives
 
+        child_diags: list[dict] = []
         (
             inc_macros,
             inc_funcs,
@@ -149,7 +179,11 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
             search_dirs=ctx["inc_dirs"],
             # marker 序号与宿主**共用**（嵌套各从 0 起会撞号 ⇒ restore 错位）
             seq_box=ctx["_seq_box"],
+            out_diags=child_diags,
         )
+        if child_diags:
+            # 子扫描的诊断并入宿主（否则嵌套里的循环/深度诊断随子 ctx 丢失）
+            ctx.setdefault("_include_diags", []).extend(child_diags)
         ctx["macro_defs"].update(inc_macros)
         ctx.setdefault("_func_params", {}).update(inc_funcs)
         ctx.setdefault("_cond_blocks", []).extend(inc_blocks)

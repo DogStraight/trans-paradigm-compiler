@@ -9,15 +9,17 @@
 ## 一、在途批次：阶段 4 A2（当前主线唯一在做的块）
 
 - [ ] **A2 预处理器收尾批次**（逐项独立判据；验收 = 退出判据 1 实质达成）：
-      **① `#include` 真实实现**：`path_forms` 接线 + 内容进流 + 缺文件/循环**给诊断**（现只 `print`）。
-      **② 两路径统一**：lint 与管线段同一输入都给诊断、都不抛异常；顺带落地 **token 级重扫**（= A1 两条已
-      声明边界：替换后再现的调用 / 实参跨行），以 **A/B 0/144 + 后缀链**为独立检查点。
-      **③ `#define` 非法输入诊断面**：空名 / 畸形形参表 / 实参个数不校验 / `#`·`##` 约束违反（GCC 均
+      **① 两路径统一**：`tpc lint`（直连 `LinterScanner`，**不过预处理**）与 `tpc check`/管线段
+      （`ProjectChecker`/`run_pipeline_on_source`）对同一输入要给**同类诊断**、都不抛异常；include 的
+      `preprocessor_errors` 要在这两条 CLI 路径上**用户可见**（当前机制已在 `result` 里，CLI 未接线）。
+      顺带落地 **token 级重扫**（= A1 两条已声明边界：替换后再现的调用 / 实参跨行），以 **A/B 0/144 +
+      后缀链**为独立检查点。
+      **② `#define` 非法输入诊断面**：空名 / 畸形形参表 / 实参个数不校验 / `#`·`##` 约束违反（GCC 均
       error、本包静默）⇒ 按「语法宽进 + 诊断走 linter」给**位置正确**的诊断。
-      （已完成移出：`expand_macros` 默认口径统一 ✅、gap ⑮ 文档漂移 ✅）
-      **③ 待修的已知偏差（不并入 ②）**：include 内容行排在 marker **前**（修正 ⇒ 内容行号 ±1 ⇒ verilog
-      A/B 从 0/144 变 2/144，属可见变化）⇒ 与渲染通道（V 剪枝）一起统一，**不单独改**。
-      链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑮⑯⑰；`preprocessor/README.md`「已知边界」
+      （已完成移出：`expand_macros` 默认口径统一 ✅、gap ⑮ 文档漂移 ✅、`#include` 真实实现 + 渲染剪枝 ✅）
+      **待修的已知偏差**：include 内容行排在 marker **前**（修正 ⇒ 内容行号 ±1 ⇒ verilog A/B 0→2/144，
+      属可见变化）⇒ 与两路径统一同批评估，**不单独改**。
+      链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑮⑯⑰⑱；`preprocessor/README.md`「已知边界」
 
 ## 二、C 包缺陷（A2 之外，能做的）
 

@@ -114,7 +114,30 @@ def _get_expand_config() -> dict[str, int]:
 
 
 def _get_include_config() -> dict:
-    return dict(_directives_cfg.get("include", {}))
+    """include 指令配置（语言包声明 + 引擎默认）。
+
+    `on_missing`：缺文件 / 循环 / 深度超限的处置——`warn`（默认，保留既有打印，
+    verilog 不声明 ⇒ 零变化）或 `error`（结构化诊断，由管线转成受控错误）。
+    `max_depth`：嵌套深度上限（未声明 = 不限）。
+    默认值只在引擎侧此处一处；**用哪种策略由语言包声明**（引擎不写死语言知识）。
+    """
+    cfg: dict = {"on_missing": "warn"}
+    cfg.update(_directives_cfg.get("include", {}))
+    policy = cfg.get("on_missing")
+    if policy not in ("warn", "error"):
+        raise ConfigError(
+            f"[preprocessor.directives.include] on_missing 非法：{policy!r}"
+            "（只能是 'warn' 或 'error'）"
+        )
+    max_depth = cfg.get("max_depth")
+    if max_depth is not None and (
+        not isinstance(max_depth, int) or max_depth <= 0
+    ):
+        raise ConfigError(
+            f"[preprocessor.directives.include] max_depth 非法：{max_depth!r}"
+            "（需为正整数，或省略表示不限）"
+        )
+    return cfg
 
 
 def _advance_block_comment(
@@ -283,6 +306,7 @@ def scan_directives(
     predefined: dict[str, str] | None = None,
     undefine: set[str] | None = None,
     seq_box: list[int] | None = None,
+    out_diags: list[dict] | None = None,
 ) -> tuple[
     dict[str, str],
     dict[str, list[str]],
@@ -325,6 +349,9 @@ def scan_directives(
     _scan_lines(source.split("\n"), ctx, prefix, directives_set, rules_dir)
 
     result = _collect_scan_result(ctx, join_map)
+    if out_diags is not None:
+        # 结构化诊断由调用方持有（管线转成 `preprocessor_errors`）——返回元组不变
+        out_diags.extend(ctx.get("_include_diags", []))
     # 宏体**不再预展开**（③）：`macro_defs` 保持原始体，替换文本由调用点用
     # `macro_expand.expand_text(..., hideset={name})` 现算 ⇒ 消除"扫描期预展开 +
     # 调用点正则插入"的双算法路径（P0-8/P0-10/P2-1 同一根因）。
@@ -366,6 +393,8 @@ def _build_scan_ctx(
         # 扫描传同一个 box，避免与宿主撞号（`tpc:directive:N` 必须全局唯一）。
         "_seq_box": seq_box if seq_box is not None else [0],
         "_directive_placeholders": {},
+        # include 问题诊断（按语言包 `on_missing` 策略：error 时记此，warn 时打印）
+        "_include_diags": [],
         "_predefined": dict(predefined) if predefined else {},
         "_undefine": set(undefine) if undefine else set(),
         "directive_lines": [],
@@ -718,6 +747,8 @@ def expand_tokens(
     rules_dir: str,
     prefix: str | None = None,
     func_macros: dict[str, list[str]] | None = None,
+    include_line_flags: list[bool] | None = None,
+    out_include_regions: list[dict] | None = None,
 ) -> tuple[str, list[dict], list[dict], list[int]]:
     """在源码文本中展开宏调用（纯文本层），并注册统一锚 / 宏区间表。
 
@@ -841,9 +872,52 @@ def expand_tokens(
     # （`lines[i] = ...` 内嵌 \n）→ 一行源行对应一串连续输出行。
     out_to_src = _out_to_src_map(lines)
 
+    if out_include_regions is not None and include_line_flags is not None:
+        # include 内容行 → 展开文本字符区间（渲染前剪枝用；分析面照常消费内容）
+        out_include_regions.extend(
+            _include_regions_from_flags(include_line_flags, lines)
+        )
+
     return(
         "\n".join(lines), ctx.restoration_stack, macro_regions, out_to_src
     )
+
+
+def _include_regions_from_flags(
+    flags: list[bool], lines: list[str]
+) -> list[dict[str, int]]:
+    """include 内容行（逐行布尔）→ 展开文本的字符区间表（连续行合并）。
+
+    只供**渲染前剪枝**用：分析面（lint/analyze）照常消费内容，渲染面按区间摘节点。
+    区间按"一行在展开文本里的字符跨度"算——宏体换行会改变输出行数，但一个输入行
+    的跨度覆盖它展开出的所有输出行（因此不受影响）。
+    """
+    if len(lines) != len(flags):
+        flags = flags[: len(lines)]
+    joined = "\n".join(lines)
+    counts = [ln.count("\n") + 1 for ln in lines]
+    line_char: list[int] = []
+    pos = 0
+    for ln in joined.split("\n"):
+        line_char.append(pos)
+        pos += len(ln) + 1
+    starts: list[int] = []
+    acc = 0
+    for i in range(len(lines)):
+        starts.append(line_char[acc] if acc < len(line_char) else len(joined))
+        acc += counts[i]
+    regions: list[dict[str, int]] = []
+    run_start: int | None = None
+    for i, flag in enumerate(flags):
+        if flag:
+            if run_start is None:
+                run_start = starts[i]
+        elif run_start is not None:
+            regions.append({"offset": run_start, "end_offset": starts[i] - 1})
+            run_start = None
+    if run_start is not None:
+        regions.append({"offset": run_start, "end_offset": len(joined)})
+    return regions
 
 
 def _raw_variadic_for(
