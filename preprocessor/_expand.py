@@ -259,8 +259,9 @@ def _inject_directive_marker(
     嵌套 ifdef 内的 define 还原后顶格（ref 里 define 有 2/4 空格缩进）。
     占位行按 (原始行号, 文本) 入账本——1:1 替换不改变行数，行映射照常。
     """
-    seq = ctx["_directive_seq"]
-    ctx["_directive_seq"] = seq + 1
+    seq_box = ctx["_seq_box"]
+    seq = seq_box[0]
+    seq_box[0] = seq + 1
     marker = f"tpc:directive:{seq}"
     placeholder = line_marker(syntax, marker)
     ctx.setdefault("_directive_placeholders", {})[marker] = line
@@ -281,6 +282,7 @@ def scan_directives(
     search_dirs: list[str] | None = None,
     predefined: dict[str, str] | None = None,
     undefine: set[str] | None = None,
+    seq_box: list[int] | None = None,
 ) -> tuple[
     dict[str, str],
     dict[str, list[str]],
@@ -307,7 +309,13 @@ def scan_directives(
     """
     prefix, directives_set = _load_config(rules_dir)
     ctx = _build_scan_ctx(
-        rules_dir, source_path, search_dirs, predefined, undefine, _include_stack
+        rules_dir,
+        source_path,
+        search_dirs,
+        predefined,
+        undefine,
+        _include_stack,
+        seq_box,
     )
 
     # ── 预合并延续行（反斜杠折行）──
@@ -330,12 +338,16 @@ def _build_scan_ctx(
     predefined: dict[str, str] | None,
     undefine: set[str] | None,
     include_stack: set[str] | None,
+    seq_box: list[int] | None = None,
 ) -> dict:
     """扫描会话上下文：宏表 + 条件栈/占位序号 + 路径与配置（handler 共享）。
 
     搜索路径：CLI 传入的 search_dirs 优先，合并配置中的 search_dirs。
     带参宏的实参形态（语言包 `[macro_recognition]` 的 call_args / arg_separator）：
     定义侧形参表与展开侧实参表共用它（引擎不硬编码 `(` / `,`）。
+    `seq_box`（单元素列表 = 共享计数器）：**嵌套 include 的递归扫描必须与宿主共用**
+    一个 marker 序号源——各自从 0 起会撞号（clean 流出现两个 `tpc:directive:0`），
+    使 `restore_anchors` 还原错位；未传则新建（顶层扫描）。
     """
     inc_config = _get_include_config()
     src_dir = resolve_source_dir(source_path, rules_dir)
@@ -350,7 +362,9 @@ def _build_scan_ctx(
         "_cond_blocks": [],
         "_cond_seq": 0,
         "_cond_placeholders": {},
-        "_directive_seq": 0,
+        # 指令 marker 序号源（单元素 list = 可共享的计数器）：嵌套 include 递归
+        # 扫描传同一个 box，避免与宿主撞号（`tpc:directive:N` 必须全局唯一）。
+        "_seq_box": seq_box if seq_box is not None else [0],
         "_directive_placeholders": {},
         "_predefined": dict(predefined) if predefined else {},
         "_undefine": set(undefine) if undefine else set(),

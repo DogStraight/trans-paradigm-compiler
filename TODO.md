@@ -15,6 +15,8 @@
       **③ `#define` 非法输入诊断面**：空名 / 畸形形参表 / 实参个数不校验 / `#`·`##` 约束违反（GCC 均
       error、本包静默）⇒ 按「语法宽进 + 诊断走 linter」给**位置正确**的诊断。
       （已完成移出：`expand_macros` 默认口径统一 ✅、gap ⑮ 文档漂移 ✅）
+      **③ 待修的已知偏差（不并入 ②）**：include 内容行排在 marker **前**（修正 ⇒ 内容行号 ±1 ⇒ verilog
+      A/B 从 0/144 变 2/144，属可见变化）⇒ 与渲染通道（V 剪枝）一起统一，**不单独改**。
       链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑮⑯⑰；`preprocessor/README.md`「已知边界」
 
 ## 二、C 包缺陷（A2 之外，能做的）

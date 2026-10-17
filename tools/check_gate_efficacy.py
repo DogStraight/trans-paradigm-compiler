@@ -739,6 +739,18 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": '    ("expand_macros", "expand_macros", False),',
         "test": "tests/engine/pipeline/test_expand_macros_default.py",
     },
+    {
+        "why": "指令 marker 序号源若各起一份（嵌套 include 递归不共享计数器）⇒ 嵌套文件与宿主"
+               "撞号，`restore_anchors` 按 marker 唯一性还原会错位（2026-10-17 实测）",
+        "file": "preprocessor/_expand.py",
+        "old": "    seq_box = ctx[\"_seq_box\"]\n"
+               "    seq = seq_box[0]\n"
+               "    seq_box[0] = seq + 1\n",
+        "new": "    seq_box = [0]  # 变异：序号源各起一份（嵌套撞号）\n"
+               "    seq = seq_box[0]\n"
+               "    seq_box[0] = seq + 1\n",
+        "test": "tests/engine/preprocessor/test_primitives.py",
+    },
 ]
 
 

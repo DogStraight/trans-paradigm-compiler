@@ -37,6 +37,8 @@ def _ctx(**kw) -> dict:
         "_cond_blocks": [],
         "_cond_seq": 0,
         "_cond_placeholders": {},
+        # 指令 marker 序号源：生产由 `_build_scan_ctx` 建；嵌套 include 递归共用同一 box
+        "_seq_box": [0],
         "_inject_lines": [],
         "_undefine": set(),
         "_predefined": {},
@@ -281,6 +283,30 @@ class TestInclude:
         )
         _call("include", '`include "inc.v"', other)  # 未声明的形态 → 不识别
         assert other["macro_defs"] == {}
+
+    def test_include_nested_markers_unique(self, tmp_path):
+        """嵌套 include 的指令 marker 序号**全局唯一**（各自从 0 起会撞号 ⇒ restore 错位）。
+
+        事故（2026-10-17 实测）：`include` 递归 `scan_directives` 时序号源各自从 0 重来，
+        宿主与嵌套文件的 marker 同为 `tpc:directive:0` ⇒ `restore_anchors` 按 marker 唯一性
+        还原会错位。修法 = 递归共用同一个 `seq_box` 计数器。
+        """
+        (tmp_path / "inner.v").write_text(
+            "`define INNER 7\nwire w;\n", encoding="utf-8"
+        )
+        (tmp_path / "outer.v").write_text(
+            '`include "inner.v"\n`define OUTER 1\nwire z;\n', encoding="utf-8"
+        )
+        src = (tmp_path / "outer.v").read_text(encoding="utf-8")
+        result = scan_directives(
+            src, "grammar/verilog", source_path=str(tmp_path / "outer.v")
+        )
+        markers = sorted(result[3])
+        assert markers == [
+            "tpc:directive:0",
+            "tpc:directive:1",
+            "tpc:directive:2",
+        ], markers
 
     def test_include_path_forms_invalid_fail_fast(self, tmp_path):
         """形态非法（非列表 / 元素缺 open·close）→ ConfigError。"""

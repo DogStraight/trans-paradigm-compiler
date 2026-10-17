@@ -147,6 +147,8 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
             source_path=inc_path,
             _include_stack=ctx["_include_stack"],
             search_dirs=ctx["inc_dirs"],
+            # marker 序号与宿主**共用**（嵌套各从 0 起会撞号 ⇒ restore 错位）
+            seq_box=ctx["_seq_box"],
         )
         ctx["macro_defs"].update(inc_macros)
         ctx.setdefault("_func_params", {}).update(inc_funcs)
