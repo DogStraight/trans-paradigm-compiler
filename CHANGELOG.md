@@ -5,6 +5,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **阶段 4 A1 宏核心返工收口：审计 15 反例 → 3 偏差（= 2 条已声明边界）**（2026-10-17，循环 #16；
+  `task-53`）：
+  - **已修**（均以端到端用例锁住）：`#`/`##` 两侧空格；调用点实参切分改 **token 级**（字面量/注释内
+    逗号与括号不再当分隔/收束符，删文本级 `MacroCallArgs.split` 的调用点）；裸调用**长名优先**；
+    函数宏无 `(` 不展开（不回退对象宏）；`#undef` 清形参表；**去掉宏体预展开**（替换文本一律由
+    hideset 现算）；跨行块注释**整段掩码**（P1-3）；`#__VA_ARGS__` **实参原文切片**（P1-1：
+    `V(a ,  b)` → `"a , b"`，GCC 16.1 对拍）。
+  - **两条已声明边界**（以守卫断言锁当前输出、不用 xfail，见 `preprocessor/README.md`「已知边界」）：
+    ① 替换结果里再现的调用不重扫（`#define g f`+`g(2)`；`f(2)(9)`）——**案 (A)**（整行 token 展开 +
+    回调保位置映射）在**实现前**判定撞 verilog 后缀链（`_extend_macro_chain`/`suffix_after_call` 在
+    替换前扩调用区间，ADR-0017）⇒ 裁定 **(B)**：单趟保留，token 级重扫归 A2「两路径统一」，以
+    **verilog A/B 0/144 + 后缀链**为独立检查点；② **实参跨行的调用不展开**（替换区间跨行会改输出
+    行数/行映射 = 冻结契约面，A1 不动）。
+  - **判据面重建**：`tests/engine/preprocessor/test_c_macro_end_to_end.py`（18 条，**生产同路**
+    `scan_directives`→`expand_tokens`；来源 = 独立审计 14 反例 + 1 条真实语料）；门禁变异 **65 → 69**
+    （4 条**端到端**：原文切片 / 整段掩码 / 掩码关闭 / 长名优先，逐条 `--only` 实测变红）。教训：
+    上一轮 8 条 A1 变异**全打在内部函数**上，端到端 10 项错而门禁全绿 ⇒ 变异/用例必须打端到端。
+  - **验证**（Lead 独立复跑）：审计脚本 **3 偏差**（= 两条边界）；`tests/engine/preprocessor`
+    **186 passed**；受影响面（preprocessor+pipeline+languages-c+policy）**1561 passed**；
+    A/B **0/144**；pyright strict **0**。**A1 分级 = `partial`**——原因 = 3 条**已声明边界**（非缺验证）。
+
 ### Changed
 
 - **规划档容量清理：删已完成项 + 校陈数**（2026-10-17，作者点名"先缓解待做列表容量再推进"）：
