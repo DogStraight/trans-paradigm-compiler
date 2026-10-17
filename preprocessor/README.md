@@ -32,6 +32,7 @@
 | 宏调用后随字面量后缀（`` `W'd0 `` 的 `'d0`；比 `[[number.based]]` 宽一档） | `[macro_recognition]`（`suffix_after_call`） | `macro_shape.py::load_macro_call_suffix`（编译形态模式）→ `_expand.py`（区间扩展） |
 | include 路径形态（开 / 闭定界符 + 解析策略：相对优先 or 仅 search_dirs） | `[directive_handlers.include]`（`path_forms`；未声明→引擎默认两形态） | `primitives/include.py`（形态匹配 + 路径解析） |
 | 宏**定义侧**形式语法（变参占位 `...` 等；linter 阶段检查的启用判据与形态） | `[macro_syntax]`（`variadic_marker`；与 `[macro_recognition]` 同文件） | `macro_shape.py::load_macro_syntax`（声明解析；**未声明 ⇒ 不启用**）→ `linter/macro_syntax.py` |
+| 条件指令**求值语义**（`#if`/`#elif`：算子符号→动作+优先级/结合性、整型常量形态/后缀、字符常量转义/符号扩展、`defined` 拼写） | `[condition]`（`grammar/c/base/_macro.toml`；**声明本段 ⇒ 接线**） | `condition.py`（通用求值器：定义/常量/字符/Pratt 求值）→ `primitives/condition.py`（`cond_if`/`cond_elif`，复用 `ifdef` 的条件块机制） |
 | 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
 | 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
 
@@ -112,11 +113,10 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 派生（不另写标识符字符类）；`[expand] max_iterations` 只是**资源上限守卫**
 （同一算法上的预算，不是第二套算法）。
 
-**阶段 4 首片 A 的已知边界**：`#include` 缺文件/循环仍只 `print` 警告（**A2 修**：
-改诊断）；`#if`/`#elif` 整型表达式、`#line`/`#error`/`#pragma`/`_Pragma` 与 C23 项
+**阶段 4 首片 A/B 的已知边界**：`#line`/`#error`/`#pragma`/`_Pragma` 与 C23 项
 （`#warning`/`#elifdef`/`#embed`/`__VA_OPT__`/`__has_include`）**未实现**（范围基线见
 `docs/gaps/gap-c-preprocessor-scope.md`）；`-E` 字节保真不承诺；`__DATE__`/`__TIME__`
-**永久排除**（破坏幂等）。
+**永久排除**（破坏幂等）。首片 B（`#if` 求值）的边界见下「条件指令求值边界」。
 
 已声明边界（端到端用例里以**守卫断言**锁住，落地时必须显式改断言）：
 
@@ -129,6 +129,18 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 - 宏算子字符串化按**实参原文切片**（`#__VA_ARGS__` 的间隔空白保留：`V(a ,  b)` ⇒
   `"a , b"`，与 GCC 一致）；体展开里的嵌套调用无原文时退回 token 拼接。
 
+**条件指令求值边界**（首片 B；对拍口径 = gcc 16.1.0 `-std=c99 -pedantic-errors`，`condition.py` 头注详述）：
+
+- **C23 项不实现**：c23 里 `true`/`false` 在 `#if` 中按 1/0（gcc 实测）、`u8'a'` 字符常量、
+  二进制常量 `0b101`、`#elifdef`/`#elifndef`——tpc 当前按"未声明标识符 ⇒ 0 / 未声明记号 ⇒ 诊断"。
+- **跳过组只不解析/不求值表达式**（与 gcc 一致）；但 gcc 仍对跳过组内的**词法**错误
+  （未闭合字符常量等）告警，tpc 不做（token 化只在求值时发生）。
+- **`#else`/`#endif`/`#ifdef` 后的多余 token** 不诊断（gcc pedwarn `extra tokens at end of ...`）。
+- **除零/有符号溢出**按 tpc 口径 = 受控硬错误并停管线（gcc 除零取左操作数继续出文本、溢出
+  在 `-pedantic-errors` 下同样报错但继续）。
+- 移位计数语义按 gcc 的 UB 口径落地（负计数反向移位、计数 ≥ 位宽时左移 0/右移饱和），
+  见 `condition.py::_eval_shift` 头注。
+
 ## 文件清单
 
 | 文件 | 一句话 |
@@ -136,10 +148,11 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 | `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 |
 | `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析：前缀 token 文本 + 名字候选 + 实参形态 + `call_shape`/算子；`[macro_syntax]` 定义侧形式语法，未声明 ⇒ 不启用） |
 | `macro_expand.py` | 宏展开核心（hideset 重扫描 + `#`/`##`/变参 + 掩码；`#` 字符串化的 token 间空白折叠） |
+| `condition.py` | 条件指令（`#if`/`#elif`）**整型常量表达式求值**（`[condition]` 声明驱动：算子/常量/字符/`defined`；未声明 ⇒ 不接线） |
 | `_reverse.py` | 宏反向（统一位置桥：锚 + 原文回插） |
 | `_bridge.py` | 统一位置桥（Anchor Bridge）——锚 + 原文消耗式回插引擎 |
 | `_markers.py` | tpc marker 书写/识别（注释形态声明驱动） |
-| `primitives/` | 指令处理原语（define/ifdef/include/undef 等） |
+| `primitives/` | 指令处理原语（define/ifdef/include/undef；条件指令 `cond_if`/`cond_elif` 复用 ifdef 的条件块机制） |
 
 > 入口：`_expand.py`（展开）/ `_reverse.py`（反向）；宏还原门禁见
 > `tests/e2e/`（test_comment_restore / 宏还原）。

@@ -48,6 +48,194 @@ variadic_name = "__VA_ARGS__"
 # 未声明 ⇒ 形参项只能是标识符（不允许变参项）。
 variadic_marker = "..."
 
+# ── [condition] 条件指令求值声明面（`#if` / `#elif`；C99 §6.10.1）──
+#
+# **声明本段 ⇒ 启用表达式求值**（`[directive_handlers]` 把 `if` / `elif` 绑到
+# `cond_if` / `cond_elif`）；未声明 ⇒ 不接线（verilog 的 `ifdef`/`elsif` 宏名语义不变）。
+# 求值语义全部在这里（引擎只做通用求值，见 `preprocessor/condition.py`）：
+# 整型模型 / 算子符号与动作 / 常量形态 / 字符常量形态 / `defined` 拼写。
+# 求值口径以本机 GCC 16.1.0（`-std=c99 -pedantic-errors`）对拍为准（见测试）。
+[condition]
+# `defined` 算子拼写（两种写法：`defined X` / `defined(X)`；操作数**不**宏展开）
+defined = "defined"
+# 表达式分组记号（文本；预处理表达式不是 C 完整表达式，故不引用 token 表）
+lparen = "("
+rparen = ")"
+# 整型求值宽度（C99 §6.10.1p4：signed/unsigned 分别按 intmax_t/uintmax_t 求值）
+intmax_bits = 64
+# 整型常量后缀（C99 §6.4.4.1）：`unsigned-suffix long-suffix?` / `long-suffix unsigned-suffix?`；
+# 值模型不区分 long（一律按 intmax/uintmax）；`u` 字符 = 无符号标记。
+# `lL` 混写（如 `1lL`）不合法（gcc: invalid suffix），正则已排除。
+suffix_pattern = "(?:[uU](?:(?:ll|LL|l|L))?|(?:(?:ll|LL|l|L))[uU]?)?"
+unsigned_chars = "uU"
+
+# ── 二元 / 三目算子：**声明序 = 优先级（低 → 高）**；结合性随项 ──
+# 去掉 C 完整表达式里的赋值 / 逗号 / sizeof / 类型名（预处理常量表达式无这些形态）。
+[[condition.operator]]
+symbol = "?"
+action = "conditional"
+assoc = "right"
+second = ":"
+
+[[condition.operator]]
+symbol = "||"
+action = "logical-or"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "&&"
+action = "logical-and"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "|"
+action = "bitwise-or"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "^"
+action = "bitwise-xor"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "&"
+action = "bitwise-and"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "=="
+action = "equal"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "!="
+action = "not-equal"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "<"
+action = "less"
+assoc = "left"
+
+[[condition.operator]]
+symbol = ">"
+action = "greater"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "<="
+action = "less-equal"
+assoc = "left"
+
+[[condition.operator]]
+symbol = ">="
+action = "greater-equal"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "<<"
+action = "shift-left"
+assoc = "left"
+
+[[condition.operator]]
+symbol = ">>"
+action = "shift-right"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "+"
+action = "add"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "-"
+action = "subtract"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "*"
+action = "multiply"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "/"
+action = "divide"
+assoc = "left"
+
+[[condition.operator]]
+symbol = "%"
+action = "modulo"
+assoc = "left"
+
+# ── 一元前缀算子（一律高于所有二元；C99 预处理表达式只允许 + - ! ~） ──
+[[condition.unary]]
+symbol = "+"
+action = "unary-plus"
+
+[[condition.unary]]
+symbol = "-"
+action = "unary-minus"
+
+[[condition.unary]]
+symbol = "!"
+action = "logical-not"
+
+[[condition.unary]]
+symbol = "~"
+action = "bitwise-not"
+
+# ── 整型常量形态（匹配位置取**最长**命中；同长取先声明者） ──
+# 无后缀且值超出 intmax_t：十六/八进制按无符号（C99 §6.4.4.1 候选类型含无符号），
+# 十进制**不许**（gcc `-pedantic-errors` 报 "integer constant is so large that it is unsigned"）。
+[[condition.int_literal]]
+pattern = "0[xX][0-9a-fA-F]+"
+base = 16
+no_suffix_unsigned = true
+
+[[condition.int_literal]]
+pattern = "0[0-7]*"
+base = 8
+no_suffix_unsigned = true
+
+[[condition.int_literal]]
+pattern = "[1-9][0-9]*"
+base = 10
+no_suffix_unsigned = false
+
+# ── 字符常量（C99 §6.4.4.4）：单字符 = 码位；多字符按 gcc 的移位口径（实现定义） ──
+[condition.character]
+delimiter = "'"
+escape = "\\"
+# C99 只有 L；C11 增加 u / U（u8 属 C23，未启用 —— 见 gap 档边界）
+prefixes = ["L", "u", "U"]
+octal_escape = true
+hex_escape_prefix = "x"
+multi_character = "gcc-shift-or"
+# plain char 求值模型（本机 gcc：signed char，8 位）——转义值按此做符号扩展
+# （gcc 实测 `'\377' == -1`、`'\200' == -128`）
+char_bits = 8
+char_signed = true
+
+# 带前缀字符常量的宽度（gcc：wchar_t/char16_t = 16 位、char32_t = 32 位）
+[condition.character.prefix_bits]
+L = 16
+u = 16
+U = 32
+
+# 简单转义序列表（字符 → 码位；C99 §6.4.4.4 表）
+[condition.character.simple_escape]
+"'" = 39
+'"' = 34
+"?" = 63
+"\\" = 92
+a = 7
+b = 8
+f = 12
+n = 10
+r = 13
+t = 9
+v = 11
+
 # ── [expand] 展开器参数 ──
 [expand]
 # rescan/自引用抑制由展开算法保证（hideset）；本值只是**资源上限守卫**
@@ -58,6 +246,11 @@ max_iterations = 128
 [directive_handlers]
 define = { op = "define", enabled = true }
 undef = { op = "undef", enabled = true }
+# 条件指令：`if` / `elif` 按**整型常量表达式**求值（声明面见 `[condition]`）。
+# 关键字在这里显式声明 ⇒ 只有声明了它的语言包才把 `#if` / `#elif` 当指令
+# （verilog 不声明 ⇒ 不接线、语义不变）。
+if = { op = "cond_if", enabled = true }
+elif = { op = "cond_elif", enabled = true }
 # include：**缺文件/循环/深度超限 = 诊断**（C 是真实预处理，缺头文件必须报错；
 # 对比 verilog 不声明 ⇒ 默认 warn 保持既有打印，A/B 零变化）。
 # `max_depth` = 嵌套深度上限（防止病态包含链，非标准语义常量）。

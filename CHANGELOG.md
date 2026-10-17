@@ -85,6 +85,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **阶段 4 首片 B：`#if` / `#elif` 整型常量表达式求值（声明驱动）**（2026-10-17，循环 #20）：
+  `#if` 家族此前只有 `ifdef`/`elsif` 的**宏名**语义；本片按 C99 §6.10.1 实现表达式求值：
+  `defined` 两种写法（操作数**不**宏展开）→ 宏展开其余 → 剩余标识符换 0 → 整型常量表达式
+  求值（intmax/uintmax 64 位模型、`&&`/`||`/`?:` 短路、有符号溢出/除零/非法常量诊断）。
+  `[condition]` 声明面（`grammar/c/base/_macro.toml`）：算子「符号 → 引擎动作」+ 优先级/结合性、
+  整型常量形态/后缀、字符常量转义与符号扩展模型、`defined` 拼写——**引擎不含 C 知识**；
+  语言包未声明 ⇒ 不接线（verilog 零变化）。`[directive_handlers]` 显式声明 `if`/`elif` 绑定
+  `cond_if`/`cond_elif`（按 rules_dir 解析；verilog 不声明 ⇒ `#if` 不是指令）。
+  - **条件块机制复用 `ifdef`**：跳过组 / 已选中分支的 `#elif` **不求值**（C99；gcc 实测静默）；
+    配对错误（未闭合、多余/重复 `#else`、`#elif` 在 `#else` 之后、`#ifdef` 缺宏名）给
+    `condition-balance` 诊断，表达式错误给 `condition` 诊断（带 `Lx:Cy`）；管线转受控
+    `error`（非异常），`tpc lint` / `tpc check` 经 `scan_diagnostics` 同报文、同 rc=1。
+  - **对拍口径**（本机 gcc 16.1.0 `-std=c99 -pedantic-errors`）：值型常量分类（`0xFFFFFFFF`
+    按有符号、`0xFFFFFFFFFFFFFFFF` 无符号）、十进制超 intmax 报错、`'\377' == -1`（signed char
+    符号扩展）、多字符 `'ab' == 0x6162`、`L'ab' == 98`、负移位计数反向（UB 面按 oracle）、
+    `1<<63` 溢出、短路只抑制算术诊断。
+  - **验证**：`tests/engine/preprocessor/test_c_conditionals.py` **94 条**（45 条真/假对拍 +
+    19 条错误面 + 惰性/跳过组 8 条 + 配对 8 条 + 声明面/未接线 2 条 + 端到端 3 条）；
+    预处理器 **294 passed**、linter/pipeline **730 passed**、A/B verilog **0/144**、pyright **0**；
+    门禁变异 **77 → 80**（真值判据 / 跳过组不求值 / 已选中 elif 不求值 / 未闭合不报）。
+  - **已声明边界**（见 `preprocessor/README.md`「已知边界」）：C23 项不实现（c23 的
+    `true`/`false` 1/0、`u8` 字符常量、二进制常量、`#elifdef`/`#elifndef`）；跳过组的**词法**
+    错误不诊断（gcc 会）；`#else`/`#endif`/`#ifdef` 后多余 token 不诊断；除零按硬错误停
+    （gcc 取左操作数继续、仍出文本）。
+
 - **A2 ④：宏定义的**形式化语法**检查落到 linter（AST 前）**（2026-10-17；作者对齐：形式化语法走 linter、
   语义级走 check 插件族）：新增 `linter/macro_syntax.py`（语言无关，知识全来自声明面）——只报 GCC 同样
   报 error 的**形式化**约束：宏名缺失/非法、形参表空项/非标识符/`...` 非末位或重复/重名、宏体 `#` 后非

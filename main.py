@@ -233,7 +233,10 @@ def _preprocessor_gate(
     if not diags:
         return
     for d in diags:
-        print(f"[preprocessor] {d.get('message', d.get('kind'))}", file=sys.stderr)
+        where = (
+            f"L{d['line']}:C{d.get('column', 1)} " if d.get("line") else ""
+        )
+        print(f"[preprocessor] {where}{d.get('message', d.get('kind'))}", file=sys.stderr)
     sys.exit(1)
 
 

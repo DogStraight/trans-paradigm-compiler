@@ -1,10 +1,9 @@
 # Gap — C 预处理器范围基线（宏与预处理指令集；`ROADMAP.md` 阶段 4）
 
-- 状态：**首片 A1 收口**（2026-10-17，循环 #15–#16：宏核心见 ⑯，返工收口与 **3 条已声明边界**见 ⑰；
-  分级 **`partial`——原因 = 已声明边界，非缺验证**）；**A2 未开工**（首项 = `expand_macros` 默认口径统一，
-  否则 A1 对用户不可达，见 ⑬）。范围基线已定（作者
-  2026-10-17 裁定"**只考虑 C 标准中的宏**"——特定编译器才需求实现的宏不考虑；文本级宏处理，
-  卫生宏=语法结构、过程宏=能力位，均不在此范围）
+- 状态：**A1 收口**（`partial`：3 条已声明边界，见 ⑰）；**A2 大部分交付**：默认口径（⑬）、`#include`（⑱）、
+  CLI 两路径（⑲）、宏形式语法诊断（⑳）、**`#if` 族**（㉑）；剩 宏语义检查族 / check 接语法诊断 / token 重扫 /
+  include 顺序（`TODO.md` 一）。范围基线 = 作者 2026-10-17 裁定（只做 **C 标准宏**、文本级；卫生宏=语法结构、
+  过程宏=能力位，均不在此范围）。
 - 关联：`ROADMAP.md`「C 语言包」阶段 4；`preprocessor/README.md`（跨语言文本能力原型）
 - 接受面证据：`tools/c_acceptance.py`（当前 **42 条 / 接受 42 / 空洞 0**）——**口径注**：两条预处理
   用例按"**被消费且无异常**"接受（指令行被替换为整行 marker 注释），**不代表 `#include` / `#define`
@@ -83,7 +82,7 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 
 ## tpc 承载面与缺口
 
-**现役承载面（实测）**：指令原语注册表 `preprocessor/primitives/registry.py` 已注册 **8 个**——`define`（对象宏 + 函数宏形参表）/ `undef` / `include`（`path_forms`=开闭定界符+`relative_first`、`search_dirs`、`silent`）/ `ifdef` / `ifndef` / `else` / `elsif` / `endif`；声明面 `[macro_recognition]`（`shape`/`directive`/`call`/`call_args`/`arg_separator`）与 `[directive_handlers]`（关键字→`op` + 每指令配置）；三机制 `splice`/`line`/`inline` + 位置桥（锚 + `source_text` 回插）。
+**现役承载面（实测）**：指令原语注册表 `preprocessor/primitives/registry.py` 已注册 **10 个**（含首片 B 的 `cond_if` / `cond_elif`）——`define`（对象宏 + 函数宏形参表）/ `undef` / `include`（`path_forms`=开闭定界符+`relative_first`、`search_dirs`、`silent`）/ `ifdef` / `ifndef` / `else` / `elsif` / `endif`；声明面 `[macro_recognition]`（`shape`/`directive`/`call`/`call_args`/`arg_separator`）与 `[directive_handlers]`（关键字→`op` + 每指令配置）；三机制 `splice`/`line`/`inline` + 位置桥（锚 + `source_text` 回插）。
 **关键现状（2026-10-17 A1 收口后）**：`grammar/c/` **已声明** `[macro_recognition]`（`shape` /
 `call_shape="name"` / `call` / `call_args`）+ `#`/`##`/`__VA_ARGS__` 三算子（verilog 语义不变）；
 `[directive_handlers]` 与 `#if` 家族、`#include` 真实实现仍在 **A2**（交付面见 ⑯⑰）。
@@ -92,7 +91,7 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 |---|---|---|
 | ① **C 裸标识符宏调用**（`NAME` / `NAME(args)`） | 机制级 | **能**（A1，循环 #15）：`call_shape="name"` 三态显式"无前缀" + 按宏表判定；verilog 语义不变（边界见 ⑰） |
 | ② `#` / `##` + **重扫描/自引用抑制** | 机制级 | **能**（A1）：`#`/`##` 算子 + **hideset 重扫描**（替换文本一律由 token 展开器现算）；重扫/跨行两条边界见 ⑰ |
-| ③ `#if` / `#elif` 的**整型常量表达式求值** | 机制级 | **不能**：现有 `elsif` 是"宏名"语义，非表达式求值 |
+| ③ `#if` / `#elif` 的**整型常量表达式求值** | 机制级 | **能**（A2 首片 B，见 ㉑）：`#if`/`#elif` 按声明面求值；`elsif`（verilog）仍是宏名语义 |
 | ④ **预定义宏注入**（`__FILE__`…/`__STDC_VERSION__`） | 机制级 | **不能**：无预定义宏面 |
 | ⑤ 指令前缀与行首语义 | 声明面 | **已具备**（A1）：`#` 已进 `[symbol.base]`；`#` 与关键字间空白、行首前导空白容差按 A1 实现（未单测的形态留观察） |
 | ⑥ `#line` / `#error` / `#pragma` / `_Pragma` | 原语 | 部分：`#pragma`/`_Pragma` 走"保真穿透 + marker"；`#line` 改变文件/行语义 ⇒ 与位置映射联动 |
@@ -112,16 +111,16 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 （放宽后已被"被消费 ⇒ 空 TU ⇒ 接受"掩盖）——**A1 信号 = 引擎核判据**（与 GCC 对拍的正样本 +
 预处理器缺陷态变红）；**A2 信号 = `#include` 被真实处理**（`path_forms` 解析生效 + 缺文件**报诊断** +
 内容确实被消费进流），**不是"空洞归零"**。
-- **首片 B**：`#if` 家族（`defined` 两写法 + 整型常量表达式）+ `#line` + `#error`。
+- **首片 B**：`#if` 家族（`defined` 两写法 + 整型常量表达式）+ `#line` + `#error`（**`#if` 家族已交付**，见 ㉑）。
 - **不做**：C23 档 C 项（`#warning`/`#elifdef`/`#elifndef`/`#embed`/`__VA_OPT__`/`__has_*`）不进首片（保留在清单）；全部 GNU 扩展（见排除表）。
-- **正/负样本（与 GCC 对拍）**：正 = `#define x x`→`x`、`CAT(EMPTY,x)`→`EMPTYx`、`F(1)`→`f(1, )`；负 = 未闭合 `#if`、多余 `#endif`、`#include` 缺文件、`#define` 形参表未闭合（须报错）。
+- **正/负样本（与 GCC 对拍）**：正 = `#define x x`→`x`、`CAT(EMPTY,x)`→`EMPTYx`、`F(1)`→`f(1, )`；负 = 未闭合 `#if`、多余 `#endif`、`#include` 缺文件、`#define` 形参表未闭合（须报错）；`#if` 表达式真/假/诊断面见 `test_c_conditionals.py`（gcc 对拍）。
 - **保真/幂等**：展开产物经位置桥回插后逐字节还原原文；复跑稳定（复用管线既有幂等检查口径）。
 
 ## 裁定（已定 / 待决）
 
 **已定方向**：① C23 档 C 项**不进首片**（保留在清单）；② GNU `, ## __VA_ARGS__` **排除**（不实现其语义），**登记触发条件**：若真实 C 语料大量出现 ⇒ 复议；③ `preprocessor/primitives/define.py` 的"**形参表未闭合 ⇒ 容错退化为对象宏**"改为 **fail-fast**（依"配置加载 fail-fast / 不静默降级"纪律；实现时附影响面实测）；
 ⑤ **C 裸标识符宏调用的前缀 = 语言包显式声明"无前缀"**（Lead 2026-10-17 裁定；**不是**引擎默认允许空前缀——否则 verilog 侧"任何标识符都成宏调用候选"会引入**全域误匹配面**）；守"**不留双路径**"：有无前缀走**同一套**匹配路径；
-⑥ **`__STDC_VERSION__` 值与 `#if` 整型求值语义都放语言包声明面**（Lead 同轮裁定：两者都是 C 特有语言知识，引擎不持有）；**具体声明键形态随首片 B 设计定**（`#if` 属首片 B）。
+⑥ **`__STDC_VERSION__` 值与 `#if` 整型求值语义都放语言包声明面**（Lead 同轮裁定：两者都是 C 特有语言知识，引擎不持有）；**具体声明键形态随首片 B 设计定**（已定：`[condition]` 段，见 ㉑）。
 
 **待决**：无（原"④ `__STDC_VERSION__` 声明位置 / `#if` 求值语义档"已按 ⑥ 归位）。
 
@@ -136,16 +135,11 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 ⑫ **判据设计教训**：定"工具指标归零"类判据前**必须核实该工具的**真实执行路径**——本轮 Lead 未核实导致判据不可达（由实现方中途拦下）。
 ⑬ **已实测确认（真不一致、用户可见）**：`run_pipeline_on_source` 的 `expand_macros` **默认 False**（`pipeline/__init__.py:1161` + `config/tpc_config.json:12`）而 `tpc check` 默认 True（`analyzer/checker.py:57`、`main.py:132`）。实测（同输入 `#define N 4\nint x = N;`、同 API 只差该 flag）：**False ⇒ `error="parse truncated (unconsumed tokens)"`；True ⇒ `error=""`** ⇒ **verdict 差异**（非风格）。CLI 侧同文件对照：`tpc lint` rc=1 报 `phase-unrecognized`（line 0 col 8-9）｜`tpc check` rc=1 报 `parse_ok: false` 且 **`parse_error` 为空串** ⇒ 两条用户可见路径**彼此诊断形态也不同**。**归属 = 管线配置口径（非 C 专有，verilog 同样受"库默认 False"影响）**；**裁定 = 修（统一为"开"）**，归 **A2 步**（与"C 端到端可用"绑定），**必须附 verilog 对拍 + 行为变化清单**。**A1 收口时追加实测（2026-10-17）**：`expand_macros=True` 时 C 宏**确实生效**（`[preprocessor] macros expanded`、`error=''`）⇒ 该 flag 是 A1 的**唯一可达开关**；默认 false 下 **CLI 对合法 `#define FOO 1` 都报语法错**（token 实测 `'#':symbol.base.pound` + `'define':id`，即预处理根本没跑）⇒ **A1 对用户不可达，直到 A2 统一默认口径**。**2026-10-17 A2 ① 已统一（实测）**：`pipeline/__init__.py` 兜底与 `config/tpc_config.json` 双双改 **True**（CLI 本已 True）⇒ 库/CLI 默认一致；合法 `#define FOO 1` 在库默认路径 `error=''` 且输出含展开值；config 指向 C 时 `tpc check` rc=0「No issues found」；verilog CLI A/B **0/144**、五套回归 **1976 passed**（详见 CHANGELOG 行为变化清单）。
 ⑭ **拆步信号修正（因 ⑪ 放宽判据）**：`--only-gaps` 计数在放宽后**不可再用**作拆步信号——`#include <stdio.h>` 在 A1 阶段（`include` 未接线、只 `print` 警告）会因"被消费 ⇒ 空 TU ⇒ 接受"而**显示 0 空洞**，**掩盖"未实现"**。修正：**A1 信号 = 引擎核判据**（E.1 与 GCC 对拍的正样本 + E.4 的 5 条缺陷态变红）；**A2 信号 = `#include` 被真实处理**（`path_forms` 解析生效 + 缺文件**报诊断** + 内容确实被消费进流），**不是"空洞归零"**。
-⑮ **文档漂移复核（2026-10-17 A2 期间已收口）**：task-50 的 5 处已全部更新——① 本档状态行 → **A1 收口**
-（见档首）；② 缺口表 ①② → **能**（A1，循环 #15）；③ "`[symbol.base]` 无 `#`"根因句 → 改为**已消除**
-（`#`/`##` 已声明；`#include` 现存问题 = 未真实包含 + 默认口径，见 A2 ①②）；④ "首片 A（闭合两个空洞）" →
-改为按 ⑭ 口径（引擎核判据，不以空洞计数表述）；⑤ `docs/gaps/gap-language-pack-scope.md` 已知偏差 #5 的
-"词法层 ValueError"现象 → 改为**现状**（`expand_macros` 默认口径 / `#include` 未真实包含，归 A2）。
+⑮ **文档漂移复核（2026-10-17 A2 期间已收口）**：task-50 的 5 处已全部更新（档首状态 → A1 收口；缺口表 ①② → 能；
+「`[symbol.base]` 无 `#`」根因 → 已消除；首片 A 判据 → 按 ⑭ 口径；gap-language-pack-scope 已知偏差 #5 → 现状）。
 
-⑯ **A1 交付实录（2026-10-17，循环 #15）——已被 ⑰ 更正，仅留历史指针**：首版判据覆盖"无空格算子形态 +
-内部函数级变异"，**不成立**（独立审计 15 反例；根因 = 双路径）；A1 最终状态见 ⑰（3 条已声明边界、
-`partial`）。**A2 诊断面**（畸形 `#define` / 实参个数 / `#`·`##` 约束在非法输入下静默）按 tpc「语法宽进 +
-诊断走 linter」归 A2 —— 形式化部分已在 ⑳ 落地，语义部分（实参个数）留 check 插件族。
+⑯ **A1 交付实录（循环 #15）——已被 ⑰ 更正，仅留历史指针**：首版判据（无空格算子 + 内部函数级变异）不成立
+（审计 15 反例；根因 = 双路径）；A1 最终见 ⑰。A2 诊断面：形式化部分已落 ⑳，语义部分（实参个数）留 check 插件族。
 
 ⑰ **A1 返工收口（2026-10-17 同日，循环 #16）**：审计 15 反例 → **3 偏差**，全部为已声明边界。
 **已修**（均以端到端用例锁住）：`#`/`##` 两侧空格；调用点**token 级实参切分**（字面量/注释内逗号与括号
@@ -171,17 +165,20 @@ token 级重扫**归 A2「两路径统一」**（那里行扫描本就要重做�
 内容 / 渲染面只出 `#include` 原行、不内联；无法整节点覆盖 ⇒ 整文件原文退化）**③ CLI 两路径**（`scan_diagnostics`
 + `_preprocessor_gate` ⇒ lint/check 同类诊断、同 rc=1；gate 须在语言配置装载后跑）。
 **剩余**：include 顺序偏差（内容先于 marker，修则 A/B 0→2/144）。证据：`test_c_include_e2e.py` 10 条、
-`c_acceptance` 42/0、A/B 0/144；未统一：`tpc lint` 仍吃未展开源码、check 未接 linter 语法诊断（⑳）。
-**CLI 两路径**（同批）：新增 `preprocessor.scan_diagnostics` + `main._preprocessor_gate` ⇒ 缺头文件时
-`tpc lint` 与 `tpc check` 同类诊断、同 rc=1（不抛异常；verilog 默认 warn ⇒ 打印原样）。gate 必须在
-语言配置装载**之后**跑（check 侧放 `checker.check()` 之后）。**仍未统一**：`tpc lint` 语法扫描仍吃未展开
-源码；`tpc check` 未接 linter 语法诊断（见 ⑳）。
+`c_acceptance` 42/0、A/B 0/144；未统一：`tpc lint` 仍吃未展开源码、check 未接 linter 语法诊断（⑳）——gate 须在语言配置装载**之后**跑（check 侧放 `checker.check()` 之后）。
 
 ⑳ **A2 ④ 形式化宏语法检查落地 linter（2026-10-17；作者对齐：形式化语法走 linter、语义级走 check 插件族）**：
 新增 `linter/macro_syntax.py` —— 对**原始源码**检 `#define` 形式约束（宏名 / 形参表 / 宏体 `#`·`##`），每类
 给带位置 blocking 诊断；**语言包声明 `[macro_syntax]` 段才启用**（定义侧形式语法：变参占位等；
 C 声明、verilog 未声明 ⇒ 不跑、A/B 0/144；verilog 补齐 = 触发式，ADR-0021）。
 证据：`test_macro_syntax_checks.py` 21 条、linter 283、精度 33/33·fp 0、A/B 0/144。**剩余**：实参个数等**语义**检查 → check 插件族；`tpc check` 未接 linter 语法诊断（lint rc=1 / check rc=0）。
+
+㉑ **首片 B 交付：`#if`/`#elif` 整型常量表达式（2026-10-17，循环 #20；裁定 ⑥ 的声明键形态在此定）**：`[condition]` 声明面
+（`grammar/c/base/_macro.toml`）= 算子「符号→引擎动作」+优先级/结合性、整型常量形态/后缀、字符常量转义与符号扩展、
+`defined` 拼写；引擎 `preprocessor/condition.py` 通用求值（intmax/uintmax 64 位、短路、跳过组不求值），`if`/`elif` 经
+`[directive_handlers]` 绑定 `cond_if`/`cond_elif`（per-dir 解析；verilog 不声明 ⇒ `#if` 不是指令、零变化）。证据：
+`test_c_conditionals.py` 94 条（gcc 16.1 对拍）、预处理器 294、A/B 0/144、变异 77→80。**边界**：C23 项（c23 的
+`true`/`false` 1/0、`u8` 字符常量、二进制常量、`#elifdef`）不实现；跳过组**词法**错误不诊断（gcc 会）；除零按硬错误停（gcc 取左操作数继续）。
 
 ## 诚实边界（统一"待抽检"，不得当实测结论用）
 

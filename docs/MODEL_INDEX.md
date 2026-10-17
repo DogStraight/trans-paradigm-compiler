@@ -107,6 +107,7 @@
 | 宏反向（统一位置桥：锚 + 原文回插） | `references.md`（语料前沿 M1：宏 inline+body 锚还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
 | 宏处置策略（引擎定义 mode 枚举；语言包以 `[capabilities] macro_policy` 声明策略） | `preprocessor/README.md`（策略契约节 + "为什么策略是语言知识"内联） | `preprocessor/macro_policy.py`（取入口/校验）<br>`grammar/verilog/plugins/macro_policy/`（判定表） | `tests/engine/preprocessor/test_macro_policy.py` |
 | tpc marker 通道（占位注释形态声明驱动 + 锚定位） | `preprocessor/README.md`（marker 书写形态） | `preprocessor/_markers.py`（书写/识别）<br>`preprocessor/_bridge.py::restore_anchors`（按锚回插） | `tests/engine/preprocessor/test_markers.py` |
+| 条件指令求值（`#if`/`#elif` 整型常量表达式：`defined` / 宏展开 / intmax 模型 / 短路 / 跳过组不求值） | `preprocessor/README.md`（形态清单 + 条件求值边界） | `preprocessor/condition.py`（声明解析 + 求值器）<br>`preprocessor/primitives/condition.py`（`cond_if`/`cond_elif`）<br>`grammar/c/base/_macro.toml`（`[condition]`） | `tests/engine/preprocessor/test_c_conditionals.py` |
 
 ### core + pipeline — 引擎骨架 / 配置 / 编排
 

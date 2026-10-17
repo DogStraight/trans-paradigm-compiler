@@ -189,6 +189,7 @@ CONSTANT: dict[str, str] = {
     "transform.normalizer.EXTRACT_PREFIXES": "抽取前缀字面量",
     "core.engine_capabilities.CAPABILITIES": "引擎能力表（能力名 → 版本，只读字面量）",
     "core.engine_capabilities.SECTION_CAPABILITY": "语言包清单段 → 能力映射（只读字面量）",
+    "preprocessor.condition._ACTIONS": "条件表达式动作词表（动作名 → 元数，只读字面量）",
 }
 
 _ENGINE_PACKAGES = (

@@ -7,6 +7,7 @@ Both operate on pure text, no token dependency.
 Doc: preprocessor/README.md
 """
 
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,6 +22,7 @@ from .primitives.registry import (
     split_directive,
 )
 from .primitives.include import resolve_source_dir
+from .primitives.ifdef import condition_syntax, outer_active
 from ._bridge import make_marker
 from ._markers import inline_marker, line_marker
 from . import macro_expand
@@ -209,12 +211,35 @@ def _next_line_marker(line: str, i: int, markers: tuple[str, ...]) -> int:
     return best
 
 
+def _load_directive_config(rules_dir: str) -> dict[str, dict]:
+    """按语言包解析 `[directive_handlers]`（per-dir，与全局 loaded 配置解耦）。
+
+    用途：条件指令关键字集合（`if` / `elif` 等由语言包显式声明绑定到引擎 op；
+    未声明的语言包 —— 如 verilog —— 不把该关键字当指令）。
+    ConfigRegistry.resolve 自带缓存（同一 rules_dir 只解析一次）。
+    """
+    from core.config_registry import ConfigRegistry
+
+    resolved = ConfigRegistry.resolve(
+        rules_dir, plugins_dir=os.path.join(rules_dir, "plugins")
+    )
+    raw = resolved.get("preprocessor.directives", {})
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            f"[preprocessor.directives] 须是表（得到 {type(raw).__name__}）"
+        )
+    return {str(k): v for k, v in raw.items() if isinstance(v, dict)}
+
+
 def _load_config(rules_dir: str) -> tuple[str, set[str]]:
     """宏形态声明 → (前缀文本, 指令名集合)。
 
     两者都从语言包 `[macro_recognition]` 的**形态生产式**推导（前缀 token 名 →
     符号文本；指令候选名 → 去 `macro.` 前缀的关键字）——前缀不在引擎里硬编码
     （解析见 preprocessor/macro_shape.py）。
+
+    指令名集合 = 形态候选 ∪ 已注册原语名 ∪ **语言包 `[directive_handlers]` 声明的键**
+    （后者是"语言声明了哪些指令关键字/绑定哪个 op"的声明面；如 C 的 `if` / `elif`）。
 
     按 rules_dir 解析该语言包的声明（与 `Lexer(rules_dir=...)` 同源），不复用
     全局已加载配置：同进程切语言时不串味（c4 无宏形态 → 空前缀 + 空指令集）。
@@ -224,19 +249,18 @@ def _load_config(rules_dir: str) -> tuple[str, set[str]]:
     prefix = directive.prefix if directive is not None else ""
     configured = set(macro_keywords(directive)) if directive is not None else set()
     # 已注册的指令处理器名也算指令：未加载配置时也能区分"指令行 vs 行首宏调用"
-    directives = configured | set(list_primitives())
+    directives = (
+        configured | set(list_primitives()) | set(_load_directive_config(rules_dir))
+    )
     return prefix, directives
 
 
 def _is_ifdef_active(ctx: dict) -> bool:
-    """检查当前行是否在活跃的 ifdef 分支内。
+    """检查当前行是否在活跃的条件分支内（整条栈链都活跃才算）。
 
-    必须检查整条栈链：如果任意外层帧 inactive，当前行也不应输出。
+    单一实现在 `primitives/ifdef.py::outer_active`（条件块机制共用）。
     """
-    stack: list = ctx.get("_ifdef_stack", [])
-    if not stack:
-        return True
-    return all(f.get("active", True) for f in stack)
+    return outer_active(ctx)
 
 
 def _load_call_prefix(rules_dir: str) -> str | None:
@@ -359,15 +383,38 @@ def scan_directives(
     # 与原始行数不同（条件压缩/续行合并），行映射只能逐行记账，不能事后对齐。
     source, join_map = _join_continuation_lines(source)
     _scan_lines(source.split("\n"), ctx, prefix, directives_set, rules_dir)
+    _report_unclosed_conditions(ctx)
 
     result = _collect_scan_result(ctx, join_map)
     if out_diags is not None:
         # 结构化诊断由调用方持有（管线转成 `preprocessor_errors`）——返回元组不变
         out_diags.extend(ctx.get("_include_diags", []))
+        out_diags.extend(ctx.get("_cond_diags", []))
     # 宏体**不再预展开**（③）：`macro_defs` 保持原始体，替换文本由调用点用
     # `macro_expand.expand_text(..., hideset={name})` 现算 ⇒ 消除"扫描期预展开 +
     # 调用点正则插入"的双算法路径（P0-8/P0-10/P2-1 同一根因）。
     return result
+
+
+def _report_unclosed_conditions(ctx: dict) -> None:
+    """扫描结束仍有未收的条件块 → 诊断（仅声明 `[condition]` 的语言包；C 标准要求）。
+
+    未闭合块即使处于 inactive 分支也报（gcc 同：宁可多报配对错误）。
+    """
+    if condition_syntax(ctx) is None:
+        return
+    for frame in ctx.get("_ifdef_stack", []):
+        block = frame["block"]
+        start = next((n for n, _ in block["boundary_lines"] if n is not None), None)
+        where = f"（起始 L{start}）" if start is not None else ""
+        ctx.setdefault("_cond_diags", []).append(
+            {
+                "kind": "condition-balance",
+                "message": f"未闭合的条件块{where}：缺少匹配的收尾指令",
+                "line": start,
+                "column": 1,
+            }
+        )
 
 
 def _build_scan_ctx(
@@ -417,6 +464,8 @@ def _build_scan_ctx(
         "rules_dir": rules_dir,
         "_include_config": inc_config,
         "_call_args": load_macro_call_args(rules_dir=rules_dir),
+        # 指令关键字 → op 绑定（per-dir 解析；条件指令 `if` / `elif` 的声明面）
+        "_directive_config": _load_directive_config(rules_dir),
     }
 
 
@@ -461,6 +510,7 @@ def _scan_lines(
 
     for jno, line in enumerate(lines, 1):
         ctx["_cur_line_no"] = jno  # 控制指令 handler 记账用（边界行归属）
+        ctx["_cur_line_indent"] = len(line) - len(line.lstrip())
         stack: list = ctx.get("_ifdef_stack", [])
         inside_block = block_state is not None
         block_state = _advance_block_comment(
@@ -514,7 +564,7 @@ def _handle_directive(
         _route_line(ctx, stack, jno, line)
         return
 
-    handler_cfg = _directives_cfg.get(directive_name, {})
+    handler_cfg = ctx.get("_directive_config", {}).get(directive_name, {})
     op = handler_cfg.get("op", directive_name)
     if not handler_cfg.get("enabled", True):
         if _is_ifdef_active(ctx):

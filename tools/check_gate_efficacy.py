@@ -799,6 +799,45 @@ _MUTATIONS: list[dict[str, str]] = [
                "        return None\n",
         "test": "tests/engine/linter/test_macro_syntax_checks.py",
     },
+    {
+        # ── 阶段 4 首片 B：`#if` / `#elif` 整型常量表达式求值 ──
+        "why": "`#if` 求值真值判据若写反（`value != 0` → `value == 0`）⇒ 条件分支全反，"
+               "活跃分支/解析面与条件文本不符（C 端到端取错分支）",
+        "file": "preprocessor/condition.py",
+        "old": "    return value != 0, diags\n",
+        "new": "    return value == 0, diags  # 变异：真值判据取反\n",
+        "test": "tests/engine/preprocessor/test_c_conditionals.py",
+    },
+    {
+        "why": "inactive 外层里的 `#if` 若仍求值 ⇒ 被跳过组内出现本不该有的表达式诊断"
+               "（C99：被跳过组不求值、不报表达式错；gcc 实测静默）",
+        "file": "preprocessor/primitives/condition.py",
+        "old": "    if outer_active(ctx):\n"
+               "        active, diags = _eval_arg(stripped, prefix, ctx, syn)\n",
+        "new": "    if True:  # 变异：inactive 外层也求值\n"
+               "        active, diags = _eval_arg(stripped, prefix, ctx, syn)\n",
+        "test": "tests/engine/preprocessor/test_c_conditionals.py",
+    },
+    {
+        "why": "已选中分支后的 `#elif` 若仍求值 ⇒ 未被采用的 elif 表达式错误也报"
+               "（C99：前支已选中时 elif 不求值；gcc `#elif 1/0` 静默）",
+        "file": "preprocessor/primitives/condition.py",
+        "old": "    if not already and outer:\n"
+               "        active, diags = _eval_arg(stripped, prefix, ctx, syn)\n",
+        "new": "    if outer:  # 变异：已选中分支后的 elif 也求值\n"
+               "        active, diags = _eval_arg(stripped, prefix, ctx, syn)\n",
+        "test": "tests/engine/preprocessor/test_c_conditionals.py",
+    },
+    {
+        "why": "扫描结束不报未闭合条件块 ⇒ 缺 `#endif` 的输入静默（C 标准要求诊断；"
+               "gcc: unterminated #if）",
+        "file": "preprocessor/_expand.py",
+        "old": "    for frame in ctx.get(\"_ifdef_stack\", []):\n"
+               "        block = frame[\"block\"]\n",
+        "new": "    for frame in []:  # 变异：不报未闭合条件块\n"
+               "        block = frame[\"block\"]\n",
+        "test": "tests/engine/preprocessor/test_c_conditionals.py",
+    },
 ]
 
 

@@ -466,15 +466,22 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
         out_diags=include_diags,
     )
     if include_diags:
-        # include 问题（语言包按 `on_missing` 策略决定记录方式）：结构化暴露；
-        # 硬错误（缺文件/循环/深度）同时写成受控 `error`（非异常，`tpc check` 可见）。
+        # 预处理硬问题（include 缺文件/循环/深度 + 条件表达式/配对错误）：结构化暴露；
+        # 硬错误同时写成受控 `error`（非异常，`tpc check` 可见），管线在扫描后即停。
         ctx.result["preprocessor_errors"] = include_diags
         hard = [
             d for d in include_diags
-            if d.get("kind") in ("missing", "cycle", "depth")
+            if d.get("kind")
+            in ("missing", "cycle", "depth", "condition", "condition-balance")
         ]
         if hard:
-            ctx.result["error"] = f"preprocessor: {hard[0]['message']}"
+            first = hard[0]
+            where = (
+                f"L{first['line']}:C{first.get('column', 1)} "
+                if first.get("line")
+                else ""
+            )
+            ctx.result["error"] = f"preprocessor: {where}{first['message']}"
     ctx.log(f"[preprocessor] macros defined: {len(ctx.macro_table)}")
     # 扫描 clean_source 中整行占位 marker 的源行号（restore_line_comments 对被吞
     # marker 用已渲染 marker 分段线性插值定位，需要源行号锚点）——占位形态
