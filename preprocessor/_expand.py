@@ -205,14 +205,32 @@ def _is_ifdef_active(ctx: dict) -> bool:
     return all(f.get("active", True) for f in stack)
 
 
-def _build_macro_re(prefix: str) -> re.Pattern:
-    """宏调用正则（前缀 + 名字）；未声明前缀 → 永不匹配（该语言无宏形态）。
+def _load_call_prefix(rules_dir: str) -> str | None:
+    """**调用**形态前缀（三态；`_load_config` 只管 directive，不重复读配置）。
 
-    名字用引擎级标识符形态（`core/token_protocol.IDENT_RE`）——与 lexer 的
-    宏形态识别同源，不在文本层另写一份名字正则。
+    `None` = 未声明 call 形态（永不匹配；c4 现状）；`""` = 显式无前缀
+    （C 的裸标识符调用）；非空 = 前缀文本（verilog 的 `` ` ``）。
     """
-    if not prefix:
+    call = load_macro_shapes(rules_dir=rules_dir).get("call")
+    return call.prefix if call is not None else None
+
+
+def _build_macro_re(prefix: str | None, macro_names=()) -> re.Pattern:
+    """宏调用正则（**三态**）。
+
+    - `None`：未声明调用形态 ⇒ 永不匹配（该语言无宏调用面）；
+    - `""`：**显式无前缀**（裸标识符调用）⇒ 正则由**宏表名字**编译 `(F|G|…)`
+      （未定义的名字根本不进匹配；不是"看形态就认宏"）；
+    - 非空：前缀 + 名字（名字用引擎级 `IDENT_RE`，与 lexer 同源）。
+    """
+    if prefix is None:
         return re.compile(r"(?!)")
+    if prefix == "":
+        names = sorted({n for n in macro_names if n})
+        if not names:
+            return re.compile(r"(?!)")
+        alt = "|".join(re.escape(n) for n in names)
+        return re.compile(rf"(?<![A-Za-z0-9_])({alt})(?![A-Za-z0-9_])")
     return re.compile(re.escape(prefix) + f"({IDENT_RE.pattern})")
 
 
@@ -279,6 +297,8 @@ def scan_directives(
                           回源时与 `expand_tokens` 的展开级映射复合使用。
     """
     prefix, directives_set = _load_config(rules_dir)
+    call_prefix = _load_call_prefix(rules_dir)
+    syntax = load_comment_syntax(rules_dir)
     ctx = _build_scan_ctx(
         rules_dir, source_path, search_dirs, predefined, undefine, _include_stack
     )
@@ -295,8 +315,9 @@ def scan_directives(
             result[0],
             result[1],
             ctx.get("_call_args"),
-            prefix,
+            call_prefix,
             load_macro_operators(rules_dir=rules_dir),
+            syntax,
         )
     return result
 
@@ -476,17 +497,21 @@ def _expand_macro_bodies(
     macro_defs: dict[str, str],
     func_macros: dict[str, list[str]],
     call_args,
-    prefix: str,
+    call_prefix: str | None,
     operators=None,
+    syntax=None,
 ) -> None:
     """原地全展开宏体（供 reverser）：hideset 重扫描。
 
     自引用/互递归抑制由 **hideset** 保证（`macro_expand`），不再用"直接自引用预判 +
     体积截断"近似；`[expand] max_iterations` 只作**资源上限守卫**（同一算法上的预算）。
     带参宏的体含形参占位，调用时才替参，故跳过（与旧行为一致）。
-    `prefix` = 声明的调用前缀（verilog 的 `` ` ``；只有"前缀 + 名字"才算调用）；
-    `operators` = 语言包声明的宏算子（`#`/`##`/变参；未声明 ⇒ 不启用）。
+    `call_prefix` = **调用**形态前缀（`None` = 未声明调用形态 ⇒ 不展开；
+    `""` = 裸标识符调用；非空 = 前缀文本）。
+    `operators`/`syntax` = 语言包声明的宏算子与注释形态（掩码用）。
     """
+    if call_prefix is None:
+        return
     budget = int(_get_expand_config().get("max_iterations", macro_expand.DEFAULT_BUDGET))
     for name in list(macro_defs):
         if name in func_macros:
@@ -496,9 +521,10 @@ def _expand_macro_bodies(
             macro_defs,
             func_macros,
             call_args,
-            prefix=prefix,
+            prefix=call_prefix,
             budget=budget,
             operators=operators,
+            syntax=syntax,
         )
 
 
@@ -703,6 +729,9 @@ class _MacroExpandCtx:
     policy: Any
     syntax: CommentSyntax
     lines: list[str]
+    #: 掩码用（字符串/字符字面量定界符 + 转义；来自 token 表 `[string]`）
+    string_delimiters: tuple[str, ...] = ()
+    escape: str | None = None
     restoration_stack: list[dict] = field(default_factory=list)
     regions_by_line: dict[int, list[dict]] = field(default_factory=dict)
     seq: int = 0
@@ -718,14 +747,17 @@ def expand_tokens(
     macro_defs: dict[str, str],
     *,
     rules_dir: str,
-    prefix: str = "`",
+    prefix: str | None = None,
     func_macros: dict[str, list[str]] | None = None,
 ) -> tuple[str, list[dict], list[dict], list[int]]:
     """在源码文本中展开宏调用（纯文本层），并注册统一锚 / 宏区间表。
 
-    用正则搜索 `NAME，向左扫同步词，记录位置后替换宏体。
-    带参宏（func_macros 中登记的名字）识别 `NAME( ... ) 调用并做形参替换。
+    用正则搜索宏调用（前缀 + 名字，或**显式无前缀**时的裸标识符）；向左扫同步词，
+    记录位置后替换宏体。带参宏（func_macros 中登记的名字）识别调用并做形参替换。
     不再依赖 Token 流或 Lexer。
+
+    `prefix` 缺省 `None` = **从语言包 `[macro_recognition]` 的 call 形态推导**
+    （`_load_config` 的 kind 分派；`None` 调用形态 ⇒ 永不匹配）；显式传值可覆盖。
 
     rules_dir：语言包目录——锚以注释形态穿过管线，标点从声明取
     （`lexer/comment_syntax.py`，引擎不认识 `//` / `/* */`）。
@@ -750,11 +782,15 @@ def expand_tokens(
             它是外层处理宏的单一事实源（ADR-0017 决策 3）：定位"哪些内容来自
             哪条宏"→ 渲染侧 raw 拼接、诊断宏归因都靠它。
     """
-    _MACRO_RE = _build_macro_re(prefix)
+    if prefix is None:
+        # 调用前缀从语言包 call 形态推导（kind 分派；不读第二份配置）
+        prefix = _load_call_prefix(rules_dir)
+    _MACRO_RE = _build_macro_re(prefix, macro_defs.keys())
     func_macros = func_macros or {}
     # 实参形态与后随字面量后缀都由语言包声明（引擎不硬编码 `(` / `,` / `'d`）
     call_args = load_macro_call_args(rules_dir=rules_dir)
     suffix_re = load_macro_call_suffix(rules_dir=rules_dir)
+    operators = load_macro_operators(rules_dir=rules_dir)
     if func_macros and call_args is None:
         raise ConfigError(
             "[macro_recognition] 有待参宏（func_macros 非空）却未声明实参形态："
@@ -772,6 +808,8 @@ def expand_tokens(
         # splice，见 macro_policy.py）：引擎只执行处置，不判定"该怎么处置"。
         policy=load_macro_policy(rules_dir),
         syntax=load_comment_syntax(rules_dir),
+        string_delimiters=operators.string_delimiters,
+        escape=operators.escape,
         lines=source.split("\n"),
     )
     lines = ctx.lines
@@ -861,9 +899,19 @@ def _collect_macro_matches(ctx: "_MacroExpandCtx", line: str) -> list[tuple]:
     """本行的宏调用（原起列, 原止列, 宏体, 名字, 是否带参, 实参文本）。"""
     matches: list[tuple] = []
     consumed_until = -1
+    # 掩码：字符串/字符/行注释/块注释内的文本不参与宏匹配（与裸匹配同一扫描）
+    spans = macro_expand.mask_spans(
+        line, ctx.string_delimiters, ctx.escape, ctx.syntax
+    )
+
+    def _masked(pos: int) -> bool:
+        return any(a <= pos < b for a, b in spans)
+
     for m in ctx.macro_re.finditer(line):
         if m.start() < consumed_until:
             continue  # 已被前一个宏调用链吞噬（`W'd`RST 嵌套）
+        if _masked(m.start()):
+            continue  # 掩码区内（字面量/注释）不展开
         hit = _match_one(ctx, line, m)
         if hit is None:
             continue

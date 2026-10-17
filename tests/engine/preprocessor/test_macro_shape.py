@@ -19,7 +19,7 @@ import pytest
 from core.define import DEFAULT_RULES_DIR
 from core.errors import ConfigError
 from lexer import Lexer
-from preprocessor._expand import _load_config
+from preprocessor._expand import _load_call_prefix, _load_config
 from preprocessor.macro_shape import (
     KIND_CALL,
     KIND_DIRECTIVE,
@@ -100,6 +100,7 @@ def test_language_without_shape_declaration(config_loaded) -> None:
     assert load_macro_shapes(rules_dir="grammar/c4") == {}
     prefix, directives = _load_config("grammar/c4")
     assert prefix == ""
+    assert _load_call_prefix("grammar/c4") is None, "无 call 形态 ⇒ 调用永不匹配（三态之一）"
     assert directives, "已注册的指令处理器名仍算指令名（与声明无关的兜底面）"
 
 

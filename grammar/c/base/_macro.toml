@@ -18,12 +18,11 @@ directive = [
     "macro.undef",
     "macro.include",
 ]
-# 调用形态 = **显式声明"无前缀"**（单元素生产式；引擎不提供默认空前缀）。
-# ⚠ 待引擎侧 schema 落地后启用（`macro_shape.py` 新增 `call_shape` 键 + 单元素
-#   生产式解析 + `_expand.py` 三态前缀）；**先行保留注释占位，不写未消费的键**
-#   ——写了会被 lexer 当成"`#` 前缀的调用形态"，与 C 的裸标识符调用语义相反。
-# call_shape = "name"
-# call = []
+# 调用形态 = **显式声明"无前缀"**（单元素生产式 `name`；引擎不提供默认空前缀）。
+# 裸标识符是否真的展开由展开器的**宏表**决定（未 #define 的名字不进匹配），
+# 且字符串/注释内的同名标识符由掩码排除（不参与匹配）。
+call_shape = "name"
+call = []
 
 # 带参宏实参形态：C 的 `(` / `)` / `,`（声明名见 base/_token.toml 的 [bracket].pairs
 # 与 [symbol.base].comma）——定义侧与调用侧同形。

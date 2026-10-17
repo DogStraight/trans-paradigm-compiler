@@ -32,22 +32,83 @@ DEFAULT_BUDGET = 128
 
 @dataclass(frozen=True)
 class _Tok:
-    """展开单元：文本 + hideset（不可变，构造后不再改）。"""
+    """展开单元：文本 + hideset（不可变，构造后不再改）。
+
+    `masked`：来自字符串/字符字面量或注释的整段文本——**永不参与宏匹配**
+    （掩码与裸匹配在同一次扫描内生效）。
+    """
 
     text: str
     hide: frozenset[str] = frozenset()
+    masked: bool = False
 
 
-def tokenize(text: str, operators: MacroOperators | None = None) -> list[_Tok]:
+def mask_spans(
+    text: str,
+    string_delimiters: tuple[str, ...] = (),
+    escape: str | None = None,
+    syntax=None,
+) -> list[tuple[int, int]]:
+    """掩码区间：字符串 / 字符字面量 / 行注释 / 块注释（左闭右开，按起点排序）。
+
+    定界符与转义**只从语言包声明取**（token 表 `[string]` + `[comment]` 的
+    `CommentSyntax`）；未声明 ⇒ 对应掩码不启用（不猜语言字符）。
+    """
+    spans: list[tuple[int, int]] = []
+    delimiters = [d for d in string_delimiters if d]
+    block_pairs = list(getattr(syntax, "block_pairs", ()) or ())
+    line_starts = list(getattr(syntax, "line_starts", ()) or ())
+    i = 0
+    n = len(text)
+    while i < n:
+        line_hit = next((m for m in line_starts if text.startswith(m, i)), None)
+        if line_hit is not None:
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            spans.append((i, end))
+            i = end
+            continue
+        block = next((p for p in block_pairs if text.startswith(p[0], i)), None)
+        if block is not None:
+            close = text.find(block[1], i + len(block[0]))
+            end = n if close < 0 else close + len(block[1])
+            spans.append((i, end))
+            i = end
+            continue
+        delim = next((d for d in delimiters if text.startswith(d, i)), None)
+        if delim is not None:
+            j = i + len(delim)
+            while j < n:
+                if escape and text.startswith(escape, j):
+                    j += len(escape) + 1
+                    continue
+                if text.startswith(delim, j):
+                    j += len(delim)
+                    break
+                j += 1
+            spans.append((i, j))
+            i = j
+            continue
+        i += 1
+    return spans
+
+
+def tokenize(
+    text: str,
+    operators: MacroOperators | None = None,
+    masks: list[tuple[int, int]] | None = None,
+) -> list[_Tok]:
     """文本 → token 列表（标识符整段；语言声明的宏算子整段；其余逐字符）。
 
     逐字符切分不改变"拼接回去等于原文"（`join` 是逆运算）；宏调用实参的括号配平
     只依赖单字符定界符（语言包当前声明的 `(`/`)`/`,` 均单字符）。
     `operators` 声明的 `##` 等**多字符算子**必须先整体成 token，否则会被拆成两个
     `#` 而失去粘贴语义（`##` 是标准算子，由语言包声明、引擎不硬编码）。
+    `masks`（来自 `mask_spans`）的整段区间作为**单个 masked token**——永不参与宏匹配。
     """
     toks: list[_Tok] = []
     i = 0
+    mask_start = dict(masks or [])
     op_texts = (
         [op for op in (operators.paste, operators.stringize) if op]
         if operators is not None
@@ -55,6 +116,11 @@ def tokenize(text: str, operators: MacroOperators | None = None) -> list[_Tok]:
     )
     op_texts.sort(key=len, reverse=True)  # 长串优先（`##` 不被 `#` 抢先切走）
     while i < len(text):
+        if i in mask_start:
+            end = mask_start[i]
+            toks.append(_Tok(text[i:end], masked=True))
+            i = end
+            continue
         op = next((o for o in op_texts if text.startswith(o, i)), None)
         if op is not None:
             toks.append(_Tok(op))
@@ -76,7 +142,8 @@ def join(toks: list[_Tok]) -> str:
 
 
 def _is_ident(tok: _Tok) -> bool:
-    return bool(IDENT_RE.fullmatch(tok.text))
+    """标识符判定（**masked token 永不算标识符**——掩码与匹配同一次扫描生效）。"""
+    return not tok.masked and bool(IDENT_RE.fullmatch(tok.text))
 
 
 def _collect_args(
@@ -148,7 +215,7 @@ def _expand_one(
         prefixed = prefix == "" or (
             i > 0 and work[i - 1].text == prefix and _is_ident(tok)
         )
-        if not prefixed or name in tok.hide or name not in macro_defs:
+        if tok.masked or not prefixed or name in tok.hide or name not in macro_defs:
             out.append(tok)
             i += 1
             continue
@@ -381,16 +448,30 @@ def expand_text(
     prefix: str = "",
     budget: int = DEFAULT_BUDGET,
     operators: MacroOperators | None = None,
+    syntax=None,
 ) -> str:
     """文本级展开入口（宏体/片段通用）：hideset 重扫描，超预算保留原文。
 
     `prefix` 缺省 `""` = 裸标识符调用；verilog 等前缀语言传声明的前缀文本
     （只有"前缀 + 名字"才是调用，裸出现同名标识符不展开）。
     `operators` 未声明 ⇒ `#`/`##`/变参语义不启用（纯替换）。
+    `syntax`（`CommentSyntax`）+ `operators.string_delimiters/escape` ⇒ 掩码：
+    字符串/字符/行注释/块注释内的文本**不参与**宏匹配（同一次扫描内生效）。
     """
+    ops = operators
+    masks = (
+        mask_spans(
+            text,
+            ops.string_delimiters if ops else (),
+            ops.escape if ops else None,
+            syntax,
+        )
+        if ops is not None or syntax is not None
+        else None
+    )
     return join(
         _expand_one(
-            tokenize(text, operators), macro_defs, func_macros, call_args, budget,
-            prefix, operators,
+            tokenize(text, ops, masks), macro_defs, func_macros, call_args, budget,
+            prefix, ops,
         )
     )
