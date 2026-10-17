@@ -779,11 +779,11 @@ _MUTATIONS: list[dict[str, str]] = [
     },
     {
         # ── A2 ④：宏定义形式语法检查（linter，AST 前） ──
-        "why": "形参表空项检查若失效（`#define F(a,) a`）⇒ 畸形形参表重新静默，"
+        "why": "宏形式语法检查若未被 linter 接线（scanner 不产出）⇒ 畸形 `#define` 重新静默，"
                "形式化语法错误不再由 linter 报出（用户面无诊断）",
-        "file": "linter/macro_syntax.py",
-        "old": "        if not text:\n",
-        "new": "        if False:  # 变异：不检空项\n",
+        "file": "linter/scanner.py",
+        "old": "        errors = macro_syntax_diagnostics(source, self._rules_dir)\n",
+        "new": "        errors = []  # 变异：不接宏形式语法检查\n",
         "test": "tests/engine/linter/test_macro_syntax_checks.py",
     },
 ]
