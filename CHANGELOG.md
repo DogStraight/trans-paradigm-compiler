@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **阶段 4 A2 ①：`expand_macros` 默认口径统一为"开"**（2026-10-17，循环 #16 续）：此前 **CLI 默认 True**
+  （`main.py:132` 按 `[commands]` 的 `preprocess`）而**库默认 False**（`pipeline/__init__.py` 兜底 +
+  `config/tpc_config.json`）⇒ 同一输入两条路径 verdict 不同（gap ⑬）。**行为变化清单**：
+  1. `run_pipeline_on_source(expand_macros=None)`（库默认）**False → True**；`config/tpc_config.json` 的
+     `pipeline.expand_macros` 同步 **true**。**CLI 行为不变**（本已 True）。
+  2. 含宏/指令的输入在**库默认路径**现在走预处理：宏调用被展开并渲染还原；`#define`/`#include` 行被消费
+     （不再 `parse truncated`）。实测：`#define FOO 1` + `int x = FOO;` 由 `error='parse truncated'` →
+     `success=True, error=''` 且输出含展开值；config 指向 C 时 `tpc check` rc=0「No issues found」。
+  3. verilog：CLI A/B `--expect-changed 0` **0/144 ✓**；五套回归（preprocessor / pipeline / languages-c /
+     languages-verilog / policy）**1976 passed**（改前改后同数 ⇒ 无既有测试依赖旧默认；显式传 `False` 的
+     用例仍测"不展开"路径）。
+  4. 退出判据 1 的实质障碍减少一项（仍差 `#include` 真实实现 / 两路径统一 / `#define` 诊断面 ⇒ A2 其余项）。
+  ⚠ **工具缺口（本轮实测，未作证据）**：`ab_pipeline_compare.py --mode inproc` 在 verilog 上不可用——
+  `--plugins` 默认 `grammar/c/plugins` ⇒ `GrammarError: 注入目标规则 PostfixExpr 不存在（EXT AlignofExpr）`；
+  改指 `grammar/verilog/plugins` 后 JSON 采样报 `JSONDecodeError`。已记入 `TODO.md` 工具项。
+
 - **阶段 4 A1 宏核心返工收口：审计 15 反例 → 3 偏差（= 2 条已声明边界）**（2026-10-17，循环 #16；
   `task-53`）：
   - **已修**（均以端到端用例锁住）：`#`/`##` 两侧空格；调用点实参切分改 **token 级**（字面量/注释内

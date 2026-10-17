@@ -1156,9 +1156,12 @@ def _init_result_dict() -> dict[str, Any]:
 
 
 # 参数 → 配置键 → 兜底值（None = "未传，取配置默认"）
+# `expand_macros` 兜底 **True**（2026-10-17 统一口径：CLI 与库默认一致，见
+# docs/gaps/gap-c-preprocessor-scope.md ⑬；此前 CLI 已默认 True、库默认 False，
+# 导致同一输入在两条路径给出不同 verdict）。
 _DEFAULT_SPECS: tuple[tuple[str, str, Any], ...] = (
     ("out_dir", "out_dir", None),
-    ("expand_macros", "expand_macros", False),
+    ("expand_macros", "expand_macros", True),
     ("quiet", "quiet", False),
     ("analyzer_enabled", "analyzer", True),
     ("transform_enabled", "transform", True),

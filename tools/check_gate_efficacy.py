@@ -722,6 +722,23 @@ _MUTATIONS: list[dict[str, str]] = [
                "# 变异：字典序（短名吃长名前缀）\n",
         "test": "tests/engine/preprocessor/test_c_macro_end_to_end.py",
     },
+    {
+        # ── A2 ①：默认口径统一（gap ⑬ 事故：CLI 默认 True / 库默认 False 分叉）──
+        "why": "项目配置把 `expand_macros` 改回 false ⇒ **库默认路径**不预处理：合法 `#define` 报 "
+               "`parse truncated`，与 CLI 默认（True）分叉（gap ⑬ 事故）",
+        "file": "config/tpc_config.json",
+        "old": '        "expand_macros": true,',
+        "new": '        "expand_macros": false,',
+        "test": "tests/engine/pipeline/test_expand_macros_default.py",
+    },
+    {
+        "why": "`_DEFAULT_SPECS` 兜底若回退 False，wheel 安装（无项目配置）会与 CLI 默认分叉"
+               "（gap ⑬ 事故的第二个侧面）",
+        "file": "pipeline/__init__.py",
+        "old": '    ("expand_macros", "expand_macros", True),',
+        "new": '    ("expand_macros", "expand_macros", False),',
+        "test": "tests/engine/pipeline/test_expand_macros_default.py",
+    },
 ]
 
 

@@ -9,7 +9,7 @@
         "transform": true,
         "renderer": true,
         "lint": true,
-        "expand_macros": false,
+        "expand_macros": true,
         "format_output": true,
         "check_idempotent": true,
         "quiet": false,

@@ -84,23 +84,30 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 ## tpc 承载面与缺口
 
 **现役承载面（实测）**：指令原语注册表 `preprocessor/primitives/registry.py` 已注册 **8 个**——`define`（对象宏 + 函数宏形参表）/ `undef` / `include`（`path_forms`=开闭定界符+`relative_first`、`search_dirs`、`silent`）/ `ifdef` / `ifndef` / `else` / `elsif` / `endif`；声明面 `[macro_recognition]`（`shape`/`directive`/`call`/`call_args`/`arg_separator`）与 `[directive_handlers]`（关键字→`op` + 每指令配置）；三机制 `splice`/`line`/`inline` + 位置桥（锚 + `source_text` 回插）。
-**关键现状**：`grammar/c/` **完全没有** `[macro_recognition]` / `[directive_handlers]`（全仓仅 `grammar/verilog/` 声明）。
+**关键现状（2026-10-17 A1 收口后）**：`grammar/c/` **已声明** `[macro_recognition]`（`shape` /
+`call_shape="name"` / `call` / `call_args`）+ `#`/`##`/`__VA_ARGS__` 三算子（verilog 语义不变）；
+`[directive_handlers]` 与 `#if` 家族、`#include` 真实实现仍在 **A2**（交付面见 ⑯⑰）。
 
 | 缺口 | 形态 | 现有能力能否承载 |
 |---|---|---|
-| ① **C 裸标识符宏调用**（`NAME` / `NAME(args)`） | 机制级 | **不能**：`shape` 实测要求"前缀 token 名 + 名字位"**两位、前缀位不能空**（`preprocessor/macro_shape.py` 的 shape 解析 fail-fast）；且宏调用与普通标识符同形，需按宏表判定 |
-| ② `#` / `##` + **重扫描/自引用抑制** | 机制级 | **不能**：现为文本替换 + `[expand] max_iterations` 封顶，无消解语义 |
+| ① **C 裸标识符宏调用**（`NAME` / `NAME(args)`） | 机制级 | **能**（A1，循环 #15）：`call_shape="name"` 三态显式"无前缀" + 按宏表判定；verilog 语义不变（边界见 ⑰） |
+| ② `#` / `##` + **重扫描/自引用抑制** | 机制级 | **能**（A1）：`#`/`##` 算子 + **hideset 重扫描**（替换文本一律由 token 展开器现算）；重扫/跨行两条边界见 ⑰ |
 | ③ `#if` / `#elif` 的**整型常量表达式求值** | 机制级 | **不能**：现有 `elsif` 是"宏名"语义，非表达式求值 |
 | ④ **预定义宏注入**（`__FILE__`…/`__STDC_VERSION__`） | 机制级 | **不能**：无预定义宏面 |
-| ⑤ 指令前缀与行首语义 | 声明面 | 部分：`#` 需作为符号 token 声明；`#` 与关键字间空白、行首（前导空白）容差待验证 |
+| ⑤ 指令前缀与行首语义 | 声明面 | **已具备**（A1）：`#` 已进 `[symbol.base]`；`#` 与关键字间空白、行首前导空白容差按 A1 实现（未单测的形态留观察） |
 | ⑥ `#line` / `#error` / `#pragma` / `_Pragma` | 原语 | 部分：`#pragma`/`_Pragma` 走"保真穿透 + marker"；`#line` 改变文件/行语义 ⇒ 与位置映射联动 |
 | ⑦ 条件块内 / 跨文件（`#include`）位置映射 | 新面 | 部分：`preprocessor/_bridge.py` 逐宏调用可回插；条件块与跨文件映射需新账本 |
 
-**根因一条（实测）**：`grammar/c/base/_token.toml` 的 `[symbol.base]`（16 项单字符符号）里**没有 `#`**（`##` 亦无）⇒ 这就是 `tools/c_acceptance.py` 报 `Unexpected token: #` 的原因，也是缺口 ①②③④ 之外最前置的一条。
+**根因一条（2026-10-17 已消除）**：`grammar/c/base/_token.toml` 的 `[symbol.base]` 里**曾没有 `#`**（`##`
+亦无）⇒ 当时 `tools/c_acceptance.py` 报 `Unexpected token: #`。A1 已把 `#`/`##` 声明为符号/算子 ⇒ 该症状
+不再出现；`#include` 现存的问题**不在词法**，而是 **未真实包含**（`path_forms` 接线 / 内容进流，A2 ②）与
+**默认口径**（A2 ①）。
 
 ## 可实现性：首片 A / B（可独立验证）
 
-- **首片 A（闭合两个空洞）**：`#define`（对象 + 函数宏 + `#` + `##` + `__VA_ARGS__` + 重扫描消解）、`#include`（`""`/`<>` + `-I` + 缺文件报错）、`#undef`、**裸标识符调用识别**。
+- **首片 A（宏核心）**：`#define`（对象 + 函数宏 + `#` + `##` + `__VA_ARGS__` + hideset 重扫描）、`#undef`、
+  **裸标识符调用识别**。**判据与已交付面见 ⑯⑰**；**不以"空洞计数"表述**（口径见 ⑭）。
+  `#include` 真实实现与两路径统一**归 A2**（不属于已交付的 A1）。
   **验收面（口径已修正，见 ⑭）**：`python tools/c_acceptance.py --only-gaps` 的计数**不再是拆步信号**
 （放宽后已被"被消费 ⇒ 空 TU ⇒ 接受"掩盖）——**A1 信号 = 引擎核判据**（与 GCC 对拍的正样本 +
 预处理器缺陷态变红）；**A2 信号 = `#include` 被真实处理**（`path_forms` 解析生效 + 缺文件**报诊断** +
@@ -127,9 +134,13 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 **首片实施期裁定**（2026-10-17，承 task-49 中途汇报）：
 ⑪ **E.0 口径修正 = (a)+(c)**：`tools/c_acceptance.py::_try`（`:123-136`）**不走预处理**（直接 `parser.parse(lexer.tokenize(src))`）且要求 AST 非空 ⇒ 对预处理样本判定**失真**——`#define N 4` 的**正确**预处理结果本就是**空翻译单元** ⇒ 该样本**永远是"空 AST 空洞"**，原判据（"只剩 `#include`"）**不可达**。修正：**(a)** 改 `_try` 走"预处理→词法→解析"（与管线同路、开宏扫描）+ **对预处理样本接受条件放宽为"无异常"**（纯指令样本 AST 可空）；**非预处理样本仍须 AST 非空**（否则掩盖解析失败）；**(c)** 管线级测试补"指令被消费 + 无异常 + 输出保真"作双保险。**不采 (b)**（只改口径不修路径）。
 ⑫ **判据设计教训**：定"工具指标归零"类判据前**必须核实该工具的**真实执行路径**——本轮 Lead 未核实导致判据不可达（由实现方中途拦下）。
-⑬ **已实测确认（真不一致、用户可见）**：`run_pipeline_on_source` 的 `expand_macros` **默认 False**（`pipeline/__init__.py:1161` + `config/tpc_config.json:12`）而 `tpc check` 默认 True（`analyzer/checker.py:57`、`main.py:132`）。实测（同输入 `#define N 4\nint x = N;`、同 API 只差该 flag）：**False ⇒ `error="parse truncated (unconsumed tokens)"`；True ⇒ `error=""`** ⇒ **verdict 差异**（非风格）。CLI 侧同文件对照：`tpc lint` rc=1 报 `phase-unrecognized`（line 0 col 8-9）｜`tpc check` rc=1 报 `parse_ok: false` 且 **`parse_error` 为空串** ⇒ 两条用户可见路径**彼此诊断形态也不同**。**归属 = 管线配置口径（非 C 专有，verilog 同样受"库默认 False"影响）**；**裁定 = 修（统一为"开"）**，归 **A2 步**（与"C 端到端可用"绑定），**必须附 verilog 对拍 + 行为变化清单**。**A1 收口时追加实测（2026-10-17）**：`expand_macros=True` 时 C 宏**确实生效**（`[preprocessor] macros expanded`、`error=''`）⇒ 该 flag 是 A1 的**唯一可达开关**；默认 false 下 **CLI 对合法 `#define FOO 1` 都报语法错**（token 实测 `'#':symbol.base.pound` + `'define':id`，即预处理根本没跑）⇒ **A1 对用户不可达，直到 A2 统一默认口径**。
+⑬ **已实测确认（真不一致、用户可见）**：`run_pipeline_on_source` 的 `expand_macros` **默认 False**（`pipeline/__init__.py:1161` + `config/tpc_config.json:12`）而 `tpc check` 默认 True（`analyzer/checker.py:57`、`main.py:132`）。实测（同输入 `#define N 4\nint x = N;`、同 API 只差该 flag）：**False ⇒ `error="parse truncated (unconsumed tokens)"`；True ⇒ `error=""`** ⇒ **verdict 差异**（非风格）。CLI 侧同文件对照：`tpc lint` rc=1 报 `phase-unrecognized`（line 0 col 8-9）｜`tpc check` rc=1 报 `parse_ok: false` 且 **`parse_error` 为空串** ⇒ 两条用户可见路径**彼此诊断形态也不同**。**归属 = 管线配置口径（非 C 专有，verilog 同样受"库默认 False"影响）**；**裁定 = 修（统一为"开"）**，归 **A2 步**（与"C 端到端可用"绑定），**必须附 verilog 对拍 + 行为变化清单**。**A1 收口时追加实测（2026-10-17）**：`expand_macros=True` 时 C 宏**确实生效**（`[preprocessor] macros expanded`、`error=''`）⇒ 该 flag 是 A1 的**唯一可达开关**；默认 false 下 **CLI 对合法 `#define FOO 1` 都报语法错**（token 实测 `'#':symbol.base.pound` + `'define':id`，即预处理根本没跑）⇒ **A1 对用户不可达，直到 A2 统一默认口径**。**2026-10-17 A2 ① 已统一（实测）**：`pipeline/__init__.py` 兜底与 `config/tpc_config.json` 双双改 **True**（CLI 本已 True）⇒ 库/CLI 默认一致；合法 `#define FOO 1` 在库默认路径 `error=''` 且输出含展开值；config 指向 C 时 `tpc check` rc=0「No issues found」；verilog CLI A/B **0/144**、五套回归 **1976 passed**（详见 CHANGELOG 行为变化清单）。
 ⑭ **拆步信号修正（因 ⑪ 放宽判据）**：`--only-gaps` 计数在放宽后**不可再用**作拆步信号——`#include <stdio.h>` 在 A1 阶段（`include` 未接线、只 `print` 警告）会因"被消费 ⇒ 空 TU ⇒ 接受"而**显示 0 空洞**，**掩盖"未实现"**。修正：**A1 信号 = 引擎核判据**（E.1 与 GCC 对拍的正样本 + E.4 的 5 条缺陷态变红）；**A2 信号 = `#include` 被真实处理**（`path_forms` 解析生效 + 缺文件**报诊断** + 内容确实被消费进流），**不是"空洞归零"**。
-⑮ **文档漂移待 A1/A2 收口统一更新**（task-50 附带发现；**不现在改**，以免与在途结论打架）：A1 落地后以下**现状陈述已不成立**——① 本档状态行仍写"未开工"；② 本档缺口表 ①② 列"**不能**"（`call_shape` / hideset rescan 正在实现）；③ 本档"`[symbol.base]` **无 `#`** ⇒ acceptance 报 `Unexpected token: #` 的根因"（**根因已消除**：`#`/`##` 已声明；直连词法 `tokenize('#include <stdio.h>\n')` 已能切出 `macro.include` 且**不抛**）；④ 本档"首片 A（**闭合两个空洞**）"（按 ⑭ 不宜用计数表述）；⑤ `docs/gaps/gap-language-pack-scope.md` 已知偏差 #5 的复现命令与现象（"`#include` 在词法层直接 ValueError"）**已随 A1 失效**。⇒ **A2 收口时逐条复核并更新**。
+⑮ **文档漂移复核（2026-10-17 A2 期间已收口）**：task-50 的 5 处已全部更新——① 本档状态行 → **A1 收口**
+（见档首）；② 缺口表 ①② → **能**（A1，循环 #15）；③ "`[symbol.base]` 无 `#`"根因句 → 改为**已消除**
+（`#`/`##` 已声明；`#include` 现存问题 = 未真实包含 + 默认口径，见 A2 ①②）；④ "首片 A（闭合两个空洞）" →
+改为按 ⑭ 口径（引擎核判据，不以空洞计数表述）；⑤ `docs/gaps/gap-language-pack-scope.md` 已知偏差 #5 的
+"词法层 ValueError"现象 → 改为**现状**（`expand_macros` 默认口径 / `#include` 未真实包含，归 A2）。
 
 ⑯ **A1 交付实录（2026-10-17，循环 #15）**：已完成面 = `#define`（对象/函数/变参）+ `#undef` + **C 裸标识符调用**（`call_shape="name"` 显式无前缀，三态，verilog 语义不变）+ `#` 字符串化（token 间空白折叠，字面量内部不动）+ `##` 粘贴（**未展开拼写**）+ `__VA_ARGS__`（空时保留宏体逗号）+ **hideset 重扫描**（替换不动点文本替换）+ **掩码**（含替换进流的宏体）+ 形参表未闭合 **fail-fast**。验证 = GCC 16.1.0 对拍（Lead 独立探针）+ 六套回归 2257 + A/B 0/144 + 门禁变异 57→65（A1 8 条全红）。**审计发现**：① 宏体字面量未掩码的真 bug（`#define B "A"` 误展开，已修）；② 两条测试空档（hideset 断言太弱、宏体掩码路径）已补判别式用例；③ 一条等价变异不可检出，已删。**未做（A2）**：`#include` 真实实现、管线段与 lint 两路径统一、`expand_macros` 默认口径；`#if` 家族与 C23 项归首片 B/后续。**⚠ 同日更正（独立审计）**：上述"交付"判据面**不成立**——审计实测 15 条合法 C99 反例（10 条 P0：`#`/`##` 两侧空格失效、调用点实参切分不认字面量、裸调用短名吃长名前缀、函数宏无 `(` 被当对象宏且不重扫），根因 = 端到端实为"预展开 + 正则插入"另一条路径（与 `expand_text` 的 token/hideset 路径并存）；A1 状态 = **返工中**（`task-53`），修复判据 = `_drafts/audit_a1_counterexamples.py` 0 偏差 + **端到端**用例。**另登记（A2 诊断面）**：畸形 `#define` / 实参个数不校验 / `#`·`##` 约束违反在**非法输入**下静默（GCC 均报 error）——按 tpc「语法宽进 + 诊断走 linter」归 A2，不硬 fail-fast。
 

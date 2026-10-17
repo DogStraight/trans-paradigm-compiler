@@ -8,14 +8,13 @@
 
 ## 一、在途批次：阶段 4 A2（当前主线唯一在做的块）
 
-- [ ] **A2 预处理器收尾批次**（五项同批，逐项独立判据；验收 = 退出判据 1 实质达成）：
-      **① `expand_macros` 默认统一为"开"**（A1 用户可达的前提）——默认 false 下 CLI 对合法 `#define`
-      都报语法错；判据 = 默认开 + verilog 对拍 0 差异 + CLI 不再报语法错。**② `#include` 真实实现**：
-      `path_forms` 接线 + 内容进流 + 缺文件/循环**给诊断**（现只 `print`）。**③ 两路径统一**：lint 与
-      管线段同一输入都给诊断、都不抛异常（`_stage_lex` 现抛 `ValueError`）；顺带落地 **token 级重扫**
-      （= A1 两条已声明边界：替换后再现的调用 / 实参跨行），以 **A/B 0/144 + 后缀链**为独立检查点。
-      **④ `#define` 非法输入诊断面**：空名 / 畸形形参表 / 实参个数不校验 / `#`·`##` 约束违反（GCC 均
-      error、本包静默）⇒ 按「语法宽进 + 诊断走 linter」给**位置正确**的诊断。**⑤ gap ⑮ 的 5 处文档漂移**。
+- [ ] **A2 预处理器收尾批次**（逐项独立判据；验收 = 退出判据 1 实质达成）：
+      **① `#include` 真实实现**：`path_forms` 接线 + 内容进流 + 缺文件/循环**给诊断**（现只 `print`）。
+      **② 两路径统一**：lint 与管线段同一输入都给诊断、都不抛异常；顺带落地 **token 级重扫**（= A1 两条已
+      声明边界：替换后再现的调用 / 实参跨行），以 **A/B 0/144 + 后缀链**为独立检查点。
+      **③ `#define` 非法输入诊断面**：空名 / 畸形形参表 / 实参个数不校验 / `#`·`##` 约束违反（GCC 均
+      error、本包静默）⇒ 按「语法宽进 + 诊断走 linter」给**位置正确**的诊断。
+      （已完成移出：`expand_macros` 默认口径统一 ✅、gap ⑮ 文档漂移 ✅）
       链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑮⑯⑰；`preprocessor/README.md`「已知边界」
 
 ## 二、C 包缺陷（A2 之外，能做的）
@@ -43,6 +42,8 @@
 - [ ] **A/B 对拍工具缺"产物摘要"档**：现只对拍 `rc`/`stdout` ⇒ 声明"零可见变化"时仍要手写脚本（M1
       那次由审计方另做逐文件 SHA256）。判据：工具增产物摘要档（逐文件 `lint --json` / 渲染文本 PRE↔POST）
       + `tools/README.md` 同步一行；零可见变化收口证据改用该档。
+      **另（2026-10-17 实测）**：`--mode inproc` 在 verilog 上不可用——`--plugins` 默认 `grammar/c/plugins`
+      ⇒ `GrammarError`（C 插件注入 verilog 规则）；改指后 JSON 采样报 `JSONDecodeError`。修好才能当证据。
 - [ ] **`check_doc_refs` D3 不查 blockquote 续行**：`Impl:`/`Test:` 多行续行在 D3 视野外 ⇒ 引用**不存在的
       测试文件也不会红**（已删档 ADR-0017 引 `test_macro_call_node.py` 而 D3 = 0）。判据：D3 支持续行（或
       明确写 D3 边界）+ 该悬空引用能被抓到。链：`policy/check_doc_refs.py`、`policy/doc-alignment.md`
