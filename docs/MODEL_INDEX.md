@@ -63,6 +63,7 @@
 | 稳健性 / 畸形输入防御 | `linter/linter_architecture.md` | `linter/scanner.py::LinterScanner.scan` | `tests/engine/linter/test_linter_robustness.py` |
 | 诊断位置精度（token_span） | `linter/linter_architecture.md` | `linter/__init__.py::token_span` | `tests/engine/linter/test_lint_accuracy.py` |
 | 条件编译多路径诊断（diagnose） | `linter/linter_architecture.md` | `linter/diagnose.py` | `tests/engine/linter/test_diagnose.py` |
+| 宏定义形式语法（声明驱动；`[macro_syntax]` 段启用） | `preprocessor/README.md`（形态清单）<br>`linter/README.md` | `linter/macro_syntax.py`<br>`preprocessor/macro_shape.py::load_macro_syntax` | `tests/engine/linter/test_macro_syntax_checks.py` |
 ### analyzer — 语义分析（作用域/符号/类型 + 检查插槽）
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |

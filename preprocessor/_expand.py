@@ -143,8 +143,8 @@ def _get_include_config() -> dict:
 def directive_handlers() -> dict[str, dict]:
     """当前加载语言的 `[preprocessor.directives]`（指令关键字 → 处理器配置）。
 
-    linter 阶段的形式化宏语法检查用它判定"哪些关键字是 define / 是否声明了
-    `check_syntax`"；与 `scan_directives` 读同一份声明（单一来源）。
+    linter 阶段的形式化宏语法检查用它判定"哪些关键字是 define"；与
+    `scan_directives` 读同一份声明（单一来源）。
     """
     return {
         key: dict(value) if isinstance(value, dict) else value

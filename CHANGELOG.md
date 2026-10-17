@@ -88,13 +88,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **A2 ④：宏定义的**形式化语法**检查落到 linter（AST 前）**（2026-10-17；作者对齐：形式化语法走 linter、
   语义级走 check 插件族）：新增 `linter/macro_syntax.py`（语言无关，知识全来自声明面）——只报 GCC 同样
   报 error 的**形式化**约束：宏名缺失/非法、形参表空项/非标识符/`...` 非末位或重复/重名、宏体 `#` 后非
-  形参或变参、`##` 在首/尾；每类给**带位置**的 blocking 诊断。启用由语言包声明
-  `[directive_handlers].define.check_syntax = true`（**仅 C 包声明**；verilog 不声明 ⇒ 不跑，A/B 0/144）。
+  形参或变参、`##` 在首/尾；每类给**带位置**的 blocking 诊断。启用由语言包声明 **`[macro_syntax]` 段**
+  （定义侧形式语法，如 `variadic_marker`；经 `preprocessor.macro_config` 读取；**仅 C 包声明**，verilog
+  未声明 ⇒ 不跑，A/B 0/144）。
+  - **配置面更正（作者提示"linter 补了宏语法检查文件，那么需要对应的宏语法配置"）**：启用不再是
+    `[directive_handlers].define.check_syntax` 布尔开关（那样 C 的定义语法仍硬编码在引擎、别的语言无法声明
+    自己的宏语法）。改为 `[macro_syntax]` **声明段**：启用判据 = 语言包声明该段；定义侧形态（变参占位）
+    也来自声明，形参表/算子形态沿用 `[macro_recognition]` ⇒ **引擎零 C 常量**；verilog 补自己的段即可启用
+    （触发式项，ADR-0021）。
   - 要点：指令行已被扫指令消费、不进 lint 流 ⇒ 检查对**原始源码**做；形参/算子形态全取
     `call_args` / `[macro_recognition]` 声明，引擎不硬编码 C。
-  - **验证**：`tests/engine/linter/test_macro_syntax_checks.py` **18 条**（9 非法形态带位置 + 7 合法零误报 +
-    verilog 不启用 + scanner 集成）；`tpc lint` 对 `#define F(a,) a` → `Ln 1:13 形参表含空项` **rc=1**；
-    linter **281 passed**、精度门禁 **hit_code 33/33 / fp 0**、六套 **2292 passed**、A/B **0/144**、pyright **0**。
+  - **验证**：`tests/engine/linter/test_macro_syntax_checks.py` **21 条**（10 非法形态带位置 + 7 合法零误报 +
+    声明驱动 2 条 + verilog 不启用 + scanner 集成）；`tpc lint` 对 `#define F(a,) a` → `Ln 1:13 形参表含空项`
+    **rc=1**；linter **283 passed**、精度门禁 **hit_code 33/33 / fp 0**、A/B **0/144**、pyright **0**。
   - **剩余（已落 TODO）**：宏**语义**检查（实参个数等，需宏表 + 调用点）→ 作者定的**插件侧 check 族**；
     `tpc check` 尚未接 linter 语法诊断（同一 malformed define：lint rc=1 / check rc=0）。
 

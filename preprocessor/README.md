@@ -31,6 +31,7 @@
 | 带参宏实参形态（调用括号对 + 实参槽 + 分隔符；定义侧与调用侧同形） | `[macro_recognition]`（`call_args` / `arg_separator`） | `macro_shape.py`（声明解析 + 配平/切分）→ `_expand.py`（调用侧）、`primitives/define.py`（形参表） |
 | 宏调用后随字面量后缀（`` `W'd0 `` 的 `'d0`；比 `[[number.based]]` 宽一档） | `[macro_recognition]`（`suffix_after_call`） | `macro_shape.py::load_macro_call_suffix`（编译形态模式）→ `_expand.py`（区间扩展） |
 | include 路径形态（开 / 闭定界符 + 解析策略：相对优先 or 仅 search_dirs） | `[directive_handlers.include]`（`path_forms`；未声明→引擎默认两形态） | `primitives/include.py`（形态匹配 + 路径解析） |
+| 宏**定义侧**形式语法（变参占位 `...` 等；linter 阶段检查的启用判据与形态） | `[macro_syntax]`（`variadic_marker`；与 `[macro_recognition]` 同文件） | `macro_shape.py::load_macro_syntax`（声明解析；**未声明 ⇒ 不启用**）→ `linter/macro_syntax.py` |
 | 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
 | 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
 
@@ -133,7 +134,7 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 | 文件 | 一句话 |
 |------|--------|
 | `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 |
-| `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析：前缀 token 文本 + 名字候选 + 实参形态 + `call_shape`/算子） |
+| `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析：前缀 token 文本 + 名字候选 + 实参形态 + `call_shape`/算子；`[macro_syntax]` 定义侧形式语法，未声明 ⇒ 不启用） |
 | `macro_expand.py` | 宏展开核心（hideset 重扫描 + `#`/`##`/变参 + 掩码；`#` 字符串化的 token 间空白折叠） |
 | `_reverse.py` | 宏反向（统一位置桥：锚 + 原文回插） |
 | `_bridge.py` | 统一位置桥（Anchor Bridge）——锚 + 原文消耗式回插引擎 |

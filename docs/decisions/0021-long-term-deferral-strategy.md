@@ -34,6 +34,7 @@
 | 7 | 语法缺口（真实语料驱动）：逐声明符位宽 `int a : 3, b : 4;`｜参数位 `register`｜ENUM003 的 C23 豁免｜复合字面量 `(t){1}` raw 候选 | 暂缓 | 均需**形态改动/语法落地/check 需求**才有意义：位宽标准上属声明符（本包绑在成员声明末尾）；`void f(register int x);` 合法但参数位不接受存储类；`enum E : int;` 语法面尚不支持；复合字面量**承载期建候选失败**（`not_understood: candidate_missing`，用户面不变） | 真实语料/头文件出现该形态；ENUM003 例外——**将来实现固定底层类型枚举时必须加"带底层类型 ⇒ 恒完整"豁免**，否则误报 | `grammar/c/02_types.toml::StructMember`、`grammar/c/README.md`（循环 #10/#11 交付边界） |
 | 8 | L1 渗透剩余面：插件侧 AST-first 改写｜引擎侧未声明的取值形态假设 | 暂缓（长期方向） | 动机是**插件代码质量**与**多形态语言包**，无当前行为缺陷；且须自带验证（无引擎侧渗透判据兜底）⇒ 不占主线 | 该子系统再动时顺带做（判据②/③），或新增第二形态语言包 | `ROADMAP.md`「语言知识渗透复审（L1）」 |
 | 9 | 循环纪律机械化 4 项（判据色产物门禁 / `cycle_triggers.py` / 审计反例入库 / `policy/*.md` 逐文件上限） | 暂缓 | 现靠 `policy/collaboration.md` + 审计执行；机械化本身要维护（且 `policy` 逐文件上限的数字待压缩收口后才有意义） | 认为"循环纪律须机器化"时逐项立项 | `policy/collaboration.md`（task-52 审计派生） |
+| 10 | Verilog 宏**定义侧**形式语法声明（补 `[macro_syntax]` 段启用 linter 检查） | 暂缓 | C 侧检查已改为声明驱动（未声明 ⇒ 不跑）；verilog 的宏定义语法不同——形参项可带默认值（`a=1`）、无 `...`/`#`/`##` ⇒ 启用前引擎需先支持形参默认值形态（`param_default_operator`），否则把合法定义误报为非法 | Verilog 包需要宏定义形式语法检查（或真实语料出现畸形 `` `define ``） | `linter/macro_syntax.py`、`preprocessor/macro_shape.py`、`grammar/verilog/base/_macro.toml` |
 
 ## 权衡
 

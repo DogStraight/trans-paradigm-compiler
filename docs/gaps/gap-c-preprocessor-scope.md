@@ -179,9 +179,9 @@ token 级重扫**归 A2「两路径统一」**（那里行扫描本就要重做�
 
 ⑳ **A2 ④ 形式化宏语法检查落地 linter（2026-10-17；作者对齐：形式化语法走 linter、语义级走 check 插件族）**：
 新增 `linter/macro_syntax.py` —— 对**原始源码**检 `#define` 形式约束（宏名 / 形参表 / 宏体 `#`·`##`），每类
-给带位置 blocking 诊断；语言包声明 `check_syntax = true` 才启用（C 声明、verilog 不声明 ⇒ A/B 0/144）。
-证据：`test_macro_syntax_checks.py` 18 条、linter 281、精度 33/33·fp 0、六套 2292、A/B 0/144。**剩余**：
-实参个数等**语义**检查 → check 插件族；`tpc check` 未接 linter 语法诊断（lint rc=1 / check rc=0）。
+给带位置 blocking 诊断；**语言包声明 `[macro_syntax]` 段才启用**（定义侧形式语法：变参占位等；
+C 声明、verilog 未声明 ⇒ 不跑、A/B 0/144；verilog 补齐 = 触发式，ADR-0021）。
+证据：`test_macro_syntax_checks.py` 21 条、linter 283、精度 33/33·fp 0、A/B 0/144。**剩余**：实参个数等**语义**检查 → check 插件族；`tpc check` 未接 linter 语法诊断（lint rc=1 / check rc=0）。
 
 ## 诚实边界（统一"待抽检"，不得当实测结论用）
 

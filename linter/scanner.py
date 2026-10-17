@@ -393,7 +393,7 @@ class LinterScanner:
 
         # 未识别语句诊断（发现阶段记录）与各 Checker 诊断合并输出。
         # 宏定义的**形式化语法**约束在此层（AST 前）：指令行已被扫指令消费、不进 lint
-        # 流，故必须对**原始源码**检查；语言包未声明 `check_syntax` ⇒ 空（语言无关）。
+        # 流，故必须对**原始源码**检查；语言包未声明 `[macro_syntax]` ⇒ 空（语言无关）。
         errors = macro_syntax_diagnostics(source, self._rules_dir)
         errors += self._discovery.unrecognized_diagnostics()
         errors += registry.validate_all(tokens)

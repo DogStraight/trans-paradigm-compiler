@@ -125,6 +125,52 @@ def load_macro_operators(
     )
 
 
+# ── 宏**定义侧**形式语法声明（`[macro_syntax]`）──
+# 宏定义的形参表约束是**语言知识**（C 的变参占位写法 `...`、C 没有默认值等）⇒ 由语言包
+# 在 `[macro_syntax]` 段声明；**未声明 ⇒ 该语言不启用**形式化宏语法检查（引擎不把 C 的
+# 定义语法套到别的语言）。声明与 `[macro_recognition]` 同文件、经
+# `preprocessor.macro_config` 读取。消费点：`linter/macro_syntax.py`（AST 前，原始源码）。
+MACRO_SYNTAX_KEY = "macro_syntax"
+VARIADIC_MARKER_KEY = "variadic_marker"
+
+
+@dataclass(frozen=True)
+class MacroSyntax:
+    """宏定义侧形式语法声明（`[macro_syntax]` 解析结果）。
+
+    `variadic_marker`：形参表里的变参占位写法（C99 §6.10.3p4 的 `...`）；
+    **未声明 ⇒ 形参项只能是标识符**（不允许变参项）。
+    """
+
+    variadic_marker: str | None = None
+
+
+def load_macro_syntax(
+    cfg: dict | None = None, rules_dir: str | None = None
+) -> MacroSyntax | None:
+    """读取 `[macro_syntax]` 声明：**未声明 → None**（不启用检查）；非法 → fail-fast。
+
+    启用判据就是"语言包声明了本段"——不是引擎里的布尔开关（语言包不声明 ⇒ 引擎
+    不把 C 的定义语法套到该语言上）。
+    """
+    if cfg is None:
+        cfg = _resolve_macro_cfg(rules_dir) if rules_dir else _macro_cfg
+    raw = cfg.get(MACRO_SYNTAX_KEY)
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            f"[{MACRO_SYNTAX_KEY}] 须是表（得到 {type(raw).__name__}）"
+        )
+    marker = raw.get(VARIADIC_MARKER_KEY)
+    if marker is not None and (not isinstance(marker, str) or not marker):
+        raise ConfigError(
+            f"[{MACRO_SYNTAX_KEY}] {VARIADIC_MARKER_KEY} 须是非空字符串"
+            f"（得到 {marker!r}）"
+        )
+    return MacroSyntax(variadic_marker=marker)
+
+
 def _operator_text(recognition: dict, key: str) -> str | None:
     raw = recognition.get(key)
     if raw is None:

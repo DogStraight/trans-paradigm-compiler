@@ -786,6 +786,19 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        errors = []  # 变异：不接宏形式语法检查\n",
         "test": "tests/engine/linter/test_macro_syntax_checks.py",
     },
+    {
+        # ── A2 ④ 续：检查启用改为**语言包声明驱动**（作者提示"需要对应的宏语法配置"）──
+        "why": "`[macro_syntax]` 未声明的语言包也被按'启用'处理（声明面被忽略）⇒ verilog 的宏定义语法"
+               "（形参项形式不同）被套上 C 的约束、合法定义误报",
+        "file": "preprocessor/macro_shape.py",
+        "old": "    raw = cfg.get(MACRO_SYNTAX_KEY)\n"
+               "    if raw is None:\n"
+               "        return None\n",
+        "new": "    raw = cfg.get(MACRO_SYNTAX_KEY) or {}  # 变异：未声明也当启用\n"
+               "    if raw is None:\n"
+               "        return None\n",
+        "test": "tests/engine/linter/test_macro_syntax_checks.py",
+    },
 ]
 
 
