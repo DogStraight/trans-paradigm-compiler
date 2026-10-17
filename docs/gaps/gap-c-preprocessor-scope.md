@@ -142,7 +142,10 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 改为按 ⑭ 口径（引擎核判据，不以空洞计数表述）；⑤ `docs/gaps/gap-language-pack-scope.md` 已知偏差 #5 的
 "词法层 ValueError"现象 → 改为**现状**（`expand_macros` 默认口径 / `#include` 未真实包含，归 A2）。
 
-⑯ **A1 交付实录（2026-10-17，循环 #15）**：已完成面 = `#define`（对象/函数/变参）+ `#undef` + **C 裸标识符调用**（`call_shape="name"` 显式无前缀，三态，verilog 语义不变）+ `#` 字符串化（token 间空白折叠，字面量内部不动）+ `##` 粘贴（**未展开拼写**）+ `__VA_ARGS__`（空时保留宏体逗号）+ **hideset 重扫描**（替换不动点文本替换）+ **掩码**（含替换进流的宏体）+ 形参表未闭合 **fail-fast**。验证 = GCC 16.1.0 对拍（Lead 独立探针）+ 六套回归 2257 + A/B 0/144 + 门禁变异 57→65（A1 8 条全红）。**审计发现**：① 宏体字面量未掩码的真 bug（`#define B "A"` 误展开，已修）；② 两条测试空档（hideset 断言太弱、宏体掩码路径）已补判别式用例；③ 一条等价变异不可检出，已删。**未做（A2）**：`#include` 真实实现、管线段与 lint 两路径统一、`expand_macros` 默认口径；`#if` 家族与 C23 项归首片 B/后续。**⚠ 同日更正（独立审计）**：上述"交付"判据面**不成立**——审计实测 15 条合法 C99 反例（10 条 P0：`#`/`##` 两侧空格失效、调用点实参切分不认字面量、裸调用短名吃长名前缀、函数宏无 `(` 被当对象宏且不重扫），根因 = 端到端实为"预展开 + 正则插入"另一条路径（与 `expand_text` 的 token/hideset 路径并存）；A1 状态 = **返工中**（`task-53`），修复判据 = `_drafts/audit_a1_counterexamples.py` 0 偏差 + **端到端**用例。**另登记（A2 诊断面）**：畸形 `#define` / 实参个数不校验 / `#`·`##` 约束违反在**非法输入**下静默（GCC 均报 error）——按 tpc「语法宽进 + 诊断走 linter」归 A2，不硬 fail-fast。
+⑯ **A1 交付实录（2026-10-17，循环 #15）——已被 ⑰ 更正，仅留历史指针**：首版判据覆盖"无空格算子形态 +
+内部函数级变异"，**不成立**（独立审计 15 反例；根因 = 双路径）；A1 最终状态见 ⑰（3 条已声明边界、
+`partial`）。**A2 诊断面**（畸形 `#define` / 实参个数 / `#`·`##` 约束在非法输入下静默）按 tpc「语法宽进 +
+诊断走 linter」归 A2 —— 形式化部分已在 ⑳ 落地，语义部分（实参个数）留 check 插件族。
 
 ⑰ **A1 返工收口（2026-10-17 同日，循环 #16）**：审计 15 反例 → **3 偏差**，全部为已声明边界。
 **已修**（均以端到端用例锁住）：`#`/`##` 两侧空格；调用点**token 级实参切分**（字面量/注释内逗号与括号
@@ -159,30 +162,28 @@ token 级重扫**归 A2「两路径统一」**（那里行扫描本就要重做�
 面**，A1 不动。
 **证据**：边界守卫 = `tests/engine/preprocessor/test_c_macro_end_to_end.py`（18 条 = GREEN 10 + `#__VA_ARGS__`
 4 + 边界 3 + 跨行块注释 1；**守卫式断言当前输出、不用 xfail**）；门禁变异 **65→69**（4 条**端到端**，
-逐条 `--only` 变红）；审计脚本 **3 偏差**；`tests/engine/preprocessor` **186**；受影响面（preprocessor +
-pipeline + languages-c + policy）**1561 passed**；A/B **0/144**；pyright strict **0**。
-**教训**：① 双路径不能靠"多写测试"防，只能靠**同一算法**收敛；② 审计反例必须先转成**生产同路**用例再谈修复
-（原 A1 判据全打在内部函数 ⇒ 端到端 10 项错而全绿）；③ 边界用**守卫断言**锁住，不用 xfail（xfail 会被当
-"待修"忽略，守卫断言逼后来者显式改）。
+逐条 `--only` 变红）；审计 **3 偏差**；`preprocessor` **186**；受影响面 **1561**；A/B **0/144**；pyright **0**。
+**教训**：双路径不能靠"多写测试"防，只能靠**同一算法**收敛；审计反例必须先转成**生产同路**用例再谈修复；
+边界用**守卫断言**锁住（不用 xfail——xfail 会被当"待修"忽略）。
 
-⑱ **A2 ② 落档（2026-10-17，循环 #17）**：`#include` 从"被消费但内容不进流"→ **机制已真实**——内容本就
-在流里（`include.py` 的 `_inject_lines`），本次补齐：**① 诊断策略声明面**（`[directive_handlers.include]`
-的 `on_missing = warn|error` / `max_depth`；C 包声明 `error` + 32，verilog 不声明 ⇒ 默认 warn、打印原样、
-A/B 0/144）**② 渲染前剪枝**（分析面见内容 / 渲染面只出 `#include` 原行，不内联；区间无法被完整顶层节点
-覆盖 ⇒ 整文件原文退化）**③ 无宏定义的 include 也计算渲染区间**（原先 `_stage_expand` 在宏表为空时跳过）。
-**剩余**：CLI 两路径可见性见 ⑲；**顺序偏差**（include 内容排在 marker 前，修则 verilog A/B 0→2/144）未改。
-证据：`test_c_include_e2e.py` **10 条**、`c_acceptance` **42/0**、A/B verilog CLI **0/144**。
+⑱ **A2 ②③ 落档（循环 #17）**：`#include` 机制真实（内容本就在流里）——补齐**① 诊断策略声明面**
+（`on_missing`/`max_depth`；C=error/32、verilog 默认 warn ⇒ 打印原样、A/B 0/144）**② 渲染前剪枝**（分析面见
+内容 / 渲染面只出 `#include` 原行、不内联；无法整节点覆盖 ⇒ 整文件原文退化）**③ CLI 两路径**（`scan_diagnostics`
++ `_preprocessor_gate` ⇒ lint/check 同类诊断、同 rc=1；gate 须在语言配置装载后跑）。
+**剩余**：include 顺序偏差（内容先于 marker，修则 A/B 0→2/144）。证据：`test_c_include_e2e.py` 10 条、
+`c_acceptance` 42/0、A/B 0/144；未统一：`tpc lint` 仍吃未展开源码、check 未接 linter 语法诊断（⑳）。
+**CLI 两路径**（同批）：新增 `preprocessor.scan_diagnostics` + `main._preprocessor_gate` ⇒ 缺头文件时
+`tpc lint` 与 `tpc check` 同类诊断、同 rc=1（不抛异常；verilog 默认 warn ⇒ 打印原样）。gate 必须在
+语言配置装载**之后**跑（check 侧放 `checker.check()` 之后）。**仍未统一**：`tpc lint` 语法扫描仍吃未展开
+源码；`tpc check` 未接 linter 语法诊断（见 ⑳）。
 
-⑲ **A2 两路径统一（CLI 面，2026-10-17）**：`tpc lint`（直连 `LinterScanner`，**不过预处理**）与
-`tpc check`（`ProjectChecker`）此前对同一 C 输入表现不同（缺头文件 check 静默 rc=0）。新增共用入口
-`preprocessor.scan_diagnostics` + `main._preprocessor_gate`（打印 + **rc=1**，不抛异常）⇒ 两条命令对
-**预处理硬错误**同类诊断。**实现要点**：gate 必须在语言配置装载**之后**跑（否则读到引擎默认 `warn`）——
-check 侧放 `checker.check()` 之后。**仍未统一**：`tpc lint` 的语法扫描仍吃**未展开源码**（与管线
-`lint_source` 展开态不同源）⇒ 宏展开后的语法诊断面仍可能分叉，留后续。
+⑳ **A2 ④ 形式化宏语法检查落地 linter（2026-10-17；作者对齐：形式化语法走 linter、语义级走 check 插件族）**：
+新增 `linter/macro_syntax.py` —— 对**原始源码**检 `#define` 形式约束（宏名 / 形参表 / 宏体 `#`·`##`），每类
+给带位置 blocking 诊断；语言包声明 `check_syntax = true` 才启用（C 声明、verilog 不声明 ⇒ A/B 0/144）。
+证据：`test_macro_syntax_checks.py` 18 条、linter 281、精度 33/33·fp 0、六套 2292、A/B 0/144。**剩余**：
+实参个数等**语义**检查 → check 插件族；`tpc check` 未接 linter 语法诊断（lint rc=1 / check rc=0）。
 
 ## 诚实边界（统一"待抽检"，不得当实测结论用）
-
-
 
 - ISO C 条款号（§6.10.x）为**记忆级**；**C23 子条编号未核实**（本机无标准正文；`cppreference`、`gcc.gnu.org` 均 403）。
 - 编译器**静默接受**的项（`#pragma once` / `__COUNTER__` / `__has_include` / `#elifdef` / `__has_c_attribute`）属**引用级** ⇒ 归位待抽检（方法局限见上文）。

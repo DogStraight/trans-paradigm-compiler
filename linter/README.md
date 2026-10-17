@@ -12,6 +12,7 @@
 | `lookahead.py` | 动态两级前瞻消歧表 |
 | `grammar_slicer.py` | 从语法规则推导切分层级映射 |
 | `diagnose.py` | 条件编译多路径诊断（枚举所有路径逐条 lint 汇总） |
+| `macro_syntax.py` | 宏定义的**形式化语法**检查（AST 前；语言包声明 `check_syntax` 才启用） |
 
 > 架构总述见 `linter/linter_architecture.md`；精度评测见
 > `tests/e2e/eval_lint_accuracy.py`（recall/误报门禁）。

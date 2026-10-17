@@ -43,7 +43,10 @@ max_iterations = 128
 
 # ── [directive_handlers] 指令关键字 → 处理器（op）绑定 ──
 [directive_handlers]
-define = { op = "define", enabled = true }
+# `check_syntax = true`：启用 **linter 阶段（AST 前）的形式化宏语法检查**
+# （宏名/形参表/宏体算子约束；见 `linter/macro_syntax.py`）。语言包不声明 ⇒ 不跑
+# （verilog 的宏语法不同，不能套 C 的约束）。
+define = { op = "define", enabled = true, check_syntax = true }
 undef = { op = "undef", enabled = true }
 # include：**缺文件/循环/深度超限 = 诊断**（C 是真实预处理，缺头文件必须报错；
 # 对比 verilog 不声明 ⇒ 默认 warn 保持既有打印，A/B 零变化）。

@@ -85,6 +85,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A2 ④：宏定义的**形式化语法**检查落到 linter（AST 前）**（2026-10-17；作者对齐：形式化语法走 linter、
+  语义级走 check 插件族）：新增 `linter/macro_syntax.py`（语言无关，知识全来自声明面）——只报 GCC 同样
+  报 error 的**形式化**约束：宏名缺失/非法、形参表空项/非标识符/`...` 非末位或重复/重名、宏体 `#` 后非
+  形参或变参、`##` 在首/尾；每类给**带位置**的 blocking 诊断。启用由语言包声明
+  `[directive_handlers].define.check_syntax = true`（**仅 C 包声明**；verilog 不声明 ⇒ 不跑，A/B 0/144）。
+  - 要点：指令行已被扫指令消费、不进 lint 流 ⇒ 检查对**原始源码**做；形参/算子形态全取
+    `call_args` / `[macro_recognition]` 声明，引擎不硬编码 C。
+  - **验证**：`tests/engine/linter/test_macro_syntax_checks.py` **18 条**（9 非法形态带位置 + 7 合法零误报 +
+    verilog 不启用 + scanner 集成）；`tpc lint` 对 `#define F(a,) a` → `Ln 1:13 形参表含空项` **rc=1**；
+    linter **281 passed**、精度门禁 **hit_code 33/33 / fp 0**、六套 **2292 passed**、A/B **0/144**、pyright **0**。
+  - **剩余（已落 TODO）**：宏**语义**检查（实参个数等，需宏表 + 调用点）→ 作者定的**插件侧 check 族**；
+    `tpc check` 尚未接 linter 语法诊断（同一 malformed define：lint rc=1 / check rc=0）。
+
 - **阶段 4 A2 ②：`#include` 真实实现 + 渲染剪枝**（2026-10-17，循环 #17）：核心发现 = 内容**本来就在流里**
   （`include.py` 的 `_inject_lines.extend`），真缺口是"缺文件只 `print` / 无深度上限 / 渲染面会**内联**头文件内容"。
   - **诊断策略声明面**（引擎只执行策略，语言知识在语言包）：`[directive_handlers.include] on_missing =
