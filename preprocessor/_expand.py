@@ -31,7 +31,6 @@ from .macro_policy import (
     plan_macro,
 )
 from .macro_shape import (
-    MacroCallArgs,
     load_macro_call_args,
     load_macro_call_suffix,
     load_macro_operators,
@@ -230,8 +229,17 @@ def _build_macro_re(prefix: str | None, macro_names=()) -> re.Pattern:
         if not names:
             return re.compile(r"(?!)")
         alt = "|".join(re.escape(n) for n in names)
-        return re.compile(rf"(?<![A-Za-z0-9_])({alt})(?![A-Za-z0-9_])")
+        return re.compile(rf"({alt})")
     return re.compile(re.escape(prefix) + f"({IDENT_RE.pattern})")
+
+
+def _is_ident_char(ch: str) -> bool:
+    """`ch` 是否标识符字符（**从 `IDENT_RE` 派生**，不另写字符类）。
+
+    起始字符 = `IDENT_RE` 直接匹配；续接字符 = `IDENT_RE` 匹配 `"a"+ch`
+    ⇒ 标识符口径只有 `core.token_protocol.IDENT_RE` 一个来源。
+    """
+    return bool(IDENT_RE.fullmatch(ch)) or bool(IDENT_RE.fullmatch("a" + ch))
 
 
 # ── 纯文本展开（新方案）──
@@ -610,23 +618,6 @@ def enumerate_conditions(
     return configs
 
 
-def _expand_func_call(
-    name: str,
-    args_text: str,
-    func_macros: dict,
-    macro_defs: dict,
-    call_args: MacroCallArgs,
-) -> str:
-    """展开带参宏调用：body[形参 → 实参]。实参不足补空串，按形参顺序绑定。"""
-    params = func_macros.get(name, [])
-    arg_list = call_args.split(args_text)
-    body = macro_defs.get(name, "")
-    for idx, p in enumerate(params):
-        arg = arg_list[idx] if idx < len(arg_list) else ""
-        body = re.sub(rf"\b{re.escape(p)}\b", lambda _: arg, body)
-    return body
-
-
 def _extend_literal_suffix(
     line: str, end: int, suffix_re: re.Pattern | None
 ) -> int:
@@ -732,6 +723,10 @@ class _MacroExpandCtx:
     #: 掩码用（字符串/字符字面量定界符 + 转义；来自 token 表 `[string]`）
     string_delimiters: tuple[str, ...] = ()
     escape: str | None = None
+    #: 裸标识符调用（call 前缀为 `""`）：匹配后需整词判定（边界从 `IDENT_RE` 派生）
+    bare_call: bool = False
+    #: 宏算子（语言包声明；替参 `#`/`##`/变参语义用）
+    operators: Any = None
     restoration_stack: list[dict] = field(default_factory=list)
     regions_by_line: dict[int, list[dict]] = field(default_factory=dict)
     seq: int = 0
@@ -810,6 +805,8 @@ def expand_tokens(
         syntax=load_comment_syntax(rules_dir),
         string_delimiters=operators.string_delimiters,
         escape=operators.escape,
+        bare_call=prefix == "",
+        operators=operators,
         lines=source.split("\n"),
     )
     lines = ctx.lines
@@ -883,8 +880,14 @@ def _match_one(
         matched = ctx.call_args.match_args(line, m.end())
         if matched is not None:
             args_text, close_idx = matched
-            body = _expand_func_call(
-                name, args_text, ctx.func_macros, ctx.macro_defs, ctx.call_args
+            body = macro_expand.substitute_call(
+                name,
+                args_text,
+                ctx.macro_defs,
+                ctx.func_macros,
+                ctx.call_args,
+                operators=ctx.operators,
+                syntax=ctx.syntax,
             )
             end = _extend_macro_chain(line, close_idx, ctx.macro_re, ctx.suffix_re)
             return end, body, name, True, args_text
@@ -912,6 +915,11 @@ def _collect_macro_matches(ctx: "_MacroExpandCtx", line: str) -> list[tuple]:
             continue  # 已被前一个宏调用链吞噬（`W'd`RST 嵌套）
         if _masked(m.start()):
             continue  # 掩码区内（字面量/注释）不展开
+        if ctx.bare_call and (
+            (m.start() > 0 and _is_ident_char(line[m.start() - 1]))
+            or (m.end() < len(line) and _is_ident_char(line[m.end()]))
+        ):
+            continue  # 裸调用须整词匹配（`FOOBAR` 不被 `FOO` 误伤）
         hit = _match_one(ctx, line, m)
         if hit is None:
             continue

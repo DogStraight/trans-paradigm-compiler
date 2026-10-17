@@ -439,6 +439,52 @@ def _apply_paste(toks: list[_Tok], paste: str | None) -> list[_Tok]:
     return out
 
 
+def substitute_call(
+    name: str,
+    args_text: str,
+    macro_defs: dict[str, str],
+    func_macros: dict[str, list[str]],
+    call_args: MacroCallArgs | None,
+    *,
+    operators: MacroOperators | None = None,
+    syntax=None,
+    budget: int = DEFAULT_BUDGET,
+) -> str:
+    """**调用点**带参宏展开：实参切分 → 替参（`#`/`##`/变参）→ hideset 重扫描。
+
+    与 `expand_text` 共用同一套语义（`_substitute`）；调用点只多做"按语言声明的
+    分隔符切实参"这一步。替换结果 token 带 `{name}` hideset（自递归抑制）。
+    """
+    body = macro_defs.get(name)
+    if body is None:
+        return ""
+    if call_args is None:
+        return body
+    params = func_macros.get(name, [])
+    ops = operators
+    args: list[list[_Tok]] = []
+    for arg_text in call_args.split(args_text):
+        masks = mask_spans(
+            arg_text,
+            ops.string_delimiters if ops else (),
+            ops.escape if ops else None,
+            syntax,
+        )
+        args.append(tokenize(arg_text, ops, masks))
+    text = _substitute(
+        body, params, args, macro_defs, func_macros, call_args, budget, "", ops
+    )
+    masks = mask_spans(
+        text,
+        ops.string_delimiters if ops else (),
+        ops.escape if ops else None,
+        syntax,
+    )
+    hide = frozenset({name})
+    toks = [replace(t, hide=t.hide | hide) for t in tokenize(text, ops, masks)]
+    return join(_expand_one(toks, macro_defs, func_macros, call_args, budget, "", ops))
+
+
 def expand_text(
     text: str,
     macro_defs: dict[str, str],

@@ -5,14 +5,23 @@
 `preprocessor/macro_shape.py::load_macro_call_args`）——定义侧与调用侧同形，
 引擎不硬编码 `(` / `,`。
 
+**未闭合的形参表 ⇒ fail-fast**（`ConfigError`）：此前"容错退化为对象宏"会把
+`#define F(a, b` 这类错误源静默当成对象宏（宏体带括号文本），与"声明错误不静默
+降级"的纪律相悖。变参形态 `#define F(a, ...)` 的 `...` **不进形参表**（展开侧按
+"超出具名形参的实参"绑定，见 `preprocessor/macro_expand.py`）。
+
 Doc: preprocessor/README.md
 """
 
 import re
 
+from core.errors import ConfigError
+
 from .registry import register, split_directive
 
 _NAME_RE = re.compile(r"([A-Za-z_]\w*)")
+#: 变参占位写法（形参表里的 `...`；按形态是三个点，由语言包声明驱动调用侧实参形态）
+_VARIADIC_MARK = "..."
 
 
 @register("define")
@@ -38,11 +47,17 @@ def handle_define(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         # function-like：`define NAME(a, b) body
         matched = call_args.match_args(rest, 0)
         if matched is None:
-            # 形参表未闭合（容错）：退化为 object-like
-            ctx["macro_defs"][def_name] = rest.strip()
-            return
+            raise ConfigError(
+                f"宏 {def_name!r} 的形参表未闭合（`{call_args.open}` 无配对 "
+                f"`{call_args.close}`）：{arg.strip()!r}"
+            )
         params_text, body_idx = matched
-        params = [p for p in call_args.split(params_text) if p]
+        # 变参记号不进形参表：展开侧按"超出具名形参的实参"绑定变参
+        params = [
+            p
+            for p in call_args.split(params_text)
+            if p and p.strip() != _VARIADIC_MARK
+        ]
         ctx["macro_defs"][def_name] = rest[body_idx:].strip()
         ctx.setdefault("_func_params", {})[def_name] = params
     else:

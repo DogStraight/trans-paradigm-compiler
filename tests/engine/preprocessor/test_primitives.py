@@ -144,11 +144,12 @@ class TestDefine:
         assert ctx["_func_params"]["MIN"] == ["a", "b"]
         assert "((a) < (b) ? (a) : (b))" in ctx["macro_defs"]["MIN"]
 
-    def test_function_like_unclosed_params_fallback(self):
-        """形参表未闭合 → 退化为 object-like（容错）。"""
+    def test_function_like_unclosed_params_fail_fast(self):
+        """形参表未闭合 ⇒ **fail-fast**（不再容错退化为对象宏）。"""
         ctx = _ctx()
-        _call("define", "`define FOO(a, b body", ctx)
-        assert "FOO" in ctx["macro_defs"]
+        with pytest.raises(ConfigError):
+            _call("define", "`define FOO(a, b body", ctx)
+        assert "FOO" not in ctx["macro_defs"], "失败不得留下半成品定义"
         assert "FOO" not in ctx["_func_params"]
 
     def test_no_name_noop(self):
