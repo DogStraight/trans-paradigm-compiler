@@ -133,6 +133,11 @@
       `lexer/main_lexer.py:1033 refine_type`：lint 路径有兜底、`_stage_lex` 没有）⇒ 同一输入两种表现。
       **并入 A2**（与 `#include` 真实实现同批，正是阶段 4 的指令面），验收含"**同一输入两条路径都给
       诊断、都不抛异常**"；**不单独**加 `_stage_lex` 守卫（随 A2 一起做）。链：`docs/gaps/gap-c-preprocessor-scope.md` ⑬
+- [ ] **A1 用户不可达：`expand_macros` 默认 false**（A2 首项）：实测 `expand_macros=True` 时 C 宏生效
+      （`error=''`），默认 false 下 **CLI 对合法 `#define` 都报语法错** ⇒ A1 能力对用户不可见。判据：
+      默认统一为"开" + verilog 对拍 0 差异 + CLI 上 `#define` 不再报语法错。链：gap ⑬
+- [ ] **`tpc check` 跨盘输入崩栈**：`main.py:361 os.path.relpath` 对 C:↔E: 跨盘路径抛 `ValueError`
+      （同盘正常）⇒ 报错非受控。判据：跨盘文件给受控诊断或正常处理。来源：A1 审计返工实测（既有缺陷）
 - [ ] **跟踪文档指向 `_drafts/` 具体草稿（死链）**：`preprocessor/README.md:94`、`grammar/c/README.md:268/316/345/380`、
       `TODO.md:62/112`、`policy/structural_budget.md:126` —— `_drafts/` 在 `.gitignore:28` ⇒ 对 clone 者是死链，
       且违反 `policy/structural_budget.md:51`「不许写"见某草稿某节"」（既有问题，非 A1 引入）。判据：**指向具体
