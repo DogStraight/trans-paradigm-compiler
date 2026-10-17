@@ -170,10 +170,17 @@ pipeline + languages-c + policy）**1561 passed**；A/B **0/144**；pyright stri
 的 `on_missing = warn|error` / `max_depth`；C 包声明 `error` + 32，verilog 不声明 ⇒ 默认 warn、打印原样、
 A/B 0/144）**② 渲染前剪枝**（分析面见内容 / 渲染面只出 `#include` 原行，不内联；区间无法被完整顶层节点
 覆盖 ⇒ 整文件原文退化）**③ 无宏定义的 include 也计算渲染区间**（原先 `_stage_expand` 在宏表为空时跳过）。
-**仍未做（A2 剩余）**：**CLI 两路径可见**——`tpc lint` 直连 `LinterScanner` 不过预处理、`tpc check` 未读
-`preprocessor_errors` ⇒ 同一输入两条 CLI 路径诊断不一致；**顺序偏差**（include 内容排在 marker 前，修则
-verilog A/B 0→2/144，待与两路径同批评估）。证据：`tests/engine/preprocessor/test_c_include_e2e.py` **10 条**、
-`c_acceptance` **42/0**、A/B verilog CLI **0/144**。
+**剩余**：CLI 两路径可见性见 ⑲；**顺序偏差**（include 内容排在 marker 前，修则 verilog A/B 0→2/144）未改。
+证据：`test_c_include_e2e.py` **10 条**、`c_acceptance` **42/0**、A/B verilog CLI **0/144**。
+
+⑲ **A2 两路径统一（CLI 面，2026-10-17）**：`tpc lint`（直连 `LinterScanner`，**不过预处理**）与
+`tpc check`（`ProjectChecker`）此前对同一 C 输入表现不同（缺头文件 check 静默 rc=0）。新增共用入口
+`preprocessor.scan_diagnostics` + `main._preprocessor_gate`（打印 + **rc=1**，不抛异常）⇒ 两条命令对
+**预处理硬错误**同类诊断。**实现要点**：gate 必须在语言配置装载**之后**跑（否则读到引擎默认 `warn`）——
+check 侧放 `checker.check()` 之后。**仍未统一**：`tpc lint` 的语法扫描仍吃**未展开源码**（与管线
+`lint_source` 展开态不同源）⇒ 宏展开后的语法诊断面仍可能分叉，留后续。
+
+## 诚实边界（统一"待抽检"，不得当实测结论用）
 
 
 

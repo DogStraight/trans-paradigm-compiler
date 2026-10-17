@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A2 两路径统一：预处理硬错误在 `tpc lint` / `tpc check` 下同类诊断、都不抛异常**（2026-10-17）：
+  此前 `tpc lint` 直连 `LinterScanner`（**不过预处理**）、`tpc check` 走 `ProjectChecker`，同一 C 输入
+  （缺头文件 / 循环 / 深度超限）两条 CLI 路径表现不同（check 静默 rc=0）。新增共用入口
+  `preprocessor.scan_diagnostics(...)`（返回 `[{kind, message}]`，**不抛异常**）+ `main._preprocessor_gate`：
+  两条命令在各自原有输出前打印 `[preprocessor] ...` 并 **rc=1**；**verilog 不受影响**（默认 warn ⇒
+  返回空、打印原样，A/B 0/144）。验证：`tests/engine/preprocessor/test_scan_diagnostics.py` 3 条；CLI
+  实测 lint/check 同报文同 rc=1、合法 include 仍 rc=0。**边界**：`tpc lint` 的语法扫描仍吃**未展开源码**
+  （完整统一留后续），本次只统一"预处理硬错误"面。
+
 - **阶段 4 A2 ①：`expand_macros` 默认口径统一为"开"**（2026-10-17，循环 #16 续）：此前 **CLI 默认 True**
   （`main.py:132` 按 `[commands]` 的 `preprocess`）而**库默认 False**（`pipeline/__init__.py` 兜底 +
   `config/tpc_config.json`）⇒ 同一输入两条路径 verdict 不同（gap ⑬）。**行为变化清单**：

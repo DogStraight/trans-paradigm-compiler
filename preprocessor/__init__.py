@@ -17,9 +17,34 @@ __all__ = [
     "protect_and_reverse",
     "restore_condition_blocks",
     "get_config_refs",
+    "scan_diagnostics",
     "_expand",
     "_reverse",
 ]
+
+
+def scan_diagnostics(
+    source: str,
+    rules_dir: str,
+    *,
+    source_path: str | None = None,
+    include_dirs: list[str] | None = None,
+) -> list[dict]:
+    """预处理问题诊断（**不抛异常**；给 CLI 两条路径共用）。
+
+    目前 = include 问题（缺文件/循环/深度超限），按语言包 `on_missing` 策略产生：
+    C 包声明 `error` ⇒ 有诊断；verilog 默认 `warn` ⇒ 打印、返回空（保持既有行为）。
+    返回 `[{kind, message}]`；用户可见面（打印/退出码）由调用方负责。
+    """
+    diags: list[dict] = []
+    scan_directives(
+        source,
+        rules_dir,
+        source_path=source_path,
+        search_dirs=include_dirs,
+        out_diags=diags,
+    )
+    return [d for d in diags if d.get("kind") in ("missing", "cycle", "depth")]
 
 
 def get_config_refs() -> dict[str, str]:

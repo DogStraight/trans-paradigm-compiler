@@ -212,6 +212,31 @@ def _cmd_trace(args: argparse.Namespace) -> None:
     _exit_on_pipeline_error(result)
 
 
+def _preprocessor_gate(
+    source: str,
+    rules_dir: str,
+    *,
+    source_path: str | None = None,
+    include_dirs: list[str] | None = None,
+) -> None:
+    """预处理错误门：**两条 CLI 路径共用**（lint 直连 scanner / check 走 checker）。
+
+    同一输入在 `tpc lint` 与 `tpc check` 下必须给同类诊断、都不抛异常（A2 两路径统一）。
+    有硬错误（缺 include / 循环 / 深度超限）⇒ 打印受控报文 + 退出码 1（在各自原有
+    输出之前返回，避免次生错误掩盖根因）。
+    """
+    from preprocessor import scan_diagnostics
+
+    diags = scan_diagnostics(
+        source, rules_dir, source_path=source_path, include_dirs=include_dirs
+    )
+    if not diags:
+        return
+    for d in diags:
+        print(f"[preprocessor] {d.get('message', d.get('kind'))}", file=sys.stderr)
+    sys.exit(1)
+
+
 def _cmd_lint(args: argparse.Namespace) -> None:
     """tpc lint — run syntax checker on a source file."""
     from linter.scanner import LinterScanner
@@ -231,6 +256,7 @@ def _cmd_lint(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     scanner = LinterScanner(rules_dir=rules_dir, ext_dirs=ext_dirs)
+    _preprocessor_gate(source, rules_dir, source_path=args.file)
     diagnostics = scanner.scan(source)
 
     if args.json:
@@ -266,7 +292,17 @@ def _cmd_check(args: argparse.Namespace) -> None:
         ext_dirs=ext_dirs,
         include_dirs=list(args.include) or None,
     )
+    # 两路径统一：lint/check 共用同一预处理门（同一输入同类诊断、都不抛异常）。
+    # 放在 `checker.check()` **之后**——语言配置（含 include 的 on_missing 策略）由
+    # 检查过程按语言包装载，提前跑会读到引擎默认（warn）并与 lint 路径分叉。
     report = checker.check(args.file)
+    with open(args.file, encoding="utf-8") as _f:
+        _preprocessor_gate(
+            _f.read(),
+            rules_dir,
+            source_path=args.file,
+            include_dirs=list(args.include) or None,
+        )
 
     # 源码内 tpc-check 豁免注释（区间形式 / disable-line 单行）
     _apply_check_suppressions(report, rules_dir)
