@@ -62,6 +62,11 @@ ARGUMENT_SLOT = "args"
 _CALL_ARGS_FORM = f'"bracket.l_<名>,{ARGUMENT_SLOT},bracket.r_<名>"'
 # 宏调用后随字面量后缀的形态模式键（如 verilog 的 `` `W'd0 `` → "'d0"）
 CALL_SUFFIX_KEY = "suffix_after_call"
+# 调用形态前缀的单列声明键：**单元素生产式 `"name"` = 显式"无前缀"**（C 的裸标识符
+# 宏调用）。引擎**不提供**默认空前缀——只有声明了本键的语言包才启用，其余语言包
+# 语义不变（`shape` 仍要求两位）。取值两种：`"name"`（无前缀）/ `"<token>,name"`
+# （显式前缀）。
+CALL_SHAPE_KEY = "call_shape"
 
 
 @dataclass(frozen=True)
@@ -202,14 +207,80 @@ def _shape_prefix(
     return _prefix_text(prefix_token, token_define, skip_undeclared)
 
 
-def _declared_shapes(recognition: dict, prefix: str) -> dict[str, _MacroShape]:
-    """逐形态段构造 _MacroShape（未声明的段不出现）。"""
+# 调用形态生产式 → 解析结果（`None` = 显式无前缀；`str` = 前缀 token 名）。
+# 与 `_PARSE_CACHE` 分开：同一生产式在这里可能得到 `None`（无前缀），混用会把
+# "无前缀"当成"缓存未命中"而反复解析（不致命但语义含混）。
+_CALL_PARSE_CACHE: dict[str, str | None] = {}
+
+
+def _parse_call_shape(production: str) -> str | None:
+    """`call_shape` 生产式 → 前缀 token 名；单元素 `name` ⇒ **显式无前缀**。
+
+    取值域只有两种（其余 fail-fast）：
+      · `"name"`                     → `None`（无前缀：调用 = 裸标识符）
+      · `"<token 名>,name"`          → 前缀 token 名（两位，复用 `_parse_shape` 校验）
+    """
+    cached = _CALL_PARSE_CACHE.get(production)
+    if cached is not None or production in _CALL_PARSE_CACHE:
+        return cached
+    from parser.rule_selector import analyze_production_features
+
+    try:
+        feat = analyze_production_features(production)
+    except Exception as exc:  # noqa: BLE001 — 生产式语法错误即配置错（fail-fast）
+        raise ConfigError(
+            f"[macro_recognition] {CALL_SHAPE_KEY} 无法解析: {production!r}（{exc}）"
+        ) from exc
+    if not isinstance(feat, dict):
+        raise ConfigError(
+            f"[macro_recognition] {CALL_SHAPE_KEY} 无法解析为特征树: {production!r}"
+        )
+    # 单元素生产式（`"name"`）在特征树里是**单个 token 特征**，不包 seq——
+    # 显式无前缀的唯一合法写法。
+    if feat.get("type") == "token":
+        if _as_token(feat) != NAME_SLOT:
+            raise ConfigError(
+                f"[macro_recognition] {CALL_SHAPE_KEY} 单元素形态只允许名字位占位符 "
+                f"{NAME_SLOT!r}（= 显式无前缀），得到: {production!r}"
+            )
+        _CALL_PARSE_CACHE[production] = None
+        return None
+    items = feat.get("items")
+    if feat.get("type") != "seq" or not items:
+        raise ConfigError(
+            f"[macro_recognition] {CALL_SHAPE_KEY} 须是生产式（1 位 name=无前缀 / "
+            f"2 位 {_SHAPE_FORM}），得到: {production!r}"
+        )
+    if len(items) == 1:
+        if _as_token(items[0]) != NAME_SLOT:
+            raise ConfigError(
+                f"[macro_recognition] {CALL_SHAPE_KEY} 单元素形态只允许名字位占位符 "
+                f"{NAME_SLOT!r}（= 显式无前缀），得到: {production!r}"
+            )
+        result: str | None = None
+    elif len(items) == 2:
+        result = _parse_shape(production)  # 两位：复用同一套校验与错误文案
+    else:
+        raise ConfigError(
+            f"[macro_recognition] {CALL_SHAPE_KEY} 最多两位（前缀 token + 名字位），"
+            f"得到: {production!r}"
+        )
+    _CALL_PARSE_CACHE[production] = result
+    return result
+
+
+def _declared_shapes(
+    recognition: dict, directive_prefix: str, call_prefix: str
+) -> dict[str, _MacroShape]:
+    """逐形态段构造 _MacroShape（未声明的段不出现）；前缀按 kind 分派。"""
     shapes: dict[str, _MacroShape] = {}
     for kind in SHAPE_KINDS:
         value = recognition.get(kind)
         if value is not None:
             shapes[kind] = _MacroShape(
-                kind=kind, prefix=prefix, names=_candidates(value, kind)
+                kind=kind,
+                prefix=call_prefix if kind == KIND_CALL else directive_prefix,
+                names=_candidates(value, kind),
             )
     return shapes
 
@@ -229,6 +300,12 @@ def load_macro_shapes(
     skip_undeclared_prefix — token 表由调用方自建（测试/嵌入方）时置 True：
         声明的前缀 token 不在该表里 → 跳过该形态（调用方的表说了算什么符号
         存在）；语言包自带的 token 表则 fail-fast（名字写错即配置错）。
+
+    前缀解析（**按 kind 分派**，同一套解析路径）：
+      · directive 段：取 `shape`（**仍要求两位**，verilog 语义不变）；
+      · call 段：`call_shape` 显式声明优先（`"name"` = **无前缀** ⇒ 前缀 `""`；
+        `"<token>,name"` = 该前缀）；未声明 `call_shape` ⇒ **沿用 `shape` 的前缀**
+        （= 今天 verilog 的行为，零语义变化）。
     """
     if cfg is None:
         cfg = _resolve_macro_cfg(rules_dir) if rules_dir else _macro_cfg
@@ -237,13 +314,37 @@ def load_macro_shapes(
     token_define = token_define or {}
     recognition = _recognition(cfg)
 
+    call_shape_raw = recognition.get(CALL_SHAPE_KEY)
+    if call_shape_raw is not None and recognition.get(KIND_CALL) is None:
+        raise ConfigError(
+            f"[macro_recognition] 声明了 {CALL_SHAPE_KEY} 但缺 call 形态段"
+            f"（无 call 候选 = 没有要识别的调用形态）"
+        )
+
     shape_production = _require_shape_production(recognition)
     if shape_production is None:
         return {}
-    prefix = _shape_prefix(shape_production, token_define, skip_undeclared_prefix)
-    if prefix is None:
+    directive_prefix = _shape_prefix(
+        shape_production, token_define, skip_undeclared_prefix
+    )
+    if directive_prefix is None:
         return {}
-    return _declared_shapes(recognition, prefix)
+    call_prefix = directive_prefix  # 未声明 call_shape ⇒ 沿用 shape（零语义变化）
+    if call_shape_raw is not None:
+        if not isinstance(call_shape_raw, str) or not call_shape_raw.strip():
+            raise ConfigError(
+                f"[macro_recognition] {CALL_SHAPE_KEY} 须是非空生产式字符串"
+                f"（得到 {call_shape_raw!r}）"
+            )
+        call_token = _parse_call_shape(call_shape_raw)
+        if call_token is None:
+            call_prefix = ""  # 显式无前缀：调用 = 裸标识符
+        else:
+            resolved = _prefix_text(call_token, token_define, skip_undeclared_prefix)
+            if resolved is None:
+                return {}
+            call_prefix = resolved
+    return _declared_shapes(recognition, directive_prefix, call_prefix)
 
 
 def macro_keywords(shape: _MacroShape) -> tuple[str, ...]:

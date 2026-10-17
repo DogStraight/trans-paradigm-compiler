@@ -23,6 +23,7 @@ from .primitives.registry import (
 from .primitives.include import resolve_source_dir
 from ._bridge import make_marker
 from ._markers import inline_marker, line_marker
+from . import macro_expand
 from .macro_policy import (
     MODE_INLINE,
     MODE_LINE,
@@ -277,7 +278,6 @@ def scan_directives(
                           回源时与 `expand_tokens` 的展开级映射复合使用。
     """
     prefix, directives_set = _load_config(rules_dir)
-    macro_re = _build_macro_re(prefix)
     ctx = _build_scan_ctx(
         rules_dir, source_path, search_dirs, predefined, undefine, _include_stack
     )
@@ -290,7 +290,7 @@ def scan_directives(
 
     result = _collect_scan_result(ctx, join_map)
     if result[0]:  # 有宏定义才预展开（供 reverser）
-        _expand_macro_bodies(result[0], result[1], macro_re)
+        _expand_macro_bodies(result[0], result[1], ctx.get("_call_args"), prefix)
     return result
 
 
@@ -465,52 +465,31 @@ def _invoke_directive(
         handler(stripped, prefix, name, ctx)
 
 
-def _expand_macro_bodies(macro_defs: dict, func_macros: dict, macro_re) -> None:
-    """原地全展开宏体（供 reverser），迭代到不动点。
+def _expand_macro_bodies(
+    macro_defs: dict[str, str],
+    func_macros: dict[str, list[str]],
+    call_args,
+    prefix: str,
+) -> None:
+    """原地全展开宏体（供 reverser）：hideset 重扫描。
 
-    体长上限：防递归宏指数膨胀（fuzz 2026-08-22 发现 MemoryError——
-    `` `define debug ( `debug ... ) `` 每次迭代体长翻倍，128 轮即 2^128 长度）。
-    超限宏停止展开（引用保留为未展开 token），软失败不崩溃。
+    自引用/互递归抑制由 **hideset** 保证（`macro_expand`），不再用"直接自引用预判 +
+    体积截断"近似；`[expand] max_iterations` 只作**资源上限守卫**（同一算法上的预算）。
+    带参宏的体含形参占位，调用时才替参，故跳过（与旧行为一致）。
+    `prefix` = 声明的调用前缀（verilog 的 `` ` ``；只有"前缀 + 名字"才算调用）。
     """
-    expand_cfg = _get_expand_config()
-    max_iter = expand_cfg.get("max_iterations", 128)
-    max_body_len = expand_cfg.get("max_body_len", 1 << 16)
-    stalled: set[str] = set()
-    for _ in range(max_iter):
-        if not _expand_round(macro_defs, func_macros, stalled, macro_re, max_body_len):
-            break
-
-
-def _expand_round(
-    macro_defs: dict,
-    func_macros: dict,
-    stalled: set[str],
-    macro_re,
-    max_body_len: int,
-) -> bool:
-    """全体宏体各展一轮 → 是否有变化（供迭代到不动点）。
-
-    带参宏 body 含形参占位，形参未绑定时不能预展开，跳过。直接自引用（`X 出现
-    在 X 自己的体里）按 GCC 语义不展开——预判跳过，避免进入翻倍循环。
-    """
-    changed = False
-    for name, body in list(macro_defs.items()):
-        if name in func_macros or name in stalled:
+    budget = int(_get_expand_config().get("max_iterations", macro_expand.DEFAULT_BUDGET))
+    for name in list(macro_defs):
+        if name in func_macros:
             continue
-        if name in macro_re.findall(body):
-            stalled.add(name)
-            continue
-        new_body = macro_re.sub(
-            lambda m: macro_defs.get(m.group(1), m.group(0)), body
+        macro_defs[name] = macro_expand.expand_text(
+            macro_defs[name],
+            macro_defs,
+            func_macros,
+            call_args,
+            prefix=prefix,
+            budget=budget,
         )
-        if new_body == body:
-            continue
-        if len(new_body) > max_body_len:
-            stalled.add(name)  # 传递递归兜底：体积超限即停止
-            continue
-        macro_defs[name] = new_body
-        changed = True
-    return changed
 
 
 # ── 多路径诊断：条件块叶路径枚举 ──

@@ -73,9 +73,10 @@
 
 **【联动族】**（步 3/5）：
 
-- **新增"声明段/组件类型"⇒ 加完即跑能力门禁**（`tests/policy/test_engine_capabilities.py`；已连中
-  三元 `transform.slots.v1` / `checks.rules.v1` / `preprocessor.pipeline.v1`）⇒ **不等收口**——
-  该门禁已强制"用了就得声明"，此处不复制它的条目。
+- **新增"声明段/组件类型/模块级状态"⇒ 加完即跑 `tests/policy`**（能力门禁 + 全局态登记；已**连中
+  四次**：`transform.slots.v1` / `checks.rules.v1` / `preprocessor.pipeline.v1` 漏声明 +
+  `macro_shape._CALL_PARSE_CACHE` 漏登记）⇒ **不等收口**——这些门禁已强制"用了就得声明/登记"，
+  此处不复制它们的条目。
 - **触发审计的清单**（判定**以语义为准**，路径只是提示；命中即触发步 3 的判据证伪 + 步 4 的对抗
   审计，**不靠自评**）：改判定行为（`parser/` / `linter/` / `analyzer/` 的候选与诊断面）、碰契约面、
   影响面未知 ⇒ 动 `[engine] uses`、新增声明段或组件类型、新增或改动配置 schema 键、动 `normalize`
