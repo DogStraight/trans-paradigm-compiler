@@ -94,8 +94,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **配置面更正（作者提示"linter 补了宏语法检查文件，那么需要对应的宏语法配置"）**：启用不再是
     `[directive_handlers].define.check_syntax` 布尔开关（那样 C 的定义语法仍硬编码在引擎、别的语言无法声明
     自己的宏语法）。改为 `[macro_syntax]` **声明段**：启用判据 = 语言包声明该段；定义侧形态（变参占位）
-    也来自声明，形参表/算子形态沿用 `[macro_recognition]` ⇒ **引擎零 C 常量**；verilog 补自己的段即可启用
-    （触发式项，ADR-0021）。
+    也来自声明，形参表/算子形态沿用 `[macro_recognition]` ⇒ **宏语法检查面引擎零 C 常量**；verilog 补自己的段即可启用
+    （触发式项，ADR-0021）。**已知重复**：展开核心（`macro_expand`/`_expand`）仍以字面量 `"..."` 识别变参
+    标记——今日只有 C 用变参、改后无法用行为判据区分（要第二门不同占位写法的语言包），按"先证后开"登记
+    ADR-0021（行 11）。
   - 要点：指令行已被扫指令消费、不进 lint 流 ⇒ 检查对**原始源码**做；形参/算子形态全取
     `call_args` / `[macro_recognition]` 声明，引擎不硬编码 C。
   - **验证**：`tests/engine/linter/test_macro_syntax_checks.py` **21 条**（10 非法形态带位置 + 7 合法零误报 +

@@ -35,6 +35,7 @@
 | 8 | L1 渗透剩余面：插件侧 AST-first 改写｜引擎侧未声明的取值形态假设 | 暂缓（长期方向） | 动机是**插件代码质量**与**多形态语言包**，无当前行为缺陷；且须自带验证（无引擎侧渗透判据兜底）⇒ 不占主线 | 该子系统再动时顺带做（判据②/③），或新增第二形态语言包 | `ROADMAP.md`「语言知识渗透复审（L1）」 |
 | 9 | 循环纪律机械化 4 项（判据色产物门禁 / `cycle_triggers.py` / 审计反例入库 / `policy/*.md` 逐文件上限） | 暂缓 | 现靠 `policy/collaboration.md` + 审计执行；机械化本身要维护（且 `policy` 逐文件上限的数字待压缩收口后才有意义） | 认为"循环纪律须机器化"时逐项立项 | `policy/collaboration.md`（task-52 审计派生） |
 | 10 | Verilog 宏**定义侧**形式语法声明（补 `[macro_syntax]` 段启用 linter 检查） | 暂缓 | C 侧检查已改为声明驱动（未声明 ⇒ 不跑）；verilog 的宏定义语法不同——形参项可带默认值（`a=1`）、无 `...`/`#`/`##` ⇒ 启用前引擎需先支持形参默认值形态（`param_default_operator`），否则把合法定义误报为非法 | Verilog 包需要宏定义形式语法检查（或真实语料出现畸形 `` `define ``） | `linter/macro_syntax.py`、`preprocessor/macro_shape.py`、`grammar/verilog/base/_macro.toml` |
+| 11 | 展开核心的变参占位常量统一到声明面（`macro_expand` / `_expand` 仍以字面量 `"..."` 识别变参标记） | 暂缓 | `[macro_syntax].variadic_marker` 已是 linter 侧单一来源；但展开核心仍写字面量。今日只有 C 用变参，且"改后占位仍是 `...`"**无法用行为判据区分**（要第二门用**不同占位写法**的语言包才能证）⇒ 按"先证后开"记债，不造无判据机制 | 第二门带变参（且占位写法不同）的语言包接入，或动展开核心源码 | `preprocessor/macro_expand.py`、`preprocessor/_expand.py` |
 
 ## 权衡
 
