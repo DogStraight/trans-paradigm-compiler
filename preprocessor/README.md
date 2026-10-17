@@ -117,6 +117,17 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 `docs/gaps/gap-c-preprocessor-scope.md`）；`-E` 字节保真不承诺；`__DATE__`/`__TIME__`
 **永久排除**（破坏幂等）。
 
+已声明边界（端到端用例里以**守卫断言**锁住，落地时必须显式改断言）：
+
+- **替换结果里再出现的调用不重扫**（token 级 hideset 重扫留 A2）：`#define g f` +
+  `#define f(x) x+1` + `g(2)` ⇒ 当前 `f(2)`（GCC `2+1`）；`#define f(a) a*g` +
+  `#define g(a) f(a)` + `f(2)(9)` ⇒ 当前 `2*g(9)`（GCC `2*9*g`）。
+- **实参跨行的调用不展开**（替换区间跨行会改输出行数/行映射，冻结契约面未动）：
+  `#define F(a,b) a+b` + `int r = F(1,` + `            2);` ⇒ 当前原样保留
+  （GCC `int r = 1+2;`）。
+- 宏算子字符串化按**实参原文切片**（`#__VA_ARGS__` 的间隔空白保留：`V(a ,  b)` ⇒
+  `"a , b"`，与 GCC 一致）；体展开里的嵌套调用无原文时退回 token 拼接。
+
 ## 文件清单
 
 | 文件 | 一句话 |

@@ -405,6 +405,9 @@ label 未使用（无条款约束，风格）、宏展开产生的标签、扩�
 **不含**：`#if`/`#elif` 整型常量表达式、`#include`（A2）、`#line`/`#error`/`#pragma`/`_Pragma`、
 C23 项（`#warning`/`#elifdef`/`#embed`/`__VA_OPT__`/`__has_include`）。
 边界档案：`docs/gaps/gap-c-preprocessor-scope.md`；门禁：`tests/engine/preprocessor/test_macro_*.py`。
+**已声明边界**（详情与用例见 `preprocessor/README.md`「已知边界」）：替换结果里再现的调用不重扫
+（`g(2)` 别名 / `f(2)(9)`）、**实参跨行的调用不展开**——两者均以端到端守卫断言锁在
+`tests/engine/preprocessor/test_c_macro_end_to_end.py`。
 
 ## P4 理解路径（两段协作）
 

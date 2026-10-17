@@ -771,9 +771,17 @@ def expand_tokens(
         lines=source.split("\n"),
     )
     lines = ctx.lines
+    # 掩码**整段一次性**算再落到各行（行内区间）：逐行重算会漏掉跨行块注释的
+    # 续行（续行没有起始定界符）⇒ 续行里的宏名被误当调用展开（P1-3）。
+    line_masks = _line_masks(
+        macro_expand.mask_spans(
+            source, ctx.string_delimiters, ctx.escape, ctx.syntax
+        ),
+        lines,
+    )
 
     for line_no, line in enumerate(lines, 1):
-        macro_matches = _collect_macro_matches(ctx, line)
+        macro_matches = _collect_macro_matches(ctx, line, line_masks[line_no - 1])
         if not macro_matches:
             continue
 
@@ -824,6 +832,24 @@ def expand_tokens(
     )
 
 
+def _raw_variadic_for(
+    ctx: "_MacroExpandCtx",
+    name: str,
+    args_text: str,
+    call_args: "macro_expand.MacroCallArgs",
+) -> str | None:
+    """`#__VA_ARGS__` 用的**变参区原文**（P1-1）；非变参/宏体不用到 → None。"""
+    operators = ctx.operators
+    if operators is None or operators.variadic is None:
+        return None
+    if "..." not in ctx.func_macros.get(name, []):
+        return None
+    named = [p for p in ctx.func_macros[name] if p != "..."]
+    return macro_expand.variadic_raw_text(
+        args_text, call_args, len(named), operators, ctx.syntax
+    )
+
+
 def _match_one(
     ctx: "_MacroExpandCtx", line: str, m
 ) -> tuple[int, str, str, bool, str] | None:
@@ -843,6 +869,7 @@ def _match_one(
         if got is None:
             return None  # 函数宏名未调用（P0-6/7；不得回退对象宏）
         args, consumed = got
+        close_idx = m.end() + consumed
         body = macro_expand.substitute_call_tokens(
             name,
             args,
@@ -851,8 +878,10 @@ def _match_one(
             ctx.call_args,
             operators=ctx.operators,
             syntax=ctx.syntax,
+            raw_args=_raw_variadic_for(
+                ctx, name, line[m.end() : close_idx], ctx.call_args
+            ),
         )
-        close_idx = m.end() + consumed
         end = _extend_macro_chain(line, close_idx, ctx.macro_re, ctx.suffix_re)
         return end, body, name, True, line[m.end() : close_idx]
     body = ctx.macro_defs.get(name)
@@ -875,13 +904,49 @@ def _match_one(
     return end, expanded, name, False, ""
 
 
-def _collect_macro_matches(ctx: "_MacroExpandCtx", line: str) -> list[tuple]:
-    """本行的宏调用（原起列, 原止列, 宏体, 名字, 是否带参, 实参文本）。"""
+def _line_masks(
+    spans: list[tuple[int, int]], lines: list[str]
+) -> list[list[tuple[int, int]]]:
+    """整段掩码区间（源文本绝对偏移）→ 每行的行内掩码区间（左闭右开、裁到行界）。
+
+    跨行块注释：首行有 `/*`、续行没有 ⇒ 续行的区间从行首开始（`max(a-offset, 0)`），
+    这样续行里的宏名不再参与匹配（P1-3）。行序与 `lines` 一一对应。
+    """
+    result: list[list[tuple[int, int]]] = []
+    offset = 0
+    for line in lines:
+        end = offset + len(line)
+        result.append(
+            [
+                (max(a - offset, 0), min(b - offset, len(line)))
+                for a, b in spans
+                if a < end and b > offset
+            ]
+        )
+        offset = end + 1  # 换行符占 1 字符（split("\n") 的口径）
+    return result
+
+
+def _collect_macro_matches(
+    ctx: "_MacroExpandCtx",
+    line: str,
+    masks: list[tuple[int, int]] | None = None,
+) -> list[tuple]:
+    """本行的宏调用（原起列, 原止列, 宏体, 名字, 是否带参, 实参文本）。
+
+    `masks` = 该行的**行内**掩码区间（由整段源文本一次性算出，见 `_line_masks`）：
+    跨行块注释的续行没有起始定界符，逐行重算会漏算 ⇒ 调用方必须传（P1-3）。
+    缺省按本行现算（仅单行上下文用）。
+    """
     matches: list[tuple] = []
     consumed_until = -1
     # 掩码：字符串/字符/行注释/块注释内的文本不参与宏匹配（与裸匹配同一扫描）
-    spans = macro_expand.mask_spans(
-        line, ctx.string_delimiters, ctx.escape, ctx.syntax
+    spans = (
+        masks
+        if masks is not None
+        else macro_expand.mask_spans(
+            line, ctx.string_delimiters, ctx.escape, ctx.syntax
+        )
     )
 
     def _masked(pos: int) -> bool:

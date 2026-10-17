@@ -185,8 +185,11 @@ class MacroCallArgs:
     def match_args(self, text: str, open_idx: int) -> tuple[str, int] | None:
         """从 open_idx（开括号处）配平到对应闭括号 → (内部文本, 闭括号后位置)。
 
-        未配平（未闭合 / 调用跨行）→ None：调用方自行容错（定义侧退化为对象宏、
-        展开侧按非带参调用处理）。
+        ⚠ **定义侧/配置解析专用**：文本级切分，只数括号、不认字符串/注释掩码。
+        适用前提 = **定义处**的形参只能是标识符（`#define F(a, b)`），不存在
+        "字面量/注释里的分隔符"。**调用点一律走 token 级**
+        `macro_expand.collect_args_tokens`（掩码内逗号/括号不算分隔符），
+        勿在调用侧复用它。
         """
         if not text.startswith(self.open, open_idx):
             return None

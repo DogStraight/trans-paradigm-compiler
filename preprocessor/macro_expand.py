@@ -225,6 +225,96 @@ def _tokenize_masked(
     return tokenize(text, ops, masks)
 
 
+def _find_open(
+    toks: list[_Tok], start: int, call_args: MacroCallArgs
+) -> int | None:
+    """名字之后（跳过空白）的开括号 token 下标；非调用形态 → None（同 `_collect_args`）。"""
+    j = start
+    while j < len(toks) and not _is_ident(toks[j]) and not toks[j].text.strip():
+        j += 1
+    if j < len(toks) and toks[j].text == call_args.open:
+        return j
+    return None
+
+
+def _variadic_raw(
+    toks: list[_Tok], open_idx: int, named_count: int, call_args: MacroCallArgs
+) -> str:
+    """开括号之后**变参区原文拼写**（首个具名实参之后、闭括号之前，含区间内逗号与空白）。
+
+    `#__VA_ARGS__` 的字符串化口径 = **实参列表原文**（GCC 16.1 实测 `V(a, b)` →
+    `"a, b"`、`V(a ,  b)` → `"a , b"`、`V( a, b )` → `"a, b"`）；按 token 重拼会
+    丢掉逗号后的空白 ⇒ 取原文切片，空白折叠交给 `_stringize`。
+    """
+    openers = {o for o, _ in call_args.nesting}
+    closers = {c for _, c in call_args.nesting}
+    depth = 0
+    seps = 0
+    buf: list[_Tok] = []
+    for t in toks[open_idx + 1 :]:
+        if t.text in openers:
+            depth += 1
+            buf.append(t)
+            continue
+        if t.text in closers:
+            if depth == 0:
+                break
+            depth -= 1
+            buf.append(t)
+            continue
+        if depth == 0 and t.text == call_args.separator:
+            seps += 1
+            if seps <= named_count:  # 该分隔符分隔具名区（或具名区与变参区）
+                buf.clear()
+            else:
+                buf.append(t)
+            continue
+        buf.append(t)
+    return join(buf).strip()
+
+
+def _call_raw_variadic(
+    toks: list[_Tok],
+    name_idx: int,
+    after: int,
+    name: str,
+    call_args: MacroCallArgs,
+    func_macros: dict[str, list[str]],
+    operators: MacroOperators | None,
+    macro_defs: dict[str, str],
+) -> str | None:
+    """token 流里的调用 → 变参区原文拼写（`#__VA_ARGS__` 用）；不适用 → None。"""
+    if operators is None or operators.variadic is None:
+        return None
+    if "..." not in func_macros.get(name, []):
+        return None
+    if not _body_mentions(macro_defs.get(name, ""), operators.variadic, operators):
+        return None
+    open_idx = _find_open(toks, name_idx + 1, call_args)
+    if open_idx is None or after <= open_idx:
+        return None
+    named = [p for p in func_macros[name] if p != "..."]
+    return _variadic_raw(toks, open_idx, len(named), call_args)
+
+
+def variadic_raw_text(
+    text: str,
+    call_args: MacroCallArgs,
+    named_count: int,
+    operators: MacroOperators | None = None,
+    syntax=None,
+) -> str | None:
+    """调用点文本（**名字之后**、含括号）→ 变参区原文拼写；非调用形态 → None。
+
+    给文本层（`_expand.py::_match_one`）用：`#__VA_ARGS__` 必须取原文（P1-1）。
+    """
+    toks = _tokenize_masked(text, operators, syntax)
+    open_idx = _find_open(toks, 0, call_args)
+    if open_idx is None:
+        return None
+    return _variadic_raw(toks, open_idx, named_count, call_args)
+
+
 def _expand_one(
     toks: list[_Tok],
     macro_defs: dict[str, str],
@@ -269,6 +359,9 @@ def _expand_one(
             if steps > budget:
                 out.extend(work[i:])
                 break
+            raw_variadic = _call_raw_variadic(
+                work, i, after, name, call_args, func_macros, operators, macro_defs
+            )
             body = _substitute(
                 macro_defs.get(name, ""),
                 func_macros[name],
@@ -280,6 +373,7 @@ def _expand_one(
                 prefix,
                 operators,
                 syntax,
+                raw_variadic=raw_variadic,
             )
             hide = tok.hide | {name}
             repl = [
@@ -327,11 +421,14 @@ def _substitute(
     prefix: str,
     operators: MacroOperators | None = None,
     syntax=None,
+    raw_variadic: str | None = None,
 ) -> str:
     """宏体替参 + `#`（字符串化）/ `##`（粘贴）/ `__VA_ARGS__`。
 
     标准语义要点（C99 §6.10.3.2–§6.10.3.4）：
     - **`#` 形参**：取实参的**未展开拼写**再字符串化（`S(hi there)` → `"hi there"`）；
+    - **`#__VA_ARGS__`**：取**实参列表原文**（`V(a, b)` → `"a, b"`；逗号后的空白
+      保留，再由 `_stringize` 折叠）——按 token 重拼会丢空白 ⇒ 用 `raw_variadic`；
     - **紧邻 `##` 的形参**：用**未展开拼写**粘贴（`CAT(EMPTY,x)` → `EMPTYx`，**不是**
       先展开成 `x`——`##` 用未展开拼写是"宏算法是否合规"的试金石）；
     - 其余形参：实参**先展开**再替换；
@@ -374,7 +471,11 @@ def _substitute(
                 and toks[j].text == variadic_name
             ):
                 sep = call_args.separator if call_args is not None else ""
-                raw = sep.join(join(a) for a in variadic)
+                raw = (
+                    raw_variadic
+                    if raw_variadic is not None
+                    else sep.join(join(a) for a in variadic)
+                )
                 out.append(_Tok(_stringize(raw, ops, syntax), t.hide))
                 i = j + 1
                 continue
@@ -579,8 +680,13 @@ def substitute_call_tokens(
     operators: MacroOperators | None = None,
     syntax=None,
     budget: int = DEFAULT_BUDGET,
+    raw_args: str | None = None,
 ) -> str:
-    """调用点替参（**token 级实参**）→ hideset 重扫描；与体展开同一套语义。"""
+    """调用点替参（**token 级实参**）→ hideset 重扫描；与体展开同一套语义。
+
+    `raw_args` = 调用**实参列表原文**（名字之后到闭括号，含括号）里变参区的
+    原文切片，供 `#__VA_ARGS__` 用（`V(a, b)` → `"a, b"` 的逗号后空白不丢）。
+    """
     body = macro_defs.get(name)
     if body is None:
         return ""
@@ -595,6 +701,7 @@ def substitute_call_tokens(
         "",
         operators,
         syntax,
+        raw_variadic=raw_args,
     )
     hide = frozenset({name})
     toks = [
