@@ -79,3 +79,21 @@ def test_empty_macro_table_is_identity() -> None:
     """无宏表 ⇒ 展开恒等（普通标识符永不因"形态像宏"被展开）。"""
     src = "int main(void) {\n    return FOO + bar;\n}\n"
     assert expand_tokens(src, {}, rules_dir="grammar/c")[0] == src
+
+
+def test_macro_body_literal_not_expanded() -> None:
+    """**宏体内部**的字符串字面量不受展开（真 bug 回归：`B`=`"A"` ⇒ `"A"`）。
+
+    GCC 16.1.0：`#define A 1` + `#define B "A"` + `B` ⇒ `"A"`（不是 `"1"`）。
+    调用点 `_masked` 兜不住这条——掩码必须同样作用于**替换进流的宏体**。
+    """
+    out = expand_text(
+        "B",
+        {"A": "1", "B": '"A"'},
+        {},
+        _CALL_ARGS,
+        prefix="",
+        operators=_OPS,
+        syntax=_c_syntax(),
+    )
+    assert out == '"A"'

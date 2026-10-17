@@ -38,6 +38,15 @@ def test_self_reference_not_expanded() -> None:
     assert _expand("x", {"x": "x"}) == "x"
 
 
+def test_hideset_prevents_expansion_growth() -> None:
+    """`#define x x x` 展开 `x` ⇒ **`x x`**（判别式用例，对拍 GCC）。
+
+    只断言 `#define x x` 时，无 hideset 的实现被**预算截断**恰好截回 `x` ⇒
+    测不出抑制。换成 `x x` 后无 hideset 会膨胀到预算上限 ⇒ 文本必不同。
+    """
+    assert _expand("x", {"x": "x x"}) == "x x"
+
+
 def test_mutual_recursion_stops_at_visited_name() -> None:
     """`y→z→y` ⇒ `z`（与 GCC 实测一致：停在被 hideset 挡住的那一刻）。"""
     assert _expand("z", {"y": "z", "z": "y"}) == "z"

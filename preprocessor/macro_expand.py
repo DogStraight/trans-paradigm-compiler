@@ -190,6 +190,24 @@ def _collect_args(
     return None, start
 
 
+def _tokenize_masked(
+    text: str, operators: MacroOperators | None, syntax
+) -> list[_Tok]:
+    """按声明算掩码后 tokenize（**宏体内部**的字面量/注释同样不参与匹配）。
+
+    掩码与匹配必须同一次扫描生效：不仅源文本要掩码，**替换进流的宏体**也要
+    （`#define A 1` + `#define B "A"` ⇒ 展开 `B` 得 `"A"`，不是 `"1"`）。
+    """
+    ops = operators
+    masks = mask_spans(
+        text,
+        ops.string_delimiters if ops else (),
+        ops.escape if ops else None,
+        syntax,
+    )
+    return tokenize(text, ops, masks)
+
+
 def _expand_one(
     toks: list[_Tok],
     macro_defs: dict[str, str],
@@ -198,6 +216,7 @@ def _expand_one(
     budget: int,
     prefix: str,
     operators: MacroOperators | None = None,
+    syntax=None,
 ) -> list[_Tok]:
     """对 `toks` 做重扫描展开（原地循环；替换文本插回当前位置重扫）。
 
@@ -243,9 +262,13 @@ def _expand_one(
                 budget - steps,
                 prefix,
                 operators,
+                syntax,
             )
             hide = tok.hide | {name}
-            repl = [replace(t, hide=t.hide | hide) for t in tokenize(body, operators)]
+            repl = [
+                replace(t, hide=t.hide | hide)
+                for t in _tokenize_masked(body, operators, syntax)
+            ]
             _drop_prefix_token(out, prefix)
             work = repl + work[after:]
             i = 0
@@ -257,7 +280,7 @@ def _expand_one(
         hide = tok.hide | {name}
         repl = [
             replace(t, hide=t.hide | hide)
-            for t in tokenize(macro_defs[name], operators)
+            for t in _tokenize_masked(macro_defs[name], operators, syntax)
         ]
         _drop_prefix_token(out, prefix)
         work = repl + work[i + 1 :]
@@ -281,6 +304,7 @@ def _substitute(
     budget: int,
     prefix: str,
     operators: MacroOperators | None = None,
+    syntax=None,
 ) -> str:
     """宏体替参 + `#`（字符串化）/ `##`（粘贴）/ `__VA_ARGS__`。
 
@@ -296,7 +320,7 @@ def _substitute(
     """
     ops = operators or MacroOperators()
     variadic_name = ops.variadic
-    toks = tokenize(body, ops)
+    toks = _tokenize_masked(body, ops, syntax)
     variadic = args[len(params):]
     out: list[_Tok] = []
     i = 0
@@ -322,7 +346,8 @@ def _substitute(
                 out.extend(replace(a, hide=a.hide | t.hide) for a in arg_toks)
             else:
                 expanded = _expand_one(
-                    arg_toks, macro_defs, func_macros, call_args, budget, prefix, ops
+                    arg_toks, macro_defs, func_macros, call_args, budget, prefix, ops,
+                    syntax,
                 )
                 out.extend(replace(a, hide=a.hide | t.hide) for a in expanded)
             i += 1
@@ -472,17 +497,16 @@ def substitute_call(
         )
         args.append(tokenize(arg_text, ops, masks))
     text = _substitute(
-        body, params, args, macro_defs, func_macros, call_args, budget, "", ops
-    )
-    masks = mask_spans(
-        text,
-        ops.string_delimiters if ops else (),
-        ops.escape if ops else None,
-        syntax,
+        body, params, args, macro_defs, func_macros, call_args, budget, "", ops, syntax
     )
     hide = frozenset({name})
-    toks = [replace(t, hide=t.hide | hide) for t in tokenize(text, ops, masks)]
-    return join(_expand_one(toks, macro_defs, func_macros, call_args, budget, "", ops))
+    toks = [
+        replace(t, hide=t.hide | hide)
+        for t in _tokenize_masked(text, ops, syntax)
+    ]
+    return join(
+        _expand_one(toks, macro_defs, func_macros, call_args, budget, "", ops, syntax)
+    )
 
 
 def expand_text(
@@ -518,6 +542,6 @@ def expand_text(
     return join(
         _expand_one(
             tokenize(text, ops, masks), macro_defs, func_macros, call_args, budget,
-            prefix, ops,
+            prefix, ops, syntax,
         )
     )

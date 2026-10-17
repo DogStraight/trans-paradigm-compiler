@@ -384,6 +384,28 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
 **边界**：VLA 跳入（需类型面）、`case` 值重复 / 多个 `default`（原文未取得 + 需常量求值）、
 label 未使用（无条款约束，风格）、宏展开产生的标签、扩展语法（`__label__`/`asm goto`）、跨 TU。
 
+## 预处理面（阶段 4 首片 A）
+
+配置挂载：`tpc.toml` 的 `[preprocessor] macro_config` / `directives` / `expand` 均指向
+`base/_macro.toml`；`#` / `##` 是 `base/_token.toml` 的符号声明。
+
+声明面（`base/_macro.toml` 的 `[macro_recognition]`）：
+
+| 键 | 值 | 含义 |
+|---|---|---|
+| `shape` | `"symbol.base.hash,name"` | 指令形态：`#` 前缀 + 名字位（候选 `macro.define`/`undef`/`include`） |
+| `call_shape` | `"name"` | **显式"无前缀"** ⇒ C 的**裸标识符宏调用**（引擎不默认允许空前缀） |
+| `call` | `[]` | 名字位任意标识符（是否真展开由**宏表**决定） |
+| `stringize_operator` / `paste_operator` / `variadic_name` | `"#"` / `"##"` / `"__VA_ARGS__"` | 宏算子（语言包声明；未声明不启用） |
+| `call_args` / `arg_separator` | `bracket.l_parentheses,args,bracket.r_parentheses` / `symbol.base.comma` | 带参宏实参形态（定义侧与调用侧同形） |
+
+**当前支持**：对象/函数/变参宏、`#` 字符串化（token 间空白折叠、字面量内部不动）、
+`##` 粘贴（**未展开拼写**）、hideset 重扫描（自引用/互递归抑制）、`#undef`、
+字符串/字符/行注释/块注释**掩码（含宏体内部）**。
+**不含**：`#if`/`#elif` 整型常量表达式、`#include`（A2）、`#line`/`#error`/`#pragma`/`_Pragma`、
+C23 项（`#warning`/`#elifdef`/`#embed`/`__VA_OPT__`/`__has_include`）。
+边界档案：`docs/gaps/gap-c-preprocessor-scope.md`；门禁：`tests/engine/preprocessor/test_macro_*.py`。
+
 ## P4 理解路径（两段协作）
 
 歧义路径（`x = (myint)y;`：`myint` 是不是类型名）走**两段协作**，能力都必须有：

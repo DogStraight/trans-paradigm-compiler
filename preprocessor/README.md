@@ -98,10 +98,32 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
   **同形**处置判定 ⇒ 以可选 `[macro_policy] when`（既有 `call_site` 事实的**合取** → mode，
   小表非 DSL）上提；**替代而非并存**（两处同时声明 ⇒ 加载期 `ConfigError`）。
 
+## 宏算子与调用形态（阶段 4 首片 A · 语言包声明）
+
+| 键（`[macro_recognition]`） | 含义 |
+|---|---|
+| `call_shape` | **调用**形态：单元素 `"name"` = **显式无前缀**（C 的裸标识符调用）；`"<token>,name"` = 该前缀；**未声明 ⇒ 沿用 `shape` 前缀**（verilog 语义不变） |
+| `stringize_operator` / `paste_operator` / `variadic_name` | `#` / `##` / 变参占位；**未声明 ⇒ 该语义不启用**（verilog 零影响） |
+| `string_delimiters` / `escape` | 不在本段声明：字符串/字符字面量形态取自 token 表 `[string]`（与 lexer 捕获器同源），供 `#` 字符串化与**掩码**共用 |
+
+引擎保证：宏匹配与**掩码**（字符串/字符/行注释/块注释，**含替换进流的宏体**）在
+**同一次扫描内**生效；裸标识符调用的整词边界由 `core.token_protocol.IDENT_RE`
+派生（不另写标识符字符类）；`[expand] max_iterations` 只是**资源上限守卫**
+（同一算法上的预算，不是第二套算法）。
+
+**阶段 4 首片 A 的已知边界**：`#include` 缺文件/循环仍只 `print` 警告（**A2 修**：
+改诊断）；`#if`/`#elif` 整型表达式、`#line`/`#error`/`#pragma`/`_Pragma` 与 C23 项
+（`#warning`/`#elifdef`/`#embed`/`__VA_OPT__`/`__has_include`）**未实现**（范围基线见
+`docs/gaps/gap-c-preprocessor-scope.md`）；`-E` 字节保真不承诺；`__DATE__`/`__TIME__`
+**永久排除**（破坏幂等）。
+
+## 文件清单
+
 | 文件 | 一句话 |
 |------|--------|
 | `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 |
-| `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析：前缀 token 文本 + 名字候选 + 实参形态） |
+| `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析：前缀 token 文本 + 名字候选 + 实参形态 + `call_shape`/算子） |
+| `macro_expand.py` | 宏展开核心（hideset 重扫描 + `#`/`##`/变参 + 掩码；`#` 字符串化的 token 间空白折叠） |
 | `_reverse.py` | 宏反向（统一位置桥：锚 + 原文回插） |
 | `_bridge.py` | 统一位置桥（Anchor Bridge）——锚 + 原文消耗式回插引擎 |
 | `_markers.py` | tpc marker 书写/识别（注释形态声明驱动） |
