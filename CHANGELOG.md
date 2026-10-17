@@ -104,7 +104,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **验证**：`tests/engine/preprocessor/test_c_conditionals.py` **94 条**（45 条真/假对拍 +
     19 条错误面 + 惰性/跳过组 8 条 + 配对 8 条 + 声明面/未接线 2 条 + 端到端 3 条）；
     预处理器 **294 passed**、linter/pipeline **730 passed**、A/B verilog **0/144**、pyright **0**；
-    门禁变异 **77 → 81**（真值判据 / 跳过组不求值 / 已选中 elif 不求值 / 未闭合不报）。
+    门禁变异 **77 → 82**（真值判据 / 跳过组不求值 / 已选中 elif 不求值 / 未闭合不报）。
   - **已声明边界**（见 `preprocessor/README.md`「已知边界」）：C23 项不实现（c23 的
     `true`/`false` 1/0、`u8` 字符常量、二进制常量、`#elifdef`/`#elifndef`）；跳过组的**词法**
     错误不诊断（gcc 会）；`#else`/`#endif`/`#ifdef` 后多余 token 不诊断；除零按硬错误停

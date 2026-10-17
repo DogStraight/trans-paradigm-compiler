@@ -177,7 +177,7 @@ C 声明、verilog 未声明 ⇒ 不跑、A/B 0/144；verilog 补齐 = 触发式
 （`grammar/c/base/_macro.toml`）= 算子「符号→引擎动作」+优先级/结合性、整型常量形态/后缀、字符常量转义与符号扩展、
 `defined` 拼写；引擎 `preprocessor/condition.py` 通用求值（intmax/uintmax 64 位、短路、跳过组不求值），`if`/`elif` 经
 `[directive_handlers]` 绑定 `cond_if`/`cond_elif`（per-dir 解析；verilog 不声明 ⇒ `#if` 不是指令、零变化）。证据：
-`test_c_conditionals.py` 94 条（gcc 16.1 对拍）、预处理器 294、A/B 0/144、变异 77→81。**边界**：C23 项（c23 的
+`test_c_conditionals.py` 94 条（gcc 16.1 对拍）、预处理器 294、A/B 0/144、变异 77→82。**边界**：C23 项（c23 的
 `true`/`false` 1/0、`u8` 字符常量、二进制常量、`#elifdef`）不实现；跳过组**词法**错误不诊断（gcc 会）；除零按硬错误停（gcc 取左操作数继续）。
 
 ## 诚实边界（统一"待抽检"，不得当实测结论用）

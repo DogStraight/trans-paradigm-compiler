@@ -140,6 +140,8 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
   在 `-pedantic-errors` 下同样报错但继续）。
 - 移位计数语义按 gcc 的 UB 口径落地（负计数反向移位、计数 ≥ 位宽时左移 0/右移饱和），
   见 `condition.py::_eval_shift` 头注。
+- **include 头文件里的条件诊断**并入宿主扫描（与 include 诊断同口径；位置是头文件内行号、
+  不标文件名）。
 
 ## 文件清单
 

@@ -418,15 +418,16 @@ def _parse_character(raw: dict[str, Any]) -> CharacterSyntax:
     )
 
 
-# ── 求值环境（按 ctx 缓存：宏表 + 掩码/展开形态） ──────────
+# ── 求值环境（按 ctx 缓存：形态/预算；**宏表在每次求值时取活值**） ──
 
 
 @dataclass
 class _EvalEnv:
+    """声明面决定的静态求值形态（按 ctx 缓存）。宏表**不进这里**：源码是顺序扫描的，
+    求值当时应看到"扫描到该行时"的宏表（前文 `#define` 才生效），缓存副本会漏掉后文更新。"""
+
     operators: MacroOperators
     call_prefix: str
-    macro_defs: dict[str, str]
-    func_macros: dict[str, list[str]]
     call_args: MacroCallArgs | None
     budget: int
     comment: Any
@@ -438,11 +439,6 @@ def _eval_env(ctx: dict[str, Any]) -> _EvalEnv:
     if isinstance(env, _EvalEnv):
         return env
     rules_dir = ctx["rules_dir"]
-    # 预定义（-D）宏也算宏表；-U 优先剔除；源码内 #define 覆盖 -D
-    defs = dict(ctx.get("_predefined") or {})
-    for name in ctx.get("_undefine") or ():
-        defs.pop(name, None)
-    defs.update(ctx.get("macro_defs") or {})
     operators = load_macro_operators(rules_dir=rules_dir)
     call = load_macro_shapes(rules_dir=rules_dir).get("call")
     if call is None:
@@ -457,14 +453,21 @@ def _eval_env(ctx: dict[str, Any]) -> _EvalEnv:
     env = _EvalEnv(
         operators=operators,
         call_prefix=call.prefix,
-        macro_defs=defs,
-        func_macros=dict(ctx.get("_func_params") or {}),
         call_args=ctx.get("_call_args"),
         budget=int(_get_expand_config().get("max_iterations", 128)),
         comment=load_comment_syntax(rules_dir),
     )
     ctx["_cond_env"] = env
     return env
+
+
+def _live_macro_defs(ctx: dict[str, Any]) -> dict[str, str]:
+    """求值当时的宏表（`-D` 预定义 + 源码 `#define`，`-U` 剔除；源码覆盖 `-D`）。"""
+    defs = dict(ctx.get("_predefined") or {})
+    for name in ctx.get("_undefine") or ():
+        defs.pop(name, None)
+    defs.update(ctx.get("macro_defs") or {})
+    return defs
 
 
 def _masks(text: str, env: _EvalEnv) -> list[tuple[int, int]]:
@@ -541,8 +544,8 @@ def _evaluate(expr: str, ctx: dict[str, Any], syntax: ConditionSyntax) -> int:
         raise _CondError(*err)
     expanded = expand_text(
         substituted,
-        env.macro_defs,
-        env.func_macros,
+        _live_macro_defs(ctx),
+        dict(ctx.get("_func_params") or {}),
         env.call_args,
         prefix=env.call_prefix,
         budget=env.budget,

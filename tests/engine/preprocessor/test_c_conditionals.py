@@ -144,6 +144,30 @@ def test_function_macro_in_condition():
     assert lines == ["FM"]
 
 
+def test_macro_defined_after_first_condition_is_visible():
+    """宏表**活值**语义：后文 `#define` 对后文 `#if` 生效（求值环境不缓存宏表快照）。"""
+    src = (
+        "#if A\nWRONG\n#else\nFIRST\n#endif\n"
+        "#define A 1\n"
+        "#if A\nSECOND\n#endif\n"
+    )
+    lines, diags = scan(src)
+    assert not diags
+    assert lines == ["FIRST", "SECOND"]
+
+
+def test_condition_comments_and_continuation():
+    """条件表达式里的注释 = 空白；反斜杠续行在扫描前合并。"""
+    src = (
+        "#if 1 /* c */ + 2 == 3\nOK1\n#endif\n"
+        "#if 1 // c\nOK2\n#endif\n"
+        "#if 1 + \\\n2 == 3\nOK3\n#endif\n"
+    )
+    lines, diags = scan(src)
+    assert not diags
+    assert lines == ["OK1", "OK2", "OK3"]
+
+
 # ── 诊断面（表达式错误）────────────────────────────────
 
 

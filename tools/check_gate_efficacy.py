@@ -838,6 +838,14 @@ _MUTATIONS: list[dict[str, str]] = [
                "        block = frame[\"block\"]\n",
         "test": "tests/engine/preprocessor/test_c_conditionals.py",
     },
+    {
+        "why": "条件求值的宏表若不是**扫描到该行时的活值**（漏并源码 `#define`）⇒ 后文才定义的宏"
+               "在后文 `#if` 里仍被当 0（顺序语义错）",
+        "file": "preprocessor/condition.py",
+        "old": "    defs.update(ctx.get(\"macro_defs\") or {})\n    return defs\n",
+        "new": "    return defs  # 变异：只用 -D/-U，漏并源码宏表\n",
+        "test": "tests/engine/preprocessor/test_c_conditionals.py",
+    },
 ]
 
 
