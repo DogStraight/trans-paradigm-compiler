@@ -670,6 +670,58 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        if matched is None:  # 变异：容错退化（不报错）\n            return\n        if False:\n            raise ConfigError(\n",
         "test": "tests/engine/preprocessor/test_primitives.py",
     },
+    {
+        # ── 以下 4 条：**端到端**变异（A1 返工后新增；来源 = 独立审计 15 反例）──
+        # 教训：上一轮 8 条 A1 变异全打在内部函数上，端到端 10 项错而全绿 ⇒ 变异必须
+        # 打"用户看得见的路径"（命中 tests/.../test_c_macro_end_to_end.py）。
+        "why": "`#` 字符串化若不用实参原文，`V(a ,  b)` 会丢掉逗号后的空白"
+               "（审计 P1-1；GCC 为 \"a , b\"）——端到端可见",
+        "file": "preprocessor/macro_expand.py",
+        "old": "                raw = (\n"
+               "                    raw_variadic\n"
+               "                    if raw_variadic is not None\n"
+               "                    else sep.join(join(a) for a in variadic)\n"
+               "                )\n",
+        "new": "                raw = sep.join(join(a) for a in variadic)  "
+               "# 变异：丢原文切片\n",
+        "test": "tests/engine/preprocessor/test_c_macro_end_to_end.py",
+    },
+    {
+        "why": "跨行块注释的续行没有起始定界符，逐行重算掩码 ⇒ 续行内的宏名被误当"
+               "调用展开（审计 P1-3，真实语料 edge_comments.c）",
+        "file": "preprocessor/_expand.py",
+        "old": "        macro_matches = _collect_macro_matches(ctx, line, line_masks[line_no - 1])\n",
+        "new": "        macro_matches = _collect_macro_matches(ctx, line)  "
+               "# 变异：退回逐行掩码\n",
+        "test": "tests/engine/preprocessor/test_c_macro_end_to_end.py",
+    },
+    {
+        "why": "tokenize 不掩码 ⇒ 字符串/注释里的逗号与括号被当实参分隔符/收束符"
+               "（审计 P0-3/P0-4），宏体里的字面量也会被当可展开文本"
+               "（Lead 独立审计的真 bug：`#define B \"A\"`）",
+        "file": "preprocessor/macro_expand.py",
+        "old": "    ops = operators\n"
+               "    masks = mask_spans(\n"
+               "        text,\n"
+               "        ops.string_delimiters if ops else (),\n"
+               "        ops.escape if ops else None,\n"
+               "        syntax,\n"
+               "    )\n"
+               "    return tokenize(text, ops, masks)\n",
+        "new": "    ops = operators\n"
+               "    return tokenize(text, ops, None)  # 变异：不掩码\n",
+        "test": "tests/engine/preprocessor/test_c_macro_end_to_end.py",
+    },
+    {
+        "why": "裸调用正则若不按名字长度降序交替，短宏名会吃掉长宏名前缀"
+               "（`#define A 1` + `#define AB 2` ⇒ `AB` 不展开；审计 P0-5）",
+        "file": "preprocessor/_expand.py",
+        "old": "        names = sorted({n for n in macro_names if n}, "
+               "key=len, reverse=True)\n",
+        "new": "        names = sorted({n for n in macro_names if n})  "
+               "# 变异：字典序（短名吃长名前缀）\n",
+        "test": "tests/engine/preprocessor/test_c_macro_end_to_end.py",
+    },
 ]
 
 
