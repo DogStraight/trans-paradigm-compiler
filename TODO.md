@@ -133,9 +133,10 @@
       `lexer/main_lexer.py:1033 refine_type`：lint 路径有兜底、`_stage_lex` 没有）⇒ 同一输入两种表现。
       **并入 A2**（与 `#include` 真实实现同批，正是阶段 4 的指令面），验收含"**同一输入两条路径都给
       诊断、都不抛异常**"；**不单独**加 `_stage_lex` 守卫（随 A2 一起做）。链：`docs/gaps/gap-c-preprocessor-scope.md` ⑬
-- [ ] **两份 README 引用 `_drafts/`（gitignored）**：`preprocessor/README.md`（`:94` 一带的调研指针）与
-      `grammar/c/README.md`（数处）指向 `_drafts/*` ⇒ 对 clone 者是**死链**（`.gitignore:28`）。既有问题
-      （非 A1 引入）。判据：改指向正式档（gap / 机制文档）或删指针，全仓 grep 无 `_drafts/`。
+- [ ] **跟踪文档指向 `_drafts/` 具体草稿（死链）**：`preprocessor/README.md:94`、`grammar/c/README.md:268/316/345/380`、
+      `TODO.md:62/112`、`policy/structural_budget.md:126` —— `_drafts/` 在 `.gitignore:28` ⇒ 对 clone 者是死链，
+      且违反 `policy/structural_budget.md:51`「不许写"见某草稿某节"」（既有问题，非 A1 引入）。判据：**指向具体
+      草稿文件**的引用清零（`docs/README.md`/`structural_budget.md` 这类"描述草稿区本身"的提及保留）。
 - [ ] **循环纪律的机械化（4 项，派生自 task-52 审计的反例）**：① 判据色产物门禁（`PRE=<rc>/POST=<rc>` +
       命令，复用 `ab_pipeline_compare.py` 的 PRE 机制）；② `tools/cycle_triggers.py`（`git diff --name-only`
       → 触发规则表，**须过种子集自检**才可当门禁）；③ 审计反例入库重跑（`tests/policy/data/cycle_audit/`
