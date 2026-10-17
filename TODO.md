@@ -15,9 +15,10 @@
       `Declaration`/`ExprStmt` 消歧；(B) 引擎侧语句边界恢复 ⇒ 改变**所有语言**的坏输入
       诊断面。现状刻意不改（不影响合法代码零误报）。
       判据：块内每条坏语句各报一条**位置正确**的诊断。链：`docs/gaps/gap-parser-linter-approximation.md`
-- [ ] **预处理两项（`#include` / `#define`）**：`tools/c_acceptance.py`（42 条构造）仅剩的
-      **接受面空洞**；属阶段 4，先立项（详案见 `ROADMAP.md`「C 语言包」）。
-      判据：两项进 AST + 负样本被拒 + 工具空洞归零。
+- [ ] **`#include` 真实实现（A2）**：`tools/c_acceptance.py` 的两个预处理样本现按"被消费且无异常"
+      接受（指令行→整行 marker 注释），**`#include` 未真实包含**（`path_forms` 未接线、缺文件只
+      `print`、内容未进流）⇒ 退出判据 1 实质未达。判据：包含内容进流 + 缺文件/循环**给诊断** +
+      管线段与 lint 两路径一致。链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑬⑭
 - [ ] **枚举体尾逗号后的行注释吞掉收尾 `};`**（`enum e { A, B, // note` + 换行 + `};`
       → 首遍 `enum e {A, B,} // note;`，**丢 token、产物非法 C**）。与渲染现状 #6 同族
       （容器 `trailing` 槽）但 #6 只位置漂移，**丢 token 不能默认按 #6「归 raw 路径」结案**
@@ -130,8 +131,11 @@
 - [ ] **预处理指令的两条路径行为不一致**：`#include` 在 CLI lint 给 `lexer-error`（blocking），
       而在**管线段抛 `ValueError`**（调用栈 `pipeline/__init__.py:538 _stage_lex` →
       `lexer/main_lexer.py:1033 refine_type`：lint 路径有兜底、`_stage_lex` 没有）⇒ 同一输入两种表现。
-      **并入阶段 4 首片**（正是阶段 4 的指令面），首片验收加一条"**同一输入两条路径都给诊断、都不抛异常**"；
-      **不单独**加 `_stage_lex` 守卫（随首片一起做）。链：`docs/gaps/gap-c-preprocessor-scope.md`
+      **并入 A2**（与 `#include` 真实实现同批，正是阶段 4 的指令面），验收含"**同一输入两条路径都给
+      诊断、都不抛异常**"；**不单独**加 `_stage_lex` 守卫（随 A2 一起做）。链：`docs/gaps/gap-c-preprocessor-scope.md` ⑬
+- [ ] **两份 README 引用 `_drafts/`（gitignored）**：`preprocessor/README.md`（`:94` 一带的调研指针）与
+      `grammar/c/README.md`（数处）指向 `_drafts/*` ⇒ 对 clone 者是**死链**（`.gitignore:28`）。既有问题
+      （非 A1 引入）。判据：改指向正式档（gap / 机制文档）或删指针，全仓 grep 无 `_drafts/`。
 - [ ] **循环纪律的机械化（4 项，派生自 task-52 审计的反例）**：① 判据色产物门禁（`PRE=<rc>/POST=<rc>` +
       命令，复用 `ab_pipeline_compare.py` 的 PRE 机制）；② `tools/cycle_triggers.py`（`git diff --name-only`
       → 触发规则表，**须过种子集自检**才可当门禁）；③ 审计反例入库重跑（`tests/policy/data/cycle_audit/`

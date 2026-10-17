@@ -7,6 +7,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **阶段 4 首片 A1：C 宏核心交付**（2026-10-17，循环 #15）：`#define`（对象/函数/变参宏）+ `#undef` +
+  **C 裸标识符调用**（语言包 `call_shape="name"` **显式声明无前缀**，三态；verilog 语义不变）+
+  `#` 字符串化（token 间空白折叠、字面量内部不动）+ `##` 粘贴（**未展开拼写**；试金石
+  `CAT(EMPTY,x)`→`EMPTYx`）+ `__VA_ARGS__`（空时保留宏体逗号 `F(1)`→`f(1, )`）+ **hideset 重扫描**
+  （替换原"宏体不动点文本替换"，删 `_expand_round`/`stalled`/体积截断）+ **掩码**（字符串/字符/
+  行注释/块注释，**含替换进流的宏体**）+ 形参表未闭合 **fail-fast**。新增声明面：`call_shape`（三态）/
+  `stringize_operator` / `paste_operator` / `variadic_name`；字符串定界符与转义**取自 token 表
+  `[string]`**（单一来源），裸调用整词边界由 `core.token_protocol.IDENT_RE` 派生。
+  **验证**：Lead 自建 GCC 16.1.0 对拍探针 8/8（`_drafts/lead_probe_e2e.py` 等）；`tests/engine/preprocessor`
+  **168 passed**；六套回归（preprocessor/lexer/parser/languages-c/languages-verilog/policy）**2257 passed**；
+  A/B `--expect-changed 0` **0/144**；e2e 宏面 **62**；pyright strict **0**；真实 C 语料空宏表下逐字节恒等 8/8。
+  **门禁变异 57 → 65**（新增 8 条 A1 变异：hideset / 调用前缀 / `call_shape` 单元素 / `##` 未展开拼写 /
+  `#` 空白折叠 / 变参绑定 / 调用点掩码 / 形参未闭合 fail-fast），逐条 `--only` 实测**全部如期变红**。
+  **Lead 独立审计发现**：① **真 bug**——宏体再 tokenize 时未算掩码 ⇒ `#define B "A"` 被误展开成 `"1"`
+  （GCC 为 `"A"`），已修（`_tokenize_masked` + `syntax` 贯穿 `_expand_one`/`_substitute`）；② 两条
+  **测试空档**（hideset 只断言文本、预算截断恰好截回同值；宏体掩码路径未被覆盖）已补判别式用例；
+  ③ 一条**等价变异**（token 级 `masked` 守卫在"掩码区间=单个不透明 token"后为空转）不可检出，
+  已从门禁表删除。**边界**：`#include` 真实实现 / `#if` 家族 / C23 项留 **A2** ⇒ 退出判据 1 仍
+  **"数字已达、实质未达"**。
+
 - **循环模式本体优化（2026-10-17）**：`policy/collaboration.md` 六步与「循环执行细则」按**失效模式族**
   重组（判据 / 证据 / 归属 / 联动），并补五条**来自实测失效**的规则：判据族新增**「靠什么绿的」**
   （放宽接受条件会掩盖"未实现"）与**「有区分力 + 留产物」**（改前红改后绿要留 `PRE/POST` 产物；改前
