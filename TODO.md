@@ -8,13 +8,12 @@
 
 ## C 语言包（0.1.3 交付面之后的未完项）
 
-- [ ] **块内诊断粒度粗（每块只报一条，且报文指错位置）**：`void f(void) { a + ; b + ; }`
-      → 1 条指向 `b` 的 `expected '}'`，**真错在 `a + ;`**（c4 同位样本 → 2 条精确诊断）。
-      成因 = `CompoundStmt` 块体无独立语句节点 + `matcher._match_repeat` 遇错即 `break`。
-      两条候选修法**各有已实测代价**：(A) 包侧改块规则 ⇒ 推翻本包刻意选定并锁进测试的
-      `Declaration`/`ExprStmt` 消歧；(B) 引擎侧语句边界恢复 ⇒ 改变**所有语言**的坏输入
-      诊断面。现状刻意不改（不影响合法代码零误报）。
-      判据：块内每条坏语句各报一条**位置正确**的诊断。链：`docs/gaps/gap-parser-linter-approximation.md`
+- [ ] **块内诊断粒度粗（每块只报一条，且报文指错位置）**：`void f(void) { a + ; b + ; }` → 1 条指向 `b`
+      的 `expected '}'`，**真错在 `a + ;`**（c4 同位样本 → 2 条精确）。成因 = `CompoundStmt` 块体无独立
+      语句节点 + `matcher._match_repeat` 遇错即 `break`。两条候选修法**各有实测代价**：(A) 包侧改块规则 ⇒
+      推翻本包锁进测试的 `Declaration`/`ExprStmt` 消歧；(B) 引擎侧语句边界恢复 ⇒ 改变**所有语言**的坏输入
+      诊断面。现状刻意不改（合法代码零误报）。判据：块内每条坏语句各报一条**位置正确**的诊断。
+      链：`docs/gaps/gap-parser-linter-approximation.md`
 - [ ] **`#include` 真实实现（A2）**：`tools/c_acceptance.py` 的两个预处理样本现按"被消费且无异常"
       接受（指令行→整行 marker 注释），**`#include` 未真实包含**（`path_forms` 未接线、缺文件只
       `print`、内容未进流）⇒ 退出判据 1 实质未达。判据：包含内容进流 + 缺文件/循环**给诊断** +
@@ -53,13 +52,10 @@
       仅有权威转述、未取得标准原文句。触发条件 = 取得原文句（C11/C23 §6.7.1 各段）**或**更大真实语料
       实测零误报（本轮仅 8 个 C 语料）。同批可议：CSC001（A 档）是否从 warning 升 `error`。
       来源：循环 #10 保守裁定
-- [ ] **阶段 3 剩余片**（S2/S3/S4/S5；循环 #11 侦察实测，**均"当前静默"**）：
-      **S2 链接性**（同 TU 同时具 internal+external linkage = UB，§6.2.2 原文；机制最省，但
-      **FP 风险中高**——头文件 `extern`/`static` 模式，须实现作用域链继承判定）｜**S4 标签**
-      （§6.8.1「Label names shall be unique within a function.」+ §6.8.6.1 goto 目标，**A 档原文、
-      FP≈0**，但需 **postpass 形态**、label 当前不进符号表）｜**S3 函数原型/定义一致性**（需
-      **类型模型**，代价最大）｜S5（case/default 部分条款未取得原文；**枚举值重复是 C 档反证 ⇒
-      永不实现**）。触发条件 = 按价值/代价逐片立项。链：`_drafts/p3_next_plan.md`；来源：循环 #11 侦察
+- [ ] **阶段 3 剩余片（S3/S5；S4 标签已交付 #12，S2 见下条"不采"）**：**S3 函数原型/定义一致性**
+      （需**类型模型**，代价最大）｜**S5**（case/default 部分条款未取得原文；**枚举值重复是 C 档反证 ⇒
+      永不实现**）。触发条件 = 按价值/代价逐片立项。来源：循环 #11 侦察（S4 的 §6.8.1「Label names shall
+      be unique within a function.」+ §6.8.6.1 已落 `checks/labels`）
 - [ ] **ENUM003 的 C23 豁免缺口**：`enum E : int;`（固定底层类型枚举）按 N2963 **总是完整**，但本包
       语法面尚不支持该形态（实测 lint 拒）⇒ 现无影响；**将来实现该语法时** ENUM003 必须加
       "带底层类型 ⇒ 恒完整"豁免，否则误报。来源：循环 #11 交付边界（已记 `grammar/c/README.md` 与规则表头注）
@@ -100,34 +96,29 @@
       `#(W = 8, D = 4)` 被 linter 阻断（现只接受每项都重复 `parameter`）。
       判据：先扫真实语料（`tests/e2e/samples/real/`）统计该形态出现次数——有量则补语法，
       无则记为既定取舍。链：`grammar/verilog/01_module/`
-- [ ] **结构欠账 S 有 16 项新增未下结论**：`python tools/structural_score.py --compare`
-      实测 **基线 0 → 当前 287**（新增 16 项，exit 1）——新代码（`tools/feature_sites.py`、
-      `analyzer/elaboration/contract.py`、`core/engine_capabilities.py`、
-      `config_registry.merge_by_name` 等）未按 R6 逐项判保持。判据：每项"重构删掉"或记入
-      `tools/structural_kept.json`（**reason + source**），`--compare` 回 0。
-      链：`policy/structural_budget.md`（口径与停止规则）
-- [ ] **功能散点步 2b：剩余 16 个未收敛登记点**（属有意保留的边界，非欠账——收敛一个删一个）。
-      清单与判据见 `docs/gaps/gap-feature-scatter.md`「步 2 收敛目标与接受边界」
-- [ ] **`[macro_policy] when` 声明表上提**（触发条件式）：现役"宏处置判定"走能力插件
-      （`[capabilities] macro_policy`）。评估（`_drafts/preprocessor_prototype_assessment.md`，2026-10-17）
-      结论 **今天不上提**——按"多语言共有且形态稳定"判据，实测只有 verilog 一个声明方。
-      触发条件 = 第二个语言包出现**同形**判定 ⇒ 以"既有 `call_site` 事实**合取** → mode"的小表上提，
-      **替代而非并存**（两处同声明 ⇒ 加载期 `ConfigError`）。链：`preprocessor/README.md`「跨语言文本能力原型」
+- [ ] **结构欠账 S 有 50 项新增未下结论**：`python tools/structural_score.py --compare` 实测 **基线 0 →
+      当前 1137**（新增 50 项，exit 1）——新代码（`linter/lookahead.py` 类体、`preprocessor/macro_expand.py`、
+      `tools/feature_sites.py` 等）未按 R6 逐项判保持。判据：每项"重构删掉"或记入
+      `tools/structural_kept.json`（**reason + source**），`--compare` 回 0。链：`policy/structural_budget.md`
+- [ ] **功能散点步 2b：剩余 16 个未收敛登记点**（有意保留的边界，非欠账——收敛一个删一个；清单与判据见
+      `docs/gaps/gap-feature-scatter.md`「步 2 收敛目标与接受边界」），**另有 3 处新增散点未登记**：
+      `python tools/feature_sites.py compare` 实测 `check` 8→12、`config` 29→30、`config:lexer.pre_scan` 2→3
+      ⇒ 合并登记点或写保持理由。
+- [ ] **`[macro_policy] when` 声明表上提**（触发式）：现役"宏处置判定"走能力插件（`[capabilities]
+      macro_policy`）。评估结论 **今天不上提**——按"多语言共有且形态稳定"判据，实测只有 verilog 一个声明方。
+      触发条件 = 第二个语言包出现**同形**判定 ⇒ 以"`call_site` 事实**合取** → mode"的小表上提，**替代而非
+      并存**（两处同声明 ⇒ 加载期 `ConfigError`）。链：`preprocessor/README.md`「跨语言文本能力原型」
 - [ ] **符号基座两处错位**（**影响任何"文件域 / 作用域"语义检查**，非仅链接性；2026-10-17 实测）：
-      ① `void f(int x);` 的**形参符号落 `<global>`**（`decl_node=ParamDecl`、`is_file=True`）⇒ 文件域判定误判；
-      ② `void f(void){}` 的**函数定义符号落 `<FunctionScope>`**（`scope_kind=function`）⇒
-      `void f(void); static void f(void){}` 这类真 UB **漏报**、"定义后的 `extern`"继承链断。
-      评估完成（task-46）：**F1/F2 会改 P1 公开产物 ⇒ 命中升级判据 ①、另立**；已落 **N1/N2 派生视图**
-      （`_api.declaration_view()` 给 `decl_scope`/`is_file_decl`/`is_param`，**产物逐字节不变**
-      = 11 源/76 记录全同、`test_c_symbol_collection.py` **零改动**）。**派生视图是"声明位置"唯一入口**。
-      ⚠ 基座档 `docs/gaps/gap-c-semantic-base.md` **已 199/200 行（满）** ⇒ 本偏差暂登记于此 +
-      `grammar/c/README.md`，**待该档裁剪时并入**。链：`docs/gaps/gap-c-semantic-base.md`
-- [ ] **S2 链接性片：不采（判据不足；触发条件式）**：task-45 实测 ⇒ ① **无真阳样本**（可解析真实 C 语料
-      仅 8 个小文件、冲突命中 0；大语料 503 个 `.c/.h` 抽样 **40/40 抛 `ValueError`**）② 朴素实现 **4/19 误报**，
-      含**高频合法形态**（`static int x; extern int x;` 依 §6.2.2p423 **继承 internal ⇒ 合法**）③ **基座两处
-      错位**未修 ④ 条款是 **UB 而非约束**、GCC/clang 本就诊断 ⇒ 价值低于 tags/labels 两片。
-      **触发条件** = 基座两处错位修完 **且** 出现可解析的真实 C 语料（含真阳样本）。
-      若届时做：最小形态 = 文件域 + 排除形参位/FuncDef 位 + **必须实现 p423 继承** + `default=false`（覆盖率约一半）。
+      ① `void f(int x);` 的**形参符号落 `<global>`**（`decl_node=ParamDecl`、`is_file=True`）⇒ 文件域误判；
+      ② `void f(void){}` 的**函数定义符号落 `<FunctionScope>`** ⇒ `void f(void); static void f(void){}` 真 UB
+      **漏报**、"定义后的 `extern`"继承链断。评估完成（task-46）：F1/F2 会改 P1 公开产物 ⇒ **命中升级判据
+      ①、另立**；已落 **N1/N2 派生视图**（`_api.declaration_view()`，产物逐字节不变）＝"声明位置"唯一入口。
+      ⚠ 基座档 `docs/gaps/gap-c-semantic-base.md` **已 200/200 行（满）** ⇒ 暂登记于此，待该档裁剪时并入。
+      链：`docs/gaps/gap-c-semantic-base.md`
+- [ ] **S2 链接性片：不采（判据不足；触发式）**：task-45 实测 ⇒ ① **无真阳样本**（可解析真实 C 语料仅
+      8 个小文件、冲突命中 0；大语料 503 个 `.c/.h` 抽样 40/40 抛 `ValueError`）② 朴素实现 **4/19 误报**，
+      含高频合法形态（`static int x; extern int x;` 依 §6.2.2p423 **继承 internal ⇒ 合法**）③ 基座两处错位
+      未修 ④ **UB 非约束**、GCC/clang 本就诊断。**触发** = 基座错位修完 **且**出现可解析真实语料（含真阳）。
 - [ ] **预处理指令的两条路径行为不一致**：`#include` 在 CLI lint 给 `lexer-error`（blocking），
       而在**管线段抛 `ValueError`**（调用栈 `pipeline/__init__.py:538 _stage_lex` →
       `lexer/main_lexer.py:1033 refine_type`：lint 路径有兜底、`_stage_lex` 没有）⇒ 同一输入两种表现。
@@ -138,10 +129,9 @@
       默认统一为"开" + verilog 对拍 0 差异 + CLI 上 `#define` 不再报语法错。链：gap ⑬
 - [ ] **`tpc check` 跨盘输入崩栈**：`main.py:361 os.path.relpath` 对 C:↔E: 跨盘路径抛 `ValueError`
       （同盘正常）⇒ 报错非受控。判据：跨盘文件给受控诊断或正常处理。来源：A1 审计返工实测（既有缺陷）
-- [ ] **跟踪文档指向 `_drafts/` 具体草稿（死链）**：`preprocessor/README.md:94`、`grammar/c/README.md:268/316/345/380`、
-      `TODO.md:62/112`、`policy/structural_budget.md:126` —— `_drafts/` 在 `.gitignore:28` ⇒ 对 clone 者是死链，
-      且违反 `policy/structural_budget.md:51`「不许写"见某草稿某节"」（既有问题，非 A1 引入）。判据：**指向具体
-      草稿文件**的引用清零（`docs/README.md`/`structural_budget.md` 这类"描述草稿区本身"的提及保留）。
+- [ ] **跟踪文档指向 `_drafts/` 具体草稿（死链）**：`preprocessor/README.md` 1 处、`grammar/c/README.md` 4 处
+      —— `_drafts/` 在 `.gitignore` ⇒ 对 clone 者是死链，且违反 `policy/structural_budget.md`「不许写"见某
+      草稿某节"」。判据：**指向具体草稿文件**的引用清零（"描述草稿区本身"的提及保留）。
 - [ ] **循环纪律的机械化（4 项，派生自 task-52 审计的反例）**：① 判据色产物门禁（`PRE=<rc>/POST=<rc>` +
       命令，复用 `ab_pipeline_compare.py` 的 PRE 机制）；② `tools/cycle_triggers.py`（`git diff --name-only`
       → 触发规则表，**须过种子集自检**才可当门禁）；③ 审计反例入库重跑（`tests/policy/data/cycle_audit/`

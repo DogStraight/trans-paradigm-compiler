@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **规划档容量清理：删已完成项 + 校陈数**（2026-10-17，作者点名"先缓解待做列表容量再推进"）：
+  `ROADMAP` **319 → 294 行**、`TODO` **159 → 149 行**，全部为**删已完成 / 去重 / 校数字**，无内容新增：
+  ① 「C 语义层切片 1b / 语义基座」整节 **26 → 5 行**——P1/P2a/P2b-1/P3b-M1 标 ✅ 未删，且 P2b-2/P3/P4 已于
+  循环 #7/#9 交付（`PROGRESS` 块 3–6 全 ✅）⇒ 按"完成即删"收成交付索引 + gap 档指针；
+  ② 阶段 4 的「A1 ✅ 已交付」**与事实相反**（返工中）⇒ 改写为返工中 + A2 清单压缩（-2 行）；
+  ③ `TODO`「阶段 3 剩余片 S2/S3/S4/S5」——**S4 标签已交付循环 #12**（`checks/labels` + `test_c_label_checks.py`）、
+  **S2 已有独立"不采"条目**（同一项在两处）⇒ 收成 S3/S5（-3 行）；
+  ④ 陈数修正：门禁变异 **38 → 65**（`--list` 实测）、结构欠账 **S 287/16 项 → 1137/50 项**
+  （`structural_score --compare` 实测）、基座档 **199 → 200 行（已满）**；
+  ⑤ 新事实登记（非本轮引入）：`feature_sites compare` 实测 **3 处散点新增**（`check` 8→12、`config` 29→30、
+  `config:lexer.pre_scan` 2→3）⇒ 进 `TODO` 待登记或合并；
+  ⑥ 死链清理 3 处（`TODO` 2 + `policy/structural_budget.md` 1；README 侧 5 处留给 A2 文档批次，避免与并行
+  写入撞车），`policy/structural_budget.md` 不再自违"不许写见某草稿"。
+  验证：`tests/policy` **392 passed**（含 `test_planning_doc_budget`）；`git status` 仅 3 个文档文件。
+
 ### Added
 
 - **⚠ 更正：A1 交付结论撤回（2026-10-17 同日，独立对抗审计）**：下条"A1 已交付"的判据面**不成立**——独立审计对 A1

@@ -39,7 +39,7 @@
       SERV 工程只放了 top 文件，13 个 `serv_*` 子模块的定义不在语料里，故误报基线
       `W101=13` 是**真未知**（实测逐条打印确认，全部来自 `ref_serv_top.v`）；补齐语料即可
       下降（门禁"只许减"自动放行）。待补场景：同编译单元多文件、`default_nettype` 跨文件泄漏
-- [ ] **毒配置清单化（变异维度化）**：`tools/check_gate_efficacy.py` 现有 **38** 条真实事故
+- [ ] **毒配置清单化（变异维度化）**：`tools/check_gate_efficacy.py` 现有 **65** 条真实事故
       变异；可扩成维度化清单（语言 × 执行顺序 × PYTHONHASHSEED × 缓存状态）并定期接入 CI。
       判据：每条变异必须**可复现变红**
 
@@ -67,16 +67,14 @@
 
 - [ ] **阶段 3 结构类型与作用域语义**：struct/union/enum（含位域）、标签命名空间、
       作用域与链接（static/extern）、函数原型与定义
-- [ ] **阶段 4 预处理器**：**A1 宏核心 ✅ 已交付**（`#define`/`#undef`/C 裸标识符调用/`#`/`##`/
-      `__VA_ARGS__`/hideset 重扫描/掩码含宏体/形参未闭合 fail-fast；对拍 GCC 16.1.0、8 条门禁变异全红）。
-      **剩 A2**：`#include` 真实实现（`path_forms` 接线 + 缺文件/循环改诊断 + 内容进流）、管线段与 lint
-      两路径统一（同输入都给诊断、都不抛异常）、`expand_macros` 默认统一为"开"（附 verilog 对拍）、
-      `gap-c-preprocessor-scope.md` ⑮ 的 5 处文档漂移。**范围（作者 2026-10-17）**：**只做 C 标准中的宏**
-      编译器专属扩展（`#pragma once` / `#include_next` / `__COUNTER__` / GNU `, ## __VA_ARGS__` 等）
-      **不做**；以 **C 标准（C99/C11/C23 §6.10）** 为准（逐条清单与档位由 task-43 核实）。
-      预处理**只做文本级宏处理**（卫生宏归语法结构、过程宏归插件能力位，主管线不管后两者）；
-      原型面**按需求实现、先满足 C**。tpc 自身需求：**"保留宏引用"输出档**（反向保真，非编译器扩展）。
-      **`#if` 求值语义放语言包声明面**（已裁定；语言包键，非引擎持有）。
+- [ ] **阶段 4 预处理器**：**A1 宏核心返工中** —— 独立审计判 `failed`（15 条合法 C99 反例 / 10 P0：
+      算子两侧空格、实参切分不认字面量、短名吃长名前缀、无 `(` 被当对象宏且不重扫；根因 = **双路径**），
+      返工执行 `task-53`（验收 = 审计脚本 0 偏差 + 端到端用例）。**A2**：`#include` 真实实现
+      （`path_forms` 接线 + 缺文件/循环给诊断 + 内容进流）、管线段与 lint 两路径统一（同输入都给诊断、
+      都不抛异常）、`expand_macros` 默认统一为"开"（附 verilog 对拍）、gap ⑮ 的 5 处文档漂移。
+      **范围（作者 2026-10-17）**：只做 **C 标准宏**（C99/C11/C23 §6.10），编译器扩展（`#pragma once`/
+      `#include_next`/`__COUNTER__`/GNU `, ##`）不做；只做**文本级**（卫生宏/过程宏归语法结构与插件能力）；
+      `#if` 求值语义放语言包声明面（已裁定）；"保留宏引用"输出档属 tpc 自身需求。
 - [ ] **阶段 5 标准等效验证**：`[plugins] enabled` 组合 → 语法接受域断言（对标各标准
       语法规范），并接真实 C 语料。**入口已就位**：`tools/c_acceptance.py`（42 条 /
       接受 42 / 空洞 0，**口径注**见 gap-c-preprocessor-scope ⑭）+ 档位参数 `resolve(...)`（判据
@@ -99,32 +97,12 @@
       要做的是把 ③/④ 补成与 ② 同级的**结构化、fail-fast** 声明面（统一 `[inject]` 的
       add/replace/remove 三动作）。**触发条件**：出现真正需要"改/删既有分支"的标准演进
 
-## C 语义层切片 1b / 语义基座（typedef 名起头的转换）——**已拍板，分片实施**
+## C 语义层切片 1b / 语义基座（typedef 名起头的转换）
 
-> 切片 1a（**关键字起头**的类型名 `(int)x` / `(struct p *)q` / `(int){1}`）**已随 0.1.3 落地**。
-> 切片 1b 与**阶段 3**共用前置 = **语义基座**（符号表：typedef 名 / 标签 / 普通标识符 +
-> 作用域栈 + 声明顺序敏感性）。**作者 2026-10-10 拍板的方向**（裁决全表与现状实测见
-> **`docs/gaps/gap-c-semantic-base.md`**）：**不走 parser 谓词键/运行期钩子**（延后），
-> 改为 **linter 先过歧义路径**——路径不收敛时出**内部 warning** → parser 走 **raw 暂缓建树**
-> → **analyzer 插件**实现理解路径；符号**提前注册 + 分期标注**；默认偏置**显式化**；
-> raw 作**内部机制**（先例 = 宏体）；两套 scope **不合并**但文档写明本质一体。
-
-- **P1 C 包声明式符号收集产物** ✅ **已交付**（循环 #2）：`{name, kind, scope, scope_kind,
-  decl_order, decl_line, phase}`；读取入口 `AnalysisTraversal.context` → `_api.two_phase_product`；
-  判据 `tests/languages/c/test_c_symbol_collection.py`（9 例 + 6 条缺陷态变红）
-- **P2a linter 候选收敛判定 + 内部 warning 旁路** ✅ **已交付**（循环 #2，用户可见面逐字节零变化）：
-  判据 `tests/engine/linter/test_linter_lookahead.py::TestConvergenceJudgment` +
-  `tests/engine/pipeline/test_lint_internal_warnings.py`；载体 `_PipelineContext.internal_warnings`
-- **P2b-1 linter 符号相关性标记** ✅ **已交付**（循环 #3，零用户可见变化）：`pre_scan` 符号经
-  `scanner`/`discovery` 进 `lookahead`，收敛条目带 `symbol_dependent`/`symbol_names`/`region`
-  （口径 = 括号紧邻 `( id )` ∧ id∈pre_scan；语料实测 0 误标）。**P2b-2（摘诊断）与 P3 同批**
-  （已用一条"决定守卫"测试钉住：P3 必须显式重新引入）
-- **P3b-M1 资格判定** ✅ **已交付**（循环 #5，**零用户可见变化**）：① 替换式试解析（改型后重跑候选集，
-  整句通过才算"唯一问题是符号歧义"）② 只认 **typedef 命名空间** ③ 声明位置先后（行+列）+
-  **深度守卫**；`pre_scan_with_lines` 并行面 + `RuleMatcher.memo_suspended`（packrat memo 以 token
-  位置为键，改型试解析必须挂起缓存）；**性能**：tv80_core `tpc lint` 由 +13.7% 优化回 **+0.0%**
-> **切片 1b 已全线交付**（循环 #7：`(myint)x` 闭环 + 校验安全网；循环 #9：**理解路径**两段协作落地
-> ——raw 段有确定结构 `CastExpr` 且渲染保真）。边界项见 `TODO.md`。
+> **已全线交付**：切片 1a（关键字起头）随 0.1.3；切片 1b = P1 符号收集 → P2a 收敛判定 → P2b-1 标记
+> → P3b-M1 资格判定 → P3c 位点发现面 → M2 raw 承载 + 窄档摘诊断 → P4 理解路径（循环 #2–#9，
+> `(myint)x` 闭环 + 渲染保真）。**完成项已删**（历史见 `CHANGELOG.md` + git log）；裁决全表与实现
+> 边界见 **`docs/gaps/gap-c-semantic-base.md`**；残留边界项见 `TODO.md`。
 
 ## 打包：规格跟随语言包（原 ADR-0010 draft 收敛删除）
 
@@ -276,11 +254,8 @@
 
 ## 渲染器后续（原 P5 六项已全部闭环）
 
-> P5 六项（统一缩进模型 / Doc IR 原语升级 / 布局意图声明化 / 世界 B 升级 / 保真度分级 /
-> 兼容验收）全部落地（历史见 git log：4bc4b3f 起，ADR-0006 阶段 1-5 + 4a/4b；Veryl 渲染层
-> 深读闭环 13f29f1 Pad 三件套）。残留缺口评估见 `renderer/renderer_architecture.md`
-> 「功能缺口评估」（世界 A）+ `grammar/verilog/plugins/formatter/README.md`「世界 B 边界」。
-> 唯一未闭环后续：
+> P5 六项全部落地（历史见 git log / ADR-0006）。残留缺口评估见 `renderer/renderer_architecture.md`
+> 「功能缺口评估」+ `grammar/verilog/plugins/formatter/README.md`「世界 B 边界」。唯一未闭环后续：
 
 - [ ] **Layout TOML schema 校验**（`renderer/renderer_architecture.md` 缺口 5）：布局表达式
       错误（拼错原语键/类型）静默降级为 None，与 fail-fast 精神相悖——可加布局 schema 校验
