@@ -175,7 +175,7 @@ def _collect_args(
         if t.text in closers:
             if depth == 0:
                 args.append(cur)
-                return args, j + 1
+                return _trim_args(args), j + 1
             depth -= 1
             cur.append(t)
             j += 1
@@ -188,6 +188,22 @@ def _collect_args(
         cur.append(t)
         j += 1
     return None, start
+
+
+def _trim_args(args: list[list[_Tok]]) -> list[list[_Tok]]:
+    """实参**首尾空白 token** 不属实参（token 级收集会保留它们）。
+
+    与文本级 `split(..., strip)` 语义对齐；内部空白保留（字符串化需要）。
+    """
+    trimmed: list[list[_Tok]] = []
+    for arg in args:
+        a, b = 0, len(arg)
+        while a < b and not arg[a].text.strip():
+            a += 1
+        while b > a and not arg[b - 1].text.strip():
+            b -= 1
+        trimmed.append(arg[a:b])
+    return trimmed
 
 
 def _tokenize_masked(
@@ -326,18 +342,25 @@ def _substitute(
     i = 0
     while i < len(toks):
         t = toks[i]
-        # `#形参`：字符串化（未展开拼写）；仅当语言声明了字符串化算子
-        if (
-            ops.stringize is not None
-            and t.text == ops.stringize
-            and i + 1 < len(toks)
-            and _is_ident(toks[i + 1])
-            and toks[i + 1].text in params
-        ):
-            raw = _raw_spelling(toks[i + 1].text, params, args)
-            out.append(_Tok(_stringize(raw, operators), t.hide))
-            i += 2
-            continue
+        # `#`：字符串化（`#` 与随后的形参/变参之间**允许空白**；取未展开拼写）
+        if ops.stringize is not None and t.text == ops.stringize:
+            j = _skip_space(toks, i + 1)
+            if j < len(toks) and _is_ident(toks[j]) and toks[j].text in params:
+                raw = _raw_spelling(toks[j].text, params, args)
+                out.append(_Tok(_stringize(raw, ops, syntax), t.hide))
+                i = j + 1
+                continue
+            if (
+                variadic_name is not None
+                and j < len(toks)
+                and _is_ident(toks[j])
+                and toks[j].text == variadic_name
+            ):
+                sep = call_args.separator if call_args is not None else ""
+                raw = sep.join(join(a) for a in variadic)
+                out.append(_Tok(_stringize(raw, ops, syntax), t.hide))
+                i = j + 1
+                continue
         if _is_ident(t) and t.text in params:
             idx = params.index(t.text)
             arg_toks = args[idx] if idx < len(args) else []
@@ -377,26 +400,68 @@ def _raw_spelling(param: str, params: list[str], args: list[list[_Tok]]) -> str:
     return join(args[idx])
 
 
+def _skip_space(toks: list[_Tok], i: int) -> int:
+    """`i` 起跳过纯空白 token（`##`/`#` 两侧允许空白；空 token 也跳过）。"""
+    while i < len(toks) and not toks[i].text.strip():
+        i += 1
+    return i
+
+
 def _adjacent_paste(toks: list[_Tok], i: int, paste: str | None) -> bool:
-    """`i` 处的形参是否紧邻粘贴算子（左或右）——决定是否跳过实参展开。"""
+    """`i` 处的形参是否**隔着空白**紧邻粘贴算子（左或右）——决定是否跳过展开。"""
     if paste is None:
         return False
-    left = i - 1 >= 0 and toks[i - 1].text == paste
-    right = i + 1 < len(toks) and toks[i + 1].text == paste
+    j = i - 1
+    while j >= 0 and not toks[j].text.strip():
+        j -= 1
+    left = j >= 0 and toks[j].text == paste
+    k = _skip_space(toks, i + 1)
+    right = k < len(toks) and toks[k].text == paste
     return left or right
 
 
-def _stringize(raw: str, operators: MacroOperators | None) -> str:
+def _comment_spans(raw: str, syntax) -> list[tuple[int, int]]:
+    """注释区间（行注释/块注释；来自语言包 `[comment]` 声明）——字符串化前换成空格。"""
+    spans: list[tuple[int, int]] = []
+    if syntax is None:
+        return spans
+    line_starts = list(getattr(syntax, "line_starts", ()) or ())
+    block_pairs = list(getattr(syntax, "block_pairs", ()) or ())
+    i = 0
+    n = len(raw)
+    while i < n:
+        line_hit = next((m for m in line_starts if raw.startswith(m, i)), None)
+        if line_hit is not None:
+            end = raw.find("\n", i)
+            end = n if end < 0 else end
+            spans.append((i, end))
+            i = end
+            continue
+        block = next((p for p in block_pairs if raw.startswith(p[0], i)), None)
+        if block is not None:
+            close = raw.find(block[1], i + len(block[0]))
+            end = n if close < 0 else close + len(block[1])
+            spans.append((i, end))
+            i = end
+            continue
+        i += 1
+    return spans
+
+
+def _stringize(
+    raw: str, operators: MacroOperators | None, syntax=None
+) -> str:
     """实参拼写 → 字符串字面量（C99 §6.10.3.2p2）。
 
     规则：**预处理 token 之间**的空白折叠为**一个空格**；token **内部**（字符串/
-    字符字面量内部的连续空白）**不得动**；首尾空白丢弃。故不能 `re.sub(r"\\s+")`
-    一把梭（会把 `S("a  b")` 的内部空白也压掉）——按 token 判：
-      · 语言声明了 `[string] delimiters`/`escape` ⇒ 定界段整体算一个 token；
-      · 标识符整段；其余字符逐字符（punctuation）；
-      · 只在**源里有空白间隔**的两个 token 之间补一个空格。
+    字符字面量内部的连续空白）**不得动**；首尾空白丢弃；**注释**按翻译阶段换成
+    一个空格（`S(a /* c */ b)` → `"a b"`）。故不能 `re.sub(r"\\s+")` 一把梭——
+    按 token 判：定界段整体算一个 token，其余逐字符，只在源里有空白间隔处补空格。
     """
     ops = operators or MacroOperators()
+    # 注释 → 空格（翻译阶段 3：注释替换为单个空格）
+    for a, b in reversed(_comment_spans(raw, syntax)):
+        raw = raw[:a] + " " + raw[b:]
     pieces: list[tuple[str, bool]] = []  # (token 文本, 之前是否有空白)
     i = 0
     had_space = False
@@ -452,21 +517,44 @@ def _apply_paste(toks: list[_Tok], paste: str | None) -> list[_Tok]:
     while i < len(toks):
         t = toks[i]
         if t.text == paste:
+            # `##` 两侧允许空白：先剥掉左/右侧空白 token，再拼成一个 token
+            while out and not out[-1].text.strip():
+                out.pop()
             lhs = out.pop() if out else _Tok("")
-            rhs = toks[i + 1] if i + 1 < len(toks) else _Tok("")
+            j = _skip_space(toks, i + 1)
+            rhs = toks[j] if j < len(toks) else _Tok("")
             pasted = f"{lhs.text}{rhs.text}"
             hide = lhs.hide | rhs.hide
             out.append(_Tok(pasted, hide) if pasted else _Tok(""))
-            i += 2
+            i = j + 1
             continue
         out.append(t)
         i += 1
     return out
 
 
-def substitute_call(
+def collect_args_tokens(
+    text: str,
+    call_args: MacroCallArgs,
+    operators: MacroOperators | None = None,
+    syntax=None,
+) -> tuple[list[list[_Tok]], int] | None:
+    """从 `text` 起点收实参（**token 级**，复用 `_collect_args` 单一实现）。
+
+    返回 (实参 token 列表, 消耗的**字符数**)；无调用（无开括号/未配平）→ None。
+    掩码在 tokenize 时生效 ⇒ 字符串/注释里的 `,`/`)` 不会误当分隔符/收束符
+    （P0-B；调用点不再走文本级 `MacroCallArgs.match_args/split`）。
+    """
+    toks = _tokenize_masked(text, operators, syntax)
+    args, after = _collect_args(toks, 0, call_args)
+    if args is None:
+        return None
+    return args, sum(len(t.text) for t in toks[:after])
+
+
+def substitute_call_tokens(
     name: str,
-    args_text: str,
+    args: list[list[_Tok]],
     macro_defs: dict[str, str],
     func_macros: dict[str, list[str]],
     call_args: MacroCallArgs | None,
@@ -475,37 +563,31 @@ def substitute_call(
     syntax=None,
     budget: int = DEFAULT_BUDGET,
 ) -> str:
-    """**调用点**带参宏展开：实参切分 → 替参（`#`/`##`/变参）→ hideset 重扫描。
-
-    与 `expand_text` 共用同一套语义（`_substitute`）；调用点只多做"按语言声明的
-    分隔符切实参"这一步。替换结果 token 带 `{name}` hideset（自递归抑制）。
-    """
+    """调用点替参（**token 级实参**）→ hideset 重扫描；与体展开同一套语义。"""
     body = macro_defs.get(name)
     if body is None:
         return ""
-    if call_args is None:
-        return body
-    params = func_macros.get(name, [])
-    ops = operators
-    args: list[list[_Tok]] = []
-    for arg_text in call_args.split(args_text):
-        masks = mask_spans(
-            arg_text,
-            ops.string_delimiters if ops else (),
-            ops.escape if ops else None,
-            syntax,
-        )
-        args.append(tokenize(arg_text, ops, masks))
     text = _substitute(
-        body, params, args, macro_defs, func_macros, call_args, budget, "", ops, syntax
+        body,
+        func_macros.get(name, []),
+        args,
+        macro_defs,
+        func_macros,
+        call_args,
+        budget,
+        "",
+        operators,
+        syntax,
     )
     hide = frozenset({name})
     toks = [
         replace(t, hide=t.hide | hide)
-        for t in _tokenize_masked(text, ops, syntax)
+        for t in _tokenize_masked(text, operators, syntax)
     ]
     return join(
-        _expand_one(toks, macro_defs, func_macros, call_args, budget, "", ops, syntax)
+        _expand_one(
+            toks, macro_defs, func_macros, call_args, budget, "", operators, syntax
+        )
     )
 
 

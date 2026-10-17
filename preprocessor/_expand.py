@@ -225,7 +225,8 @@ def _build_macro_re(prefix: str | None, macro_names=()) -> re.Pattern:
     if prefix is None:
         return re.compile(r"(?!)")
     if prefix == "":
-        names = sorted({n for n in macro_names if n})
+        # 名字按**长度降序**交替：`AB` 不被 `A` 抢先命中（有前缀关系的宏名必中）
+        names = sorted({n for n in macro_names if n}, key=len, reverse=True)
         if not names:
             return re.compile(r"(?!)")
         alt = "|".join(re.escape(n) for n in names)
@@ -868,29 +869,32 @@ def _match_one(
 ) -> tuple[int, str, str, bool, str] | None:
     """单个正则命中 → `(end, body, name, is_func, args_text)`；不可展开 → None。
 
-    带参调用：名字在 func_macros 且后随调用开始符，且实参可配对 → 形参替换；
-    否则（含带参形态但实参未闭合）回退当同名的无参宏。
+    **函数宏**（名字在 `func_macros`）：名字后允许**空白/注释/换行**再接 `(`；
+    实参切分走 **token 级** `macro_expand.collect_args_tokens`（掩码内逗号/括号
+    不是分隔符）。名字后**没有 `(`** ⇒ **不展开**（标准：函数的宏名不调用就
+    不替换，不得回退成对象宏）。
+    对象宏：按宏表替换（无参）。
     """
     name = m.group(1)
-    if (
-        ctx.call_args is not None
-        and name in ctx.func_macros
-        and line[m.end() :].startswith(ctx.call_args.open)
-    ):
-        matched = ctx.call_args.match_args(line, m.end())
-        if matched is not None:
-            args_text, close_idx = matched
-            body = macro_expand.substitute_call(
-                name,
-                args_text,
-                ctx.macro_defs,
-                ctx.func_macros,
-                ctx.call_args,
-                operators=ctx.operators,
-                syntax=ctx.syntax,
-            )
-            end = _extend_macro_chain(line, close_idx, ctx.macro_re, ctx.suffix_re)
-            return end, body, name, True, args_text
+    if ctx.call_args is not None and name in ctx.func_macros:
+        got = macro_expand.collect_args_tokens(
+            line[m.end() :], ctx.call_args, ctx.operators, ctx.syntax
+        )
+        if got is None:
+            return None  # 函数宏名未调用（P0-6/7；不得回退对象宏）
+        args, consumed = got
+        body = macro_expand.substitute_call_tokens(
+            name,
+            args,
+            ctx.macro_defs,
+            ctx.func_macros,
+            ctx.call_args,
+            operators=ctx.operators,
+            syntax=ctx.syntax,
+        )
+        close_idx = m.end() + consumed
+        end = _extend_macro_chain(line, close_idx, ctx.macro_re, ctx.suffix_re)
+        return end, body, name, True, line[m.end() : close_idx]
     body = ctx.macro_defs.get(name)
     if body is None:
         return None
