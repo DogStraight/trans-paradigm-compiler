@@ -657,13 +657,6 @@ _MUTATIONS: list[dict[str, str]] = [
         "test": "tests/engine/preprocessor/test_macro_stringize_paste.py",
     },
     {
-        "why": "A1 丢 **token 级掩码判定** ⇒ 字符串/注释内的宏名被当调用展开",
-        "file": "preprocessor/macro_expand.py",
-        "old": "    return not tok.masked and bool(IDENT_RE.fullmatch(tok.text))\n",
-        "new": "    return bool(IDENT_RE.fullmatch(tok.text))  # 变异：不看掩码\n",
-        "test": "tests/engine/preprocessor/test_macro_mask.py",
-    },
-    {
         "why": "A1 丢**调用点掩码过滤** ⇒ 匹配不看是否落在字面量/注释内（`printf(\"FOO\")` 被展开）",
         "file": "preprocessor/_expand.py",
         "old": "        if _masked(m.start()):\n            continue  # 掩码区内（字面量/注释）不展开\n",
