@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from core.errors import ConfigError
 from core.token_protocol import IDENT_RE
 
 from .macro_shape import MacroCallArgs, MacroOperators
@@ -310,6 +311,11 @@ def _drop_prefix_token(out: list[_Tok], prefix: str) -> None:
         out.pop()
 
 
+def _body_mentions(body: str, name: str, operators: MacroOperators | None) -> bool:
+    """宏体里是否出现某标识符（变参名误用检查用；按算子切分后的 token 判）。"""
+    return any(t.text == name for t in tokenize(body, operators))
+
+
 def _substitute(
     body: str,
     params: list[str],
@@ -336,6 +342,17 @@ def _substitute(
     """
     ops = operators or MacroOperators()
     variadic_name = ops.variadic
+    # 形参记录里 `...` 是**变参标记**（`define.py` 保留）：真形参 = 去掉标记后的项；
+    # 非变参宏里出现 `__VA_ARGS__`/`#__VA_ARGS__` ⇒ 明确报错（不猜"超出即变参"）
+    is_variadic = "..." in params
+    params = [p for p in params if p != "..."]
+    has_var_args = (
+        variadic_name is not None and _body_mentions(body, variadic_name, ops)
+    )
+    if has_var_args and not is_variadic:
+        raise ConfigError(
+            f"非变参宏的宏体使用了 {variadic_name!r}：形参表需含 '...'（宏体：{body!r}）"
+        )
     toks = _tokenize_masked(body, ops, syntax)
     variadic = args[len(params):]
     out: list[_Tok] = []
@@ -601,6 +618,7 @@ def expand_text(
     budget: int = DEFAULT_BUDGET,
     operators: MacroOperators | None = None,
     syntax=None,
+    hideset: frozenset[str] = frozenset(),
 ) -> str:
     """文本级展开入口（宏体/片段通用）：hideset 重扫描，超预算保留原文。
 
@@ -609,6 +627,8 @@ def expand_text(
     `operators` 未声明 ⇒ `#`/`##`/变参语义不启用（纯替换）。
     `syntax`（`CommentSyntax`）+ `operators.string_delimiters/escape` ⇒ 掩码：
     字符串/字符/行注释/块注释内的文本**不参与**宏匹配（同一次扫描内生效）。
+    `hideset` = **初始 hideset**（种子）：调用点替换传 `{name}` 防自递归
+    ——公开 API，调用方/测试不必碰私有函数。
     """
     ops = operators
     masks = (
@@ -621,9 +641,11 @@ def expand_text(
         if ops is not None or syntax is not None
         else None
     )
+    toks = tokenize(text, ops, masks)
+    if hideset:
+        toks = [replace(t, hide=t.hide | hideset) for t in toks]
     return join(
         _expand_one(
-            tokenize(text, ops, masks), macro_defs, func_macros, call_args, budget,
-            prefix, ops, syntax,
+            toks, macro_defs, func_macros, call_args, budget, prefix, ops, syntax,
         )
     )

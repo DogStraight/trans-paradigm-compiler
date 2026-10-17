@@ -66,7 +66,7 @@ def test_variadic_join_uses_declared_separator() -> None:
     out = expand_text(
         "G(1;2)",
         {"G": "g(__VA_ARGS__)"},
-        {"G": []},
+        {"G": ["..."]},
         call_args,
         operators=_OPS,
     )
@@ -91,19 +91,19 @@ def test_paste_of_identifiers_forms_new_identifier() -> None:
 
 def test_variadic_keeps_comma_when_empty() -> None:
     """`F(1)`（`f(a, __VA_ARGS__)`）→ `f(1, )`：**留逗号**（标准行为）。"""
-    out = _expand("F(1)", {"F": "f(a, __VA_ARGS__)"}, {"F": ["a"]})
+    out = _expand("F(1)", {"F": "f(a, __VA_ARGS__)"}, {"F": ["a", "..."]})
     assert out == "f(1, )"
 
 
 def test_variadic_multiple_args() -> None:
     """`F(1,2,3)` → `f(1, 2,3)`（具名实参 + 变参原样拼接）。"""
-    out = _expand("F(1,2,3)", {"F": "f(a, __VA_ARGS__)"}, {"F": ["a"]})
+    out = _expand("F(1,2,3)", {"F": "f(a, __VA_ARGS__)"}, {"F": ["a", "..."]})
     assert out == "f(1, 2,3)"
 
 
 def test_variadic_only_macro_empty_call() -> None:
     """`G()`（`g(__VA_ARGS__)`）→ `g()`；`G(1)` → `g(1)`。"""
     defs = {"G": "g(__VA_ARGS__)"}
-    funcs = {"G": []}
+    funcs = {"G": ["..."]}
     assert _expand("G()", defs, funcs) == "g()"
     assert _expand("G(1)", defs, funcs) == "g(1)"

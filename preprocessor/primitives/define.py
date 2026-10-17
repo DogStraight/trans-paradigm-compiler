@@ -52,12 +52,9 @@ def handle_define(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
                 f"`{call_args.close}`）：{arg.strip()!r}"
             )
         params_text, body_idx = matched
-        # 变参记号不进形参表：展开侧按"超出具名形参的实参"绑定变参
-        params = [
-            p
-            for p in call_args.split(params_text)
-            if p and p.strip() != _VARIADIC_MARK
-        ]
+        # 变参记号**保留在形参记录里**（`...`）：展开侧据此区分"真变参宏"与
+        # "非变参宏里误用 `__VA_ARGS__`"（后者报错，不靠"超出具名实参即变参"猜）。
+        params = [p for p in call_args.split(params_text) if p]
         ctx["macro_defs"][def_name] = rest[body_idx:].strip()
         ctx.setdefault("_func_params", {})[def_name] = params
     else:

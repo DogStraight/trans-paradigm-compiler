@@ -306,8 +306,6 @@ def scan_directives(
                           回源时与 `expand_tokens` 的展开级映射复合使用。
     """
     prefix, directives_set = _load_config(rules_dir)
-    call_prefix = _load_call_prefix(rules_dir)
-    syntax = load_comment_syntax(rules_dir)
     ctx = _build_scan_ctx(
         rules_dir, source_path, search_dirs, predefined, undefine, _include_stack
     )
@@ -319,15 +317,9 @@ def scan_directives(
     _scan_lines(source.split("\n"), ctx, prefix, directives_set, rules_dir)
 
     result = _collect_scan_result(ctx, join_map)
-    if result[0]:  # 有宏定义才预展开（供 reverser）
-        _expand_macro_bodies(
-            result[0],
-            result[1],
-            ctx.get("_call_args"),
-            call_prefix,
-            load_macro_operators(rules_dir=rules_dir),
-            syntax,
-        )
+    # 宏体**不再预展开**（③）：`macro_defs` 保持原始体，替换文本由调用点用
+    # `macro_expand.expand_text(..., hideset={name})` 现算 ⇒ 消除"扫描期预展开 +
+    # 调用点正则插入"的双算法路径（P0-8/P0-10/P2-1 同一根因）。
     return result
 
 
@@ -500,41 +492,6 @@ def _invoke_directive(
     handler = get_primitive(op)
     if handler:
         handler(stripped, prefix, name, ctx)
-
-
-def _expand_macro_bodies(
-    macro_defs: dict[str, str],
-    func_macros: dict[str, list[str]],
-    call_args,
-    call_prefix: str | None,
-    operators=None,
-    syntax=None,
-) -> None:
-    """原地全展开宏体（供 reverser）：hideset 重扫描。
-
-    自引用/互递归抑制由 **hideset** 保证（`macro_expand`），不再用"直接自引用预判 +
-    体积截断"近似；`[expand] max_iterations` 只作**资源上限守卫**（同一算法上的预算）。
-    带参宏的体含形参占位，调用时才替参，故跳过（与旧行为一致）。
-    `call_prefix` = **调用**形态前缀（`None` = 未声明调用形态 ⇒ 不展开；
-    `""` = 裸标识符调用；非空 = 前缀文本）。
-    `operators`/`syntax` = 语言包声明的宏算子与注释形态（掩码用）。
-    """
-    if call_prefix is None:
-        return
-    budget = int(_get_expand_config().get("max_iterations", macro_expand.DEFAULT_BUDGET))
-    for name in list(macro_defs):
-        if name in func_macros:
-            continue
-        macro_defs[name] = macro_expand.expand_text(
-            macro_defs[name],
-            macro_defs,
-            func_macros,
-            call_args,
-            prefix=call_prefix,
-            budget=budget,
-            operators=operators,
-            syntax=syntax,
-        )
 
 
 # ── 多路径诊断：条件块叶路径枚举 ──
@@ -728,6 +685,8 @@ class _MacroExpandCtx:
     bare_call: bool = False
     #: 宏算子（语言包声明；替参 `#`/`##`/变参语义用）
     operators: Any = None
+    #: **调用**形态前缀（三态：None 未声明 / "" 裸调用 / 非空前缀）——体展开用
+    call_prefix: str | None = ""
     restoration_stack: list[dict] = field(default_factory=list)
     regions_by_line: dict[int, list[dict]] = field(default_factory=dict)
     seq: int = 0
@@ -807,6 +766,7 @@ def expand_tokens(
         string_delimiters=operators.string_delimiters,
         escape=operators.escape,
         bare_call=prefix == "",
+        call_prefix=prefix,
         operators=operators,
         lines=source.split("\n"),
     )
@@ -898,8 +858,21 @@ def _match_one(
     body = ctx.macro_defs.get(name)
     if body is None:
         return None
+    # 对象宏：替换文本由 hideset 展开器**现算**（初始 hideset={name} 防自递归；
+    # 体里再出现的宏调用在此一并展开 ⇒ P0-8/P0-10/P2-1 同一根因消解）
+    expanded = macro_expand.expand_text(
+        body,
+        ctx.macro_defs,
+        ctx.func_macros,
+        ctx.call_args,
+        prefix=ctx.call_prefix if ctx.call_prefix is not None else "",
+        budget=int(_get_expand_config().get("max_iterations", 128)),
+        operators=ctx.operators,
+        syntax=ctx.syntax,
+        hideset=frozenset({name}),
+    )
     end = _extend_macro_chain(line, m.end(), ctx.macro_re, ctx.suffix_re)
-    return end, body, name, False, ""
+    return end, expanded, name, False, ""
 
 
 def _collect_macro_matches(ctx: "_MacroExpandCtx", line: str) -> list[tuple]:
