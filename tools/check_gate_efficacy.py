@@ -755,8 +755,12 @@ _MUTATIONS: list[dict[str, str]] = [
         # ── A2 ②：#include 真实实现的三个关键行为 ──
         "why": "渲染前剪枝若被跳过，include 内容会**内联**进格式化输出（保真破坏 + 不幂等）",
         "file": "pipeline/__init__.py",
-        "old": "    if not regions or ast is None:\n        return ast\n",
-        "new": "    if True:  # 变异：不剪枝（内联 include 内容）\n        return ast\n",
+        "old": "    if not regions or ast is None:\n"
+               "        return ast\n"
+               "    offsets = _token_offsets(ctx.source, tokens)\n",
+        "new": "    if True:  # 变异：不剪枝（内联 include 内容）\n"
+               "        return ast\n"
+               "    offsets = _token_offsets(ctx.source, tokens)\n",
         "test": "tests/engine/preprocessor/test_c_include_e2e.py",
     },
     {
