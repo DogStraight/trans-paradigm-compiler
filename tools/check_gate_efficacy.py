@@ -777,6 +777,15 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "    if False:  # 变异：不检深度\n",
         "test": "tests/engine/preprocessor/test_c_include_e2e.py",
     },
+    {
+        # ── A2 ④：宏定义形式语法检查（linter，AST 前） ──
+        "why": "形参表空项检查若失效（`#define F(a,) a`）⇒ 畸形形参表重新静默，"
+               "形式化语法错误不再由 linter 报出（用户面无诊断）",
+        "file": "linter/macro_syntax.py",
+        "old": "        if not text:\n",
+        "new": "        if False:  # 变异：不检空项\n",
+        "test": "tests/engine/linter/test_macro_syntax_checks.py",
+    },
 ]
 
 
