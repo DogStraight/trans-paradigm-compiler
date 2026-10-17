@@ -24,7 +24,7 @@ from dataclasses import dataclass, replace
 
 from core.token_protocol import IDENT_RE
 
-from .macro_shape import MacroCallArgs
+from .macro_shape import MacroCallArgs, MacroOperators
 
 #: 展开次数预算的默认值（与 `[expand] max_iterations` 同义，仅作资源上限）
 DEFAULT_BUDGET = 128
@@ -38,15 +38,28 @@ class _Tok:
     hide: frozenset[str] = frozenset()
 
 
-def tokenize(text: str) -> list[_Tok]:
-    """文本 → token 列表（标识符整段；非标识符逐字符——只为判 `NAME(` 边界）。
+def tokenize(text: str, operators: MacroOperators | None = None) -> list[_Tok]:
+    """文本 → token 列表（标识符整段；语言声明的宏算子整段；其余逐字符）。
 
     逐字符切分不改变"拼接回去等于原文"（`join` 是逆运算）；宏调用实参的括号配平
     只依赖单字符定界符（语言包当前声明的 `(`/`)`/`,` 均单字符）。
+    `operators` 声明的 `##` 等**多字符算子**必须先整体成 token，否则会被拆成两个
+    `#` 而失去粘贴语义（`##` 是标准算子，由语言包声明、引擎不硬编码）。
     """
     toks: list[_Tok] = []
     i = 0
+    op_texts = (
+        [op for op in (operators.paste, operators.stringize) if op]
+        if operators is not None
+        else []
+    )
+    op_texts.sort(key=len, reverse=True)  # 长串优先（`##` 不被 `#` 抢先切走）
     while i < len(text):
+        op = next((o for o in op_texts if text.startswith(o, i)), None)
+        if op is not None:
+            toks.append(_Tok(op))
+            i += len(op)
+            continue
         m = IDENT_RE.match(text, i)
         if m:
             toks.append(_Tok(m.group(0)))
@@ -117,6 +130,7 @@ def _expand_one(
     call_args: MacroCallArgs | None,
     budget: int,
     prefix: str,
+    operators: MacroOperators | None = None,
 ) -> list[_Tok]:
     """对 `toks` 做重扫描展开（原地循环；替换文本插回当前位置重扫）。
 
@@ -161,9 +175,10 @@ def _expand_one(
                 call_args,
                 budget - steps,
                 prefix,
+                operators,
             )
             hide = tok.hide | {name}
-            repl = [replace(t, hide=t.hide | hide) for t in tokenize(body)]
+            repl = [replace(t, hide=t.hide | hide) for t in tokenize(body, operators)]
             _drop_prefix_token(out, prefix)
             work = repl + work[after:]
             i = 0
@@ -173,7 +188,10 @@ def _expand_one(
             out.extend(work[i:])
             break
         hide = tok.hide | {name}
-        repl = [replace(t, hide=t.hide | hide) for t in tokenize(macro_defs[name])]
+        repl = [
+            replace(t, hide=t.hide | hide)
+            for t in tokenize(macro_defs[name], operators)
+        ]
         _drop_prefix_token(out, prefix)
         work = repl + work[i + 1 :]
         i = 0
@@ -195,25 +213,163 @@ def _substitute(
     call_args: MacroCallArgs | None,
     budget: int,
     prefix: str,
+    operators: MacroOperators | None = None,
 ) -> str:
-    """宏体替参（A1 子步：具名形参；实参**先展开**再替换）。
+    """宏体替参 + `#`（字符串化）/ `##`（粘贴）/ `__VA_ARGS__`。
 
-    `#`/`##`/`__VA_ARGS__` 在下一子步补：那时本函数需要给"紧邻 `#`/`##` 的形参"
-    走**不展开**路径（标准语义），因此这里先保持"实参全展开"的简单形态。
+    标准语义要点（C99 §6.10.3.2–§6.10.3.4）：
+    - **`#` 形参**：取实参的**未展开拼写**再字符串化（`S(hi there)` → `"hi there"`）；
+    - **紧邻 `##` 的形参**：用**未展开拼写**粘贴（`CAT(EMPTY,x)` → `EMPTYx`，**不是**
+      先展开成 `x`——`##` 用未展开拼写是"宏算法是否合规"的试金石）；
+    - 其余形参：实参**先展开**再替换；
+    - **变参**（`operators.variadic` 声明时才启用）：替换为"超出具名形参的实参"
+      按 `,` 连接；为空 ⇒ 空串（标准行为：宏体里的逗号**保留**——`F(1)` → `f(1, )`；
+      GNU `, ## __VA_ARGS__` 的删逗号是扩展，本引擎不实现）。
+    `operators` 未声明对应算子 ⇒ 该语义**不启用**（普通替换）。
     """
-    body_toks = tokenize(body)
+    ops = operators or MacroOperators()
+    variadic_name = ops.variadic
+    toks = tokenize(body, ops)
+    variadic = args[len(params):]
     out: list[_Tok] = []
-    for t in body_toks:
+    i = 0
+    while i < len(toks):
+        t = toks[i]
+        # `#形参`：字符串化（未展开拼写）；仅当语言声明了字符串化算子
+        if (
+            ops.stringize is not None
+            and t.text == ops.stringize
+            and i + 1 < len(toks)
+            and _is_ident(toks[i + 1])
+            and toks[i + 1].text in params
+        ):
+            raw = _raw_spelling(toks[i + 1].text, params, args)
+            out.append(_Tok(_stringize(raw, operators), t.hide))
+            i += 2
+            continue
         if _is_ident(t) and t.text in params:
             idx = params.index(t.text)
             arg_toks = args[idx] if idx < len(args) else []
-            expanded = _expand_one(
-                arg_toks, macro_defs, func_macros, call_args, budget, prefix
-            )
-            out.extend(replace(a, hide=a.hide | t.hide) for a in expanded)
+            if _adjacent_paste(toks, i, ops.paste):
+                # 紧邻 `##`：未展开拼写（粘贴在 `_apply_paste` 统一做）
+                out.extend(replace(a, hide=a.hide | t.hide) for a in arg_toks)
+            else:
+                expanded = _expand_one(
+                    arg_toks, macro_defs, func_macros, call_args, budget, prefix, ops
+                )
+                out.extend(replace(a, hide=a.hide | t.hide) for a in expanded)
+            i += 1
+            continue
+        if variadic_name is not None and _is_ident(t) and t.text == variadic_name:
+            # 变参：超出具名形参的实参按**声明的实参分隔符**连接（未展开拼写）。
+            # `call_args` 为 None 时本分支不可达：函数宏展开入口
+            # （`_expand_one` 的 `name in func_macros` 分支）要求 `call_args` 非 None。
+            sep = call_args.separator if call_args is not None else ""
+            if variadic:
+                for k, arg_toks in enumerate(variadic):
+                    if k:
+                        out.append(_Tok(sep))
+                    out.extend(replace(a, hide=a.hide | t.hide) for a in arg_toks)
+            i += 1
             continue
         out.append(t)
-    return join(out)
+        i += 1
+    return join(_apply_paste(out, ops.paste))
+
+
+def _raw_spelling(param: str, params: list[str], args: list[list[_Tok]]) -> str:
+    """形参 → 实参的**未展开拼写**（`#` 字符串化与 `##` 粘贴共用）。"""
+    idx = params.index(param)
+    if idx >= len(args):
+        return ""
+    return join(args[idx])
+
+
+def _adjacent_paste(toks: list[_Tok], i: int, paste: str | None) -> bool:
+    """`i` 处的形参是否紧邻粘贴算子（左或右）——决定是否跳过实参展开。"""
+    if paste is None:
+        return False
+    left = i - 1 >= 0 and toks[i - 1].text == paste
+    right = i + 1 < len(toks) and toks[i + 1].text == paste
+    return left or right
+
+
+def _stringize(raw: str, operators: MacroOperators | None) -> str:
+    """实参拼写 → 字符串字面量（C99 §6.10.3.2p2）。
+
+    规则：**预处理 token 之间**的空白折叠为**一个空格**；token **内部**（字符串/
+    字符字面量内部的连续空白）**不得动**；首尾空白丢弃。故不能 `re.sub(r"\\s+")`
+    一把梭（会把 `S("a  b")` 的内部空白也压掉）——按 token 判：
+      · 语言声明了 `[string] delimiters`/`escape` ⇒ 定界段整体算一个 token；
+      · 标识符整段；其余字符逐字符（punctuation）；
+      · 只在**源里有空白间隔**的两个 token 之间补一个空格。
+    """
+    ops = operators or MacroOperators()
+    pieces: list[tuple[str, bool]] = []  # (token 文本, 之前是否有空白)
+    i = 0
+    had_space = False
+    delimiters = ops.string_delimiters
+    escape = ops.escape
+    while i < len(raw):
+        ch = raw[i]
+        if ch.isspace():
+            had_space = True
+            i += 1
+            continue
+        delim = next((d for d in delimiters if raw.startswith(d, i)), None)
+        if delim is not None:
+            j = i + len(delim)
+            while j < len(raw):
+                if escape and raw.startswith(escape, j):
+                    j += len(escape) + 1
+                    continue
+                if raw.startswith(delim, j):
+                    j += len(delim)
+                    break
+                j += 1
+            pieces.append((raw[i:j], had_space))
+            had_space = False
+            i = j
+            continue
+        m = IDENT_RE.match(raw, i)
+        if m:
+            pieces.append((m.group(0), had_space))
+            had_space = False
+            i = m.end()
+            continue
+        pieces.append((ch, had_space))
+        had_space = False
+        i += 1
+    joined = "".join(
+        ((" " if ws and k else "") + text) for k, (text, ws) in enumerate(pieces)
+    )
+    escaped = joined.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _apply_paste(toks: list[_Tok], paste: str | None) -> list[_Tok]:
+    """执行粘贴：`lhs <paste> rhs` → 一个 token（空操作数走占位符规则）。
+
+    `paste` 未声明（None）⇒ 不启用粘贴语义（算子 token 原样保留）。
+    结果按**新 token** 处理（文本拼接；标识符/数字形态的下游重扫描再判宏表）。
+    """
+    if paste is None:
+        return toks
+    out: list[_Tok] = []
+    i = 0
+    while i < len(toks):
+        t = toks[i]
+        if t.text == paste:
+            lhs = out.pop() if out else _Tok("")
+            rhs = toks[i + 1] if i + 1 < len(toks) else _Tok("")
+            pasted = f"{lhs.text}{rhs.text}"
+            hide = lhs.hide | rhs.hide
+            out.append(_Tok(pasted, hide) if pasted else _Tok(""))
+            i += 2
+            continue
+        out.append(t)
+        i += 1
+    return out
 
 
 def expand_text(
@@ -224,12 +380,17 @@ def expand_text(
     *,
     prefix: str = "",
     budget: int = DEFAULT_BUDGET,
+    operators: MacroOperators | None = None,
 ) -> str:
     """文本级展开入口（宏体/片段通用）：hideset 重扫描，超预算保留原文。
 
     `prefix` 缺省 `""` = 裸标识符调用；verilog 等前缀语言传声明的前缀文本
     （只有"前缀 + 名字"才是调用，裸出现同名标识符不展开）。
+    `operators` 未声明 ⇒ `#`/`##`/变参语义不启用（纯替换）。
     """
     return join(
-        _expand_one(tokenize(text), macro_defs, func_macros, call_args, budget, prefix)
+        _expand_one(
+            tokenize(text, operators), macro_defs, func_macros, call_args, budget,
+            prefix, operators,
+        )
     )

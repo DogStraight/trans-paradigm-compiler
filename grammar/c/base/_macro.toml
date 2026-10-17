@@ -30,6 +30,12 @@ directive = [
 call_args = "bracket.l_parentheses,args,bracket.r_parentheses"
 arg_separator = "symbol.base.comma"
 
+# 宏算子（C99 §6.10.3.2–§6.10.3.4）：字符串化 / 令牌粘贴 / 变参占位。
+# 引擎按声明启用对应语义；**未声明的语言包不启用**（verilog 无这些算子，零影响）。
+stringize_operator = "#"
+paste_operator = "##"
+variadic_name = "__VA_ARGS__"
+
 # ── [expand] 展开器参数 ──
 [expand]
 # rescan/自引用抑制由展开算法保证（hideset）；本值只是**资源上限守卫**

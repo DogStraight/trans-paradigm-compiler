@@ -68,6 +68,73 @@ CALL_SUFFIX_KEY = "suffix_after_call"
 # （显式前缀）。
 CALL_SHAPE_KEY = "call_shape"
 
+# ── 宏**算子**声明（语言知识 → 语言包）──
+# `#`（字符串化）/`##`（粘贴）/`__VA_ARGS__`（变参）在 C 是标准算子，但**不是**引擎
+# 通用语法（verilog 无这些算子）⇒ 由语言包在 `[macro_recognition]` 声明；未声明
+# ⇒ 该算子**不启用**（引擎只做普通替换），对其他语言包零影响。
+STRINGIZE_KEY = "stringize_operator"
+PASTE_KEY = "paste_operator"
+VARIADIC_KEY = "variadic_name"
+
+
+@dataclass(frozen=True)
+class MacroOperators:
+    """宏算子声明（未声明的项为 None ⇒ 不启用该语义）。
+
+    `string_delimiters` / `escape` 来自语言包 token 表的 `[string]` 声明（**同一来源**，
+    不重复声明）：`#` 字符串化时按它们识别字符串/字符字面量，使内部空白不被折叠
+    （C99 §6.10.3.2p2 只折叠**预处理 token 之间**的空白）。
+    """
+
+    stringize: str | None = None
+    paste: str | None = None
+    variadic: str | None = None
+    string_delimiters: tuple[str, ...] = ()
+    escape: str | None = None
+
+
+def load_macro_operators(
+    cfg: dict | None = None, rules_dir: str | None = None
+) -> MacroOperators:
+    """读取宏算子声明（缺省 → 全 None；非法类型 → fail-fast）。
+
+    字符串/字符字面量形态从 token 表的 `[string]` 段取（与 lexer 捕获器同源）。
+    """
+    if cfg is None:
+        cfg = _resolve_macro_cfg(rules_dir) if rules_dir else _macro_cfg
+    recognition = _recognition(cfg)
+    stringize = _operator_text(recognition, STRINGIZE_KEY)
+    paste = _operator_text(recognition, PASTE_KEY)
+    variadic = _operator_text(recognition, VARIADIC_KEY)
+    delimiters: tuple[str, ...] = ()
+    escape: str | None = None
+    if rules_dir:
+        section = _token_define_of(rules_dir).get("string", {}) or {}
+        raw_delims = section.get("delimiters", []) or []
+        if isinstance(raw_delims, list):
+            delimiters = tuple(str(d) for d in raw_delims if str(d))
+        raw_escape = section.get("escape")
+        if isinstance(raw_escape, str) and raw_escape:
+            escape = raw_escape
+    return MacroOperators(
+        stringize=stringize,
+        paste=paste,
+        variadic=variadic,
+        string_delimiters=delimiters,
+        escape=escape,
+    )
+
+
+def _operator_text(recognition: dict, key: str) -> str | None:
+    raw = recognition.get(key)
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw:
+        raise ConfigError(
+            f"[macro_recognition] {key} 须是非空字符串（得到 {raw!r}）"
+        )
+    return raw
+
 
 @dataclass(frozen=True)
 class _MacroShape:

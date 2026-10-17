@@ -34,6 +34,7 @@ from .macro_shape import (
     MacroCallArgs,
     load_macro_call_args,
     load_macro_call_suffix,
+    load_macro_operators,
     load_macro_shapes,
     macro_keywords,
 )
@@ -290,7 +291,13 @@ def scan_directives(
 
     result = _collect_scan_result(ctx, join_map)
     if result[0]:  # 有宏定义才预展开（供 reverser）
-        _expand_macro_bodies(result[0], result[1], ctx.get("_call_args"), prefix)
+        _expand_macro_bodies(
+            result[0],
+            result[1],
+            ctx.get("_call_args"),
+            prefix,
+            load_macro_operators(rules_dir=rules_dir),
+        )
     return result
 
 
@@ -470,13 +477,15 @@ def _expand_macro_bodies(
     func_macros: dict[str, list[str]],
     call_args,
     prefix: str,
+    operators=None,
 ) -> None:
     """原地全展开宏体（供 reverser）：hideset 重扫描。
 
     自引用/互递归抑制由 **hideset** 保证（`macro_expand`），不再用"直接自引用预判 +
     体积截断"近似；`[expand] max_iterations` 只作**资源上限守卫**（同一算法上的预算）。
     带参宏的体含形参占位，调用时才替参，故跳过（与旧行为一致）。
-    `prefix` = 声明的调用前缀（verilog 的 `` ` ``；只有"前缀 + 名字"才算调用）。
+    `prefix` = 声明的调用前缀（verilog 的 `` ` ``；只有"前缀 + 名字"才算调用）；
+    `operators` = 语言包声明的宏算子（`#`/`##`/变参；未声明 ⇒ 不启用）。
     """
     budget = int(_get_expand_config().get("max_iterations", macro_expand.DEFAULT_BUDGET))
     for name in list(macro_defs):
@@ -489,6 +498,7 @@ def _expand_macro_bodies(
             call_args,
             prefix=prefix,
             budget=budget,
+            operators=operators,
         )
 
 
