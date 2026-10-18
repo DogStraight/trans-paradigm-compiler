@@ -13,9 +13,11 @@
 语言无关：标识符形态取 `core.token_protocol.IDENT_RE`，实参括号/分隔符取语言包声明
 的 `MacroCallArgs`（`[macro_recognition]` 的 `call_args` / `arg_separator`）。
 
-范围（首片 A1 子步）：对象宏 + 函数宏（具名形参）+ 重扫描/自引用抑制。
-`#`（字符串化）/`##`（粘贴）/`__VA_ARGS__` 是下一子步（本模块先把调用/替参骨架
-立起来，届时在 `_substitute` 内补三处语义）。
+覆盖：对象宏 + 函数宏（具名/变参形参）+ hideset 重扫描 + `#`（字符串化）/
+`##`（粘贴）/ `__VA_ARGS__`；外加**实参空判**（`arg_tokens_blank`：注释在翻译阶段
+已换成空白，供调用点事实的"单槽是否空"用，见 `preprocessor/README.md`）。
+
+Doc: preprocessor/README.md
 """
 
 from __future__ import annotations

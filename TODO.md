@@ -76,14 +76,15 @@
 
 ## 四、预算与登记（代码结构债 / 功能散点）
 
-- [ ] **结构欠账 S 有 50 项新增未下结论**：`python tools/structural_score.py --compare` 实测 **基线 0 →
-      当前 1137**（新增 50 项，exit 1）——新代码（`linter/lookahead.py` 类体、`preprocessor/macro_expand.py`、
-      `tools/feature_sites.py` 等）未按 R6 逐项判保持。判据：每项"重构删掉"或记入
-      `tools/structural_kept.json`（**reason + source**），`--compare` 回 0。链：`policy/structural_budget.md`
+- [ ] **结构欠账 S 有 71 项新增未下结论**：`python tools/structural_score.py --compare` 实测 **基线 0 →
+      当前 1341（Δ +1341，新增 71 项，exit 1）**——新代码（`linter/lookahead.py` 类体、`preprocessor/macro_expand.py`、
+      `tools/feature_sites.py`、循环 #21 的 `preprocessor/macro_timeline.py` / `map_invocations_to_source` 等）未按 R6
+      逐项判保持。判据：每项"重构删掉"或记入 `tools/structural_kept.json`（**reason + source**），`--compare` 回 0。
+      链：`policy/structural_budget.md`
 - [ ] **功能散点步 2b**：剩余 16 个未收敛登记点（有意保留的边界，非欠账——收敛一个删一个；清单与判据见
-      `docs/gaps/gap-feature-scatter.md`「步 2 收敛目标与接受边界」），**另有 3 处新增散点未登记**：
-      `python tools/feature_sites.py compare` 实测 `check` 8→12、`config` 29→30、`config:lexer.pre_scan` 2→3
-      ⇒ 合并登记点或写保持理由。
+      `docs/gaps/gap-feature-scatter.md`「步 2 收敛目标与接受边界」），**另有新增散点未登记**：
+      `python tools/feature_sites.py compare` 实测 **`check` 8→13**（其中 `check:MAC001` 为循环 #21 新增实例）、
+      **`config` 29→30**、**`config:lexer.pre_scan` 2→3** ⇒ 合并登记点或写保持理由。
 
 ## 五、策略层（不进本档）
 
