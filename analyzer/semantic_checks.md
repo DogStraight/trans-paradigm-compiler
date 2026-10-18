@@ -117,6 +117,7 @@ primitives = ["collect_width_src"]     # 遍历期收集（节点锚定，L2 原
 [[analyzer.postpasses]]                # 遍历后走查（已实现）
 run = "_chain_walk.py:run"
 produces = ["width_src"]               # 可选：本环节产出名（供后续环节 requires）
+ast_optional = true                    # 可选：解析失败文件也执行（事实型检查，见 5.4）
 ```
 
 ```python
@@ -130,8 +131,8 @@ def run(analyzer, context) -> None:
 - 实现位置：`analyzer/traversal.py::AnalysisTraversal._run_postpasses`——
   `analyze()` 的 `_walk()` 之后、`_resolve_pending()` 之后执行。
 - 声明解析：`core/plugin_loader.py::_load_postpasses`（表形态 `run =
-  "file.py:fn"` + 可选 `produces`/`requires`，fail-fast：非表/未知键/模块或函数
-  缺失直接报错）+ `get_analyzer_postpass_decls()` 合并（保持声明序）。
+  "file.py:fn"` + 可选 `produces`/`requires`/`ast_optional`，fail-fast：非表/未知键/
+  模块或函数缺失直接报错）+ `get_analyzer_postpass_decls()` 合并（保持声明序）。
 - **链内契约**：`requires` 须由链上更早环节的 `produces`、`scope` 或链开始时
   `context.extra` 已有的键提供，否则 fail-fast——顺序不再靠组件名排序碰巧成立。
   与 transform 单元契约的区别：postpass 产物写在符号表/context 上，引擎不懂其
@@ -193,6 +194,33 @@ resolved_ports），语言语义全在组件。
 
 **删中间层/兜底的安全前提**：postpass 对健康输入全覆盖，且**无条件写键**
 （空展开也写 `[]`）——否则下游被迫留 raw/旧数据回退，双实现漂移回归。
+
+### 5.4 事实型 postpass（`ast_optional`）：解析失败也要跑
+
+宏调用点在**展开期**就被替换掉、AST 里不存在；而实参个数错常使展开结果语法非法
+（`#define F(a,b) a+b` + `F(1)` → `1+`）⇒ 解析失败 ⇒ 常规语义阶段整文件跳过，最该
+报的那批文件反而漏掉。故 postpass 可声明 **`ast_optional = true`**：它**不依赖 AST**，
+输入是引擎注入的展开期事实。`ProjectChecker._analyze` 在 `fr.ast is None` 时改走
+`AnalysisTraversal.analyze_file_facts()`——只跑这些 postpass（不做符号遍历、不跑
+kind 分发的 L1 规则；`requires` 不得含 `scope`，加载期 fail-fast）。未声明该键的语言包
+（verilog 全部 postpass）行为不变：语法有错 → 语义阶段仍跳过。
+
+引擎当前注入的**语言无关事实**（`context.extra`，键见 `core/_protocol.py`）：
+
+| 键 | 形状 | 来源 / 消费先例 |
+|---|---|---|
+| `module_index` / `inst_sites` | 跨文件模块表 / 本文件实例化点 | ProjectChecker（ADR-0005） |
+| `analyzed_file`（`CTX_ANALYZED_FILE`） | 当前文件路径 | 插件按文件取精化产物切片 |
+| `macro_invocations`（`CTX_MACRO_INVOCATIONS`） | `[{name, slots, single_empty, params, line, column}]`（**原始源**坐标；`params` 已按定义时间线取**调用点时点**值） | `map_invocations_to_source`（`expand_tokens` 的 `out_invocations` + `macro_timeline`）；C 包 `checks/macro_args/`（MAC001 实参个数）先例 |
+
+判定仍归语言包：引擎只给"谁在哪儿被调用、给了几槽实参"，"个数合不合规"由 check 族
+的规则数据 + handler 判（C 包条款与 gcc 对拍见 `grammar/c/plugins/checks/macro_args/rules/macro_args.toml`）。
+
+**`ast_optional` 是信任契约**（无运行期强制）：声明方保证只读展开期事实、不碰
+`analyzer._ast`/符号表；引擎只校验"与 `requires=["scope"]` 互斥"。新增这类检查时，
+判据须覆盖"解析失败文件上仍能跑完"（先例 `test_postpass_ast_optional.py`）。
+parse 失败文件的**语义**诊断仍可被 `tpc-check: disable-line` 类注释豁免（`main.py`
+的豁免门只跳过语法诊断，语义面照常过豁免表）。
 
 ## 6. 符号宽度表示（width 检查基础）
 

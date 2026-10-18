@@ -70,6 +70,7 @@ from preprocessor import (
     scan_directives,
     expand_tokens,
 )
+from preprocessor._expand import map_invocations_to_source
 from preprocessor._markers import line_form_re
 from lexer.comment_syntax import load_comment_syntax
 
@@ -126,6 +127,14 @@ class _PipelineContext:
     # clean 行→原始源行映射（由 `_stage_macro_scan` 的 scan_directives 填充；
     # 与 line_map 复合得到 展开行→原始源行，供 lint 日志回源）。
     clean_line_map: list = field(default_factory=list)
+    # 函数宏**调用点事实**（`expand_tokens` 的 out_invocations）：{name, slots,
+    # single_empty, params, line, column}，line 已回源到**原始源行**（1-based）、
+    # column 为 0-based 宏名起列、`params` 已按宏定义时间线取调用点时点值。供
+    # analyze pass 注入插件（`CTX_MACRO_INVOCATIONS`）；语义判定归语言包 check 族。
+    macro_invocations: list[dict] = field(default_factory=list)
+    # 宏定义/取消事件（`scan_directives` 的 out_macro_events；原始源行号 + 形参表）：
+    # 调用点事实的顺序语义修正来源（见 `preprocessor/macro_timeline.py`）。
+    macro_events: list[dict] = field(default_factory=list)
 
     # 输出目录（由 _resolve_output_paths 填充；基础目录由调用方显式给出）
     out_dir: str | None = None
@@ -464,6 +473,7 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
         predefined=ctx.predefined,
         undefine=ctx.undefine,
         out_diags=include_diags,
+        out_macro_events=ctx.macro_events,
     )
     if include_diags:
         # 预处理硬问题（include 缺文件/循环/深度 + 条件表达式/配对错误）：结构化暴露；
@@ -509,6 +519,9 @@ def _stage_expand(ctx: _PipelineContext) -> None:
     # lint 输入 = **展开态**：linter 是反向解析器，要验的是
     # "宏体铺进去之后语法是否成立"；锚形态只有表达式位可匹配，结构位（类型/关键
     # 字位）无产生式可对（实测 `input `NT d` 在锚形态下 1 条误报、展开态通过）。
+    # 调用点事实挂在**第一次**展开上（两处展开的输入同为 clean 源、调用点相同；
+    # 只记一次——parse_raw 模式下第二次展开不展开宏，挂在第二次会丢事实）。
+    recorded = False
     if ctx.macro_table and not ctx.lint_source:
         (
             ctx.lint_source,
@@ -520,7 +533,9 @@ def _stage_expand(ctx: _PipelineContext) -> None:
             ctx.macro_table,
             rules_dir=ctx.rules_dir,
             func_macros=ctx.func_macros,
+            out_invocations=ctx.macro_invocations,
         )
+        recorded = True
     if ctx.parse_raw:
         # raw 解析模式：不做替身替换——ctx.source 保持扫指令后的
         # 原文（宏调用可见），解析器见 `macro.call` 走通配/占位。
@@ -537,6 +552,13 @@ def _stage_expand(ctx: _PipelineContext) -> None:
         func_macros=ctx.func_macros,
         include_line_flags=[m is None for m in ctx.clean_line_map],
         out_include_regions=ctx.include_regions,
+        out_invocations=None if recorded else ctx.macro_invocations,
+    )
+    map_invocations_to_source(
+        ctx.macro_invocations,
+        ctx.clean_line_map,
+        ctx.raw_source,
+        ctx.macro_events,
     )
     if not ctx.parse_raw:
         ctx.log("[preprocessor] macros expanded")

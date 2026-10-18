@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Any
 
 from core.errors import ConfigError
 from core.token_protocol import IDENT_RE
@@ -205,6 +206,42 @@ def _trim_args(args: list[list[_Tok]]) -> list[list[_Tok]]:
             b -= 1
         trimmed.append(arg[a:b])
     return trimmed
+
+
+def arg_tokens_blank(arg: list[_Tok], syntax: Any = None) -> bool:
+    """单个实参的 token 列表是否**不含任何预处理 token**（只含空白/注释）。
+
+    C99+TC §6.10.3p18「The sequence of preprocessing tokens bounded by the
+    outside-most matching parentheses forms the list of arguments」：注释在
+    翻译阶段 3 已换成空白、不是预处理 token ⇒ `#define Z() 1` + `Z(/*c*/)`
+    与 `Z()` 等价（GCC 16.1 实测接受）。故判"空实参"必须把注释算空。
+
+    注释形态来自语言包 `[comment]` 声明（`CommentSyntax`），引擎不写死
+    `//`/`/* */`。`syntax=None` ⇒ 只按空白判（调用方无语境）。
+    """
+    for tok in arg:
+        if not tok.text.strip():
+            continue
+        if tok.masked and _is_comment_text(tok.text, syntax):
+            continue
+        return False
+    return True
+
+
+def _is_comment_text(text: str, syntax: Any) -> bool:
+    """掩码文本是否整段是一条注释（行注释起始标记 / 成对块注释整体）。"""
+    if syntax is None:
+        return False
+    line_starts = tuple(getattr(syntax, "line_starts", ()) or ())
+    if any(text.startswith(mark) for mark in line_starts):
+        return True
+    raw_pairs: Any = getattr(syntax, "block_pairs", ())
+    if not raw_pairs:
+        return False
+    for open_mark, close_mark in raw_pairs:
+        if text.startswith(open_mark) and text.endswith(close_mark):
+            return True
+    return False
 
 
 def _tokenize_masked(

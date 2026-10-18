@@ -130,3 +130,46 @@ def test_line_map_table_contract(checker, tmp_path):
     fr = checker._ctx.memo[str(src)]
     assert fr.line_map[5] == 9  # wire z_unused：展开行 5 → 原始行 9
     assert fr.line_map[1] == 2  # 块前段照常 1:1（module 行）
+
+
+# ── 合成节点：位置已是原始坐标 ⇒ 不再经行表回源 ─────────────
+
+
+class _SyntheticNode:
+    """替身节点（如宏调用点）：只带位置，`_pos_original` = 已在原始坐标系。"""
+
+    node_name = "MacroInvocation"
+
+    def __init__(self, line: int, col: int, *, original: bool) -> None:
+        self._pos_line = line
+        self._pos_col = col
+        if original:
+            self._pos_original = True
+
+
+def _semantic_serialized(node, line_map: list) -> dict:
+    from analyzer.diag_serialize import semantic_diag
+    from analyzer.diagnostic import Diagnostic
+    from analyzer.structure import FileResult
+
+    fr = FileResult(path="x.c", source="")
+    fr.line_map = line_map
+    d = Diagnostic(
+        message="宏实参个数不符", code="MAC001", level="warning", node=node
+    )
+    return semantic_diag(fr, d)
+
+
+def test_synthetic_original_position_skips_line_map() -> None:
+    """`_pos_original` ⇒ 位置不再经"展开坐标→原始源"映射（否则会二次错位）。"""
+    node = _SyntheticNode(5, 3, original=True)
+    out = _semantic_serialized(node, [1, 2, 3, 4, 1])
+    assert out["range"]["start"] == {"line": 4, "character": 3}
+    assert "macro" not in out  # 原始坐标不做展开行宏归因
+
+
+def test_synthetic_normal_position_keeps_mapping() -> None:
+    """对照组：无 `_pos_original` 的节点仍走行表回源（既有语义不变）。"""
+    node = _SyntheticNode(5, 3, original=False)
+    out = _semantic_serialized(node, [1, 2, 3, 4, 1])
+    assert out["range"]["start"] == {"line": 0, "character": 3}  # line_map[4]=1 → 0

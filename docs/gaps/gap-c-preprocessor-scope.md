@@ -1,8 +1,8 @@
 # Gap — C 预处理器范围基线（宏与预处理指令集；`ROADMAP.md` 阶段 4）
 
 - 状态：**A1 收口**（`partial`：3 条已声明边界，见 ⑰）；**A2 大部分交付**：默认口径（⑬）、`#include`（⑱）、
-  CLI 两路径（⑲）、宏形式语法诊断（⑳）、**`#if` 族**（㉑）；剩 宏语义检查族 / check 接语法诊断 / token 重扫 /
-  include 顺序（`TODO.md` 一）。范围基线 = 作者 2026-10-17 裁定（只做 **C 标准宏**、文本级；卫生宏=语法结构、
+  CLI 两路径（⑲）、宏形式语法诊断（⑳）、**`#if` 族**（㉑）、**宏实参个数检查**（㉒）；剩 check 接语法诊断 /
+  token 重扫 / include 顺序（`TODO.md` 一）。范围基线 = 作者 2026-10-17 裁定（只做 **C 标准宏**、文本级；卫生宏=语法结构、
   过程宏=能力位，均不在此范围）。
 - 关联：`ROADMAP.md`「C 语言包」阶段 4；`preprocessor/README.md`（跨语言文本能力原型）
 - 接受面证据：`tools/c_acceptance.py`（当前 **42 条 / 接受 42 / 空洞 0**）——**口径注**：两条预处理
@@ -133,13 +133,13 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 **首片实施期裁定**（2026-10-17，承 task-49 中途汇报）：
 ⑪ **E.0 口径修正 = (a)+(c)**：`tools/c_acceptance.py::_try`（`:123-136`）**不走预处理**（直接 `parser.parse(lexer.tokenize(src))`）且要求 AST 非空 ⇒ 对预处理样本判定**失真**——`#define N 4` 的**正确**预处理结果本就是**空翻译单元** ⇒ 该样本**永远是"空 AST 空洞"**，原判据（"只剩 `#include`"）**不可达**。修正：**(a)** 改 `_try` 走"预处理→词法→解析"（与管线同路、开宏扫描）+ **对预处理样本接受条件放宽为"无异常"**（纯指令样本 AST 可空）；**非预处理样本仍须 AST 非空**（否则掩盖解析失败）；**(c)** 管线级测试补"指令被消费 + 无异常 + 输出保真"作双保险。**不采 (b)**（只改口径不修路径）。
 ⑫ **判据设计教训**：定"工具指标归零"类判据前**必须核实该工具的**真实执行路径**——本轮 Lead 未核实导致判据不可达（由实现方中途拦下）。
-⑬ **已实测确认（真不一致、用户可见）**：`run_pipeline_on_source` 的 `expand_macros` **默认 False**（`pipeline/__init__.py:1161` + `config/tpc_config.json:12`）而 `tpc check` 默认 True（`analyzer/checker.py:57`、`main.py:132`）。实测（同输入 `#define N 4\nint x = N;`、同 API 只差该 flag）：**False ⇒ `error="parse truncated (unconsumed tokens)"`；True ⇒ `error=""`** ⇒ **verdict 差异**（非风格）。CLI 侧同文件对照：`tpc lint` rc=1 报 `phase-unrecognized`（line 0 col 8-9）｜`tpc check` rc=1 报 `parse_ok: false` 且 **`parse_error` 为空串** ⇒ 两条用户可见路径**彼此诊断形态也不同**。**归属 = 管线配置口径（非 C 专有，verilog 同样受"库默认 False"影响）**；**裁定 = 修（统一为"开"）**，归 **A2 步**（与"C 端到端可用"绑定），**必须附 verilog 对拍 + 行为变化清单**。**A1 收口时追加实测（2026-10-17）**：`expand_macros=True` 时 C 宏**确实生效**（`[preprocessor] macros expanded`、`error=''`）⇒ 该 flag 是 A1 的**唯一可达开关**；默认 false 下 **CLI 对合法 `#define FOO 1` 都报语法错**（token 实测 `'#':symbol.base.pound` + `'define':id`，即预处理根本没跑）⇒ **A1 对用户不可达，直到 A2 统一默认口径**。**2026-10-17 A2 ① 已统一（实测）**：`pipeline/__init__.py` 兜底与 `config/tpc_config.json` 双双改 **True**（CLI 本已 True）⇒ 库/CLI 默认一致；合法 `#define FOO 1` 在库默认路径 `error=''` 且输出含展开值；config 指向 C 时 `tpc check` rc=0「No issues found」；verilog CLI A/B **0/144**、五套回归 **1976 passed**（详见 CHANGELOG 行为变化清单）。
+⑬ **已实测确认（真不一致、用户可见）**：`run_pipeline_on_source` 的 `expand_macros` **默认 False** 而 `tpc check` 默认 True。实测（`#define N 4\nint x = N;`、只差该 flag）：False ⇒ `parse truncated`；True ⇒ `error=""` ⇒ **verdict 差异**。CLI 对照：`tpc lint` rc=1 报 `phase-unrecognized`｜`tpc check` rc=1 报 `parse_ok:false` 且 `parse_error` 空 ⇒ 两路径诊断形态也不同。**归属 = 管线配置口径（非 C 专有）**；**裁定 = 修（统一"开"）**，与"C 端到端可用"绑定，须附 verilog 对拍 + 行为变化清单。**2026-10-17 A2 ① 已统一（实测）**：库兜底与用户配置双双 True ⇒ 库/CLI 一致；verilog CLI A/B **0/144**（详见 CHANGELOG）。
 ⑭ **拆步信号修正（因 ⑪ 放宽判据）**：`--only-gaps` 计数在放宽后**不可再用**作拆步信号——`#include <stdio.h>` 在 A1 阶段（`include` 未接线、只 `print` 警告）会因"被消费 ⇒ 空 TU ⇒ 接受"而**显示 0 空洞**，**掩盖"未实现"**。修正：**A1 信号 = 引擎核判据**（E.1 与 GCC 对拍的正样本 + E.4 的 5 条缺陷态变红）；**A2 信号 = `#include` 被真实处理**（`path_forms` 解析生效 + 缺文件**报诊断** + 内容确实被消费进流），**不是"空洞归零"**。
 ⑮ **文档漂移复核（2026-10-17 A2 期间已收口）**：task-50 的 5 处已全部更新（档首状态 → A1 收口；缺口表 ①② → 能；
 「`[symbol.base]` 无 `#`」根因 → 已消除；首片 A 判据 → 按 ⑭ 口径；gap-language-pack-scope 已知偏差 #5 → 现状）。
 
 ⑯ **A1 交付实录（循环 #15）——已被 ⑰ 更正，仅留历史指针**：首版判据（无空格算子 + 内部函数级变异）不成立
-（审计 15 反例；根因 = 双路径）；A1 最终见 ⑰。A2 诊断面：形式化部分已落 ⑳，语义部分（实参个数）留 check 插件族。
+（审计 15 反例；根因 = 双路径）；A1 最终见 ⑰。A2 诊断面：形式化部分已落 ⑳，语义部分（实参个数）落 ㉒。
 
 ⑰ **A1 返工收口（2026-10-17 同日，循环 #16）**：审计 15 反例 → **3 偏差**，全部为已声明边界。
 **已修**（均以端到端用例锁住）：`#`/`##` 两侧空格；调用点**token 级实参切分**（字面量/注释内逗号与括号
@@ -148,37 +148,40 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 跨行块注释**整段掩码**（P1-3：`mask_spans(source)` 一次算再落行）；`#__VA_ARGS__` **实参原文切片**
 （P1-1；见「诚实边界」末条）。
 **边界①（P0-8/P0-10）替换结果里再现的调用不重扫**：单趟展开下文本层插入后不再做 token 重扫。
-**案 (A)**（整行一次 token 展开 + 回调保位置映射）在**实现前**判定撞 verilog 后缀链——
-`_extend_macro_chain`/`suffix_after_call` 在**替换前**扩调用区间（ADR-0017），整行 token 展开要么把后缀
-语义搬进通用展开器、要么退回"正则算区间 + 展开器"混合（= 双路径变体）⇒ **裁定 (B)**：单趟保留、边界声明，
-token 级重扫**归 A2「两路径统一」**（那里行扫描本就要重做），以 **verilog A/B 0/144 + 后缀链**为独立检查点。
-**边界②（P0-9）实参跨行的调用不展开**：替换区间跨行 ⇒ 输出行数变化 ⇒ 触行映射/`out_to_src` **冻结契约
-面**，A1 不动。
-**证据**：边界守卫 = `tests/engine/preprocessor/test_c_macro_end_to_end.py`（18 条 = GREEN 10 + `#__VA_ARGS__`
-4 + 边界 3 + 跨行块注释 1；**守卫式断言当前输出、不用 xfail**）；门禁变异 **65→69**（4 条**端到端**，
-逐条 `--only` 变红）；审计 **3 偏差**；`preprocessor` **186**；受影响面 **1561**；A/B **0/144**；pyright **0**。
-**教训**：双路径不能靠"多写测试"防，只能靠**同一算法**收敛；审计反例必须先转成**生产同路**用例再谈修复；
-边界用**守卫断言**锁住（不用 xfail——xfail 会被当"待修"忽略）。
+**案 (A)**（整行一次 token 展开 + 回调保位置映射）在**实现前**判定撞 verilog 后缀链（`_extend_macro_chain`/
+`suffix_after_call` 在替换前扩调用区间，ADR-0017）⇒ **裁定 (B)**：单趟保留、边界声明，token 级重扫**归 A2
+「两路径统一」**，以 **verilog A/B 0/144 + 后缀链**为独立检查点。
+**边界②（P0-9）实参跨行的调用不展开**：替换区间跨行 ⇒ 输出行数变化 ⇒ 触行映射/`out_to_src` **冻结契约面**，A1 不动。
+**证据**：边界守卫 = `test_c_macro_end_to_end.py` 18 条（守卫式断言当前输出、不用 xfail）；门禁变异 **65→69**（4 条端到端，
+逐条 `--only` 变红）；审计 3 偏差；`preprocessor` 186；A/B **0/144**；pyright **0**。**教训**：双路径只能靠**同一算法**
+收敛；边界用**守卫断言**锁住（不用 xfail——xfail 会被当"待修"忽略）。
 
-⑱ **A2 ②③ 落档（循环 #17）**：`#include` 机制真实（内容本就在流里）——补齐**① 诊断策略声明面**
-（`on_missing`/`max_depth`；C=error/32、verilog 默认 warn ⇒ 打印原样、A/B 0/144）**② 渲染前剪枝**（分析面见
-内容 / 渲染面只出 `#include` 原行、不内联；无法整节点覆盖 ⇒ 整文件原文退化）**③ CLI 两路径**（`scan_diagnostics`
-+ `_preprocessor_gate` ⇒ lint/check 同类诊断、同 rc=1；gate 须在语言配置装载后跑）。
-**剩余**：include 顺序偏差（内容先于 marker，修则 A/B 0→2/144）。证据：`test_c_include_e2e.py` 10 条、
-`c_acceptance` 42/0、A/B 0/144；未统一：`tpc lint` 仍吃未展开源码、check 未接 linter 语法诊断（⑳）——gate 须在语言配置装载**之后**跑（check 侧放 `checker.check()` 之后）。
+⑱ **A2 ②③ 落档（循环 #17）**：`#include` 机制真实（内容本就在流里）——① 诊断策略声明面（`on_missing`/`max_depth`；C=error/32、verilog
+默认 warn ⇒ A/B 0/144）② 渲染前剪枝（分析面见内容 / 渲染面只出原行；无法整节点覆盖 ⇒ 整文件原文退化）③ CLI 两路径（`scan_diagnostics`
++ `_preprocessor_gate` ⇒ 同类诊断/同 rc=1）。**剩余**：include 顺序偏差（修则 A/B 0→2/144）、lint 吃未展开源码、check 未接 linter 语法诊断（⑳）。证据：`test_c_include_e2e.py` 10 条、`c_acceptance` 42/0。
 
-⑳ **A2 ④ 形式化宏语法检查落地 linter（2026-10-17；作者对齐：形式化语法走 linter、语义级走 check 插件族）**：
-新增 `linter/macro_syntax.py` —— 对**原始源码**检 `#define` 形式约束（宏名 / 形参表 / 宏体 `#`·`##`），每类
-给带位置 blocking 诊断；**语言包声明 `[macro_syntax]` 段才启用**（定义侧形式语法：变参占位等；
-C 声明、verilog 未声明 ⇒ 不跑、A/B 0/144；verilog 补齐 = 触发式，ADR-0021）。
-证据：`test_macro_syntax_checks.py` 21 条、linter 283、精度 33/33·fp 0、A/B 0/144。**剩余**：实参个数等**语义**检查 → check 插件族；`tpc check` 未接 linter 语法诊断（lint rc=1 / check rc=0）。
+⑳ **A2 ④ 形式化宏语法检查落地 linter（2026-10-17；作者对齐：形式化语法走 linter、语义级走 check 插件族）**：新增
+`linter/macro_syntax.py` —— 对**原始源码**检 `#define` 形式约束（宏名/形参表/宏体 `#`·`##`），每类带位置 blocking 诊断；
+**语言包声明 `[macro_syntax]` 段才启用**（C 声明、verilog 未声明 ⇒ 不跑、A/B 0/144；verilog 补齐 = 触发式，ADR-0021）。证据：`test_macro_syntax_checks.py` 21 条、linter 283、精度 33/33·fp 0、A/B 0/144。**剩余**：实参个数等语义检查（㉒已交付）、`tpc check` 未接 linter 语法诊断。
 
 ㉑ **首片 B 交付：`#if`/`#elif` 整型常量表达式（2026-10-17，循环 #20；裁定 ⑥ 的声明键形态在此定）**：`[condition]` 声明面
 （`grammar/c/base/_macro.toml`）= 算子「符号→引擎动作」+优先级/结合性、整型常量形态/后缀、字符常量转义与符号扩展、
 `defined` 拼写；引擎 `preprocessor/condition.py` 通用求值（intmax/uintmax 64 位、短路、跳过组不求值），`if`/`elif` 经
 `[directive_handlers]` 绑定 `cond_if`/`cond_elif`（per-dir 解析；verilog 不声明 ⇒ `#if` 不是指令、零变化）。证据：
 `test_c_conditionals.py` 96 条（gcc 16.1 对拍）、预处理器 294、A/B 0/144、变异 77→82。**边界**：C23 项（c23 的
-`true`/`false` 1/0、`u8` 字符常量、二进制常量、`#elifdef`）不实现；跳过组**词法**错误不诊断（gcc 会）；除零按硬错误停（gcc 取左操作数继续）。
+`true`/`false` 1/0、`u8` 字符常量、二进制常量、`#elifdef`）不实现；跳过组**词法**错误不诊断（gcc 会）；除零按硬错误停。
+
+㉒ **A2 ① 交付：宏实参个数检查（插件侧 check 族；2026-10-18，循环 #21）**：引擎 `expand_tokens` 记录函数宏调用点事实
+（`out_invocations`：name/slots/single_empty/params + clean 行坐标；`map_invocations_to_source` 回源 + **宏定义时间线**
+（`scan_directives(out_macro_events)`）把 params 修正为**调用点时点**值——展开器仍用最终宏表，后置定义/重定义/undef
+前后不误判；被包含内容/行拼接段内调用点丢弃）；`[[analyzer.postpasses]]` 新增同族键 **`ast_optional`**（解析失败文件
+也执行——实参不足展开成非法语法，正是该报的那批）＋ `CTX_MACRO_INVOCATIONS` 注入＋合成节点 `_pos_original`（原始坐标
+跳过行表回源；parse 失败文件的**语义**诊断可豁免）。C 包 `plugins/checks/macro_args/`：MAC001（A 档 N1124 §6.10.3
+段 1903/1904/1918；gcc 16.1 四档对拍），判定 = 非变参 `slots==形参数`（n=0 仅 `Z()`）、变参 `slots>=具名数` ⇒ 先前静默
+的多给 / 零参传参 / 变参缺具名现报；少给在 parse 失败文件上仍报（ast_optional）。证据：`test_macro_call_sites.py` 17、
+`test_macro_timeline.py` 13、`test_c_macro_args_checks.py` 19、`test_postpass_ast_optional.py` 5、变异 82→87。
+**边界**：变参恰好具名（C23 起接受）、宏体替换产生的嵌套调用、`#if` 表达式内调用、实参跨行、被包含文件内调用点
+（头文件定义按 include 行快照）、行拼接段内调用点、`#undef` 之前的调用点（展开器不展开 ⇒ 无事实）。
 
 ## 诚实边界（统一"待抽检"，不得当实测结论用）
 

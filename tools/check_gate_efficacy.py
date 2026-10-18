@@ -690,7 +690,9 @@ _MUTATIONS: list[dict[str, str]] = [
         "why": "跨行块注释的续行没有起始定界符，逐行重算掩码 ⇒ 续行内的宏名被误当"
                "调用展开（审计 P1-3，真实语料 edge_comments.c）",
         "file": "preprocessor/_expand.py",
-        "old": "        macro_matches = _collect_macro_matches(ctx, line, line_masks[line_no - 1])\n",
+        "old": "        macro_matches = _collect_macro_matches(\n"
+               "            ctx, line, line_masks[line_no - 1], line_no\n"
+               "        )\n",
         "new": "        macro_matches = _collect_macro_matches(ctx, line)  "
                "# 变异：退回逐行掩码\n",
         "test": "tests/engine/preprocessor/test_c_macro_end_to_end.py",
@@ -845,6 +847,58 @@ _MUTATIONS: list[dict[str, str]] = [
         "old": "    defs.update(ctx.get(\"macro_defs\") or {})\n    return defs\n",
         "new": "    return defs  # 变异：只用 -D/-U，漏并源码宏表\n",
         "test": "tests/engine/preprocessor/test_c_conditionals.py",
+    },
+    {
+        # ── A2 ①：宏实参个数检查（插件侧 check 族）──
+        "why": "展开期不记录函数宏调用点事实 ⇒ 实参个数检查失去输入（`tpc check` 对"
+               "少给/多给重新静默）",
+        "file": "preprocessor/_expand.py",
+        "old": "        if is_func and ctx.invocations is not None:\n"
+               "            ctx.invocations.append(\n",
+        "new": "        if False and ctx.invocations is not None:  # 变异：不记调用点事实\n"
+               "            ctx.invocations.append(\n",
+        "test": "tests/engine/preprocessor/test_macro_call_sites.py",
+    },
+    {
+        "why": "解析失败文件一律跳过语义阶段（不跑 `ast_optional` postpass）⇒ 实参不足"
+               "（展开成非法语法的那批文件）的 arity 诊断全部丢失",
+        "file": "analyzer/checker.py",
+        "old": "        if fr.ast is None and not _has_ast_optional_postpass():\n"
+               "            return\n",
+        "new": "        if fr.ast is None:  # 变异：解析失败一律跳过事实型 postpass\n"
+               "            return\n",
+        "test": "tests/languages/c/test_c_macro_args_checks.py",
+    },
+    {
+        "why": "零形参宏若不判（`Z()` 合法默认吞掉一切）⇒ `Z(2)` 这类传参给零形参宏的"
+               "硬错被漏报（GCC 全档报 'passed 1 arguments, but takes just 0'）",
+        "file": "grammar/c/plugins/checks/macro_args/rules/_macro_args_check.py",
+        "old": "    if n == 0:\n"
+               "        # 零形参宏的合法调用只有 `Z()`（空实参列表；注释算空）\n"
+               "        if slots == 1 and bool(inv.get(\"single_empty\")):\n"
+               "            return None\n"
+               "        return \"0\", slots\n",
+        "new": "    if n == 0:\n"
+               "        return None  # 变异：零形参宏不判\n",
+        "test": "tests/languages/c/test_c_macro_args_checks.py",
+    },
+    {
+        "why": "合成节点的位置（已是原始源坐标）若再经'展开坐标→原始源'行表回源 ⇒ 行号二次"
+               "错位（`#if` 块压缩后的宏调用诊断指到错行）",
+        "file": "analyzer/diag_serialize.py",
+        "old": "        if same_file and not original:\n"
+               "            line0 = map_diag_line(fr, line0)\n",
+        "new": "        if same_file:  # 变异：原始坐标也经行表回源\n"
+               "            line0 = map_diag_line(fr, line0)\n",
+        "test": "tests/engine/analyzer/test_diag_line_map.py",
+    },
+    {
+        "why": "调用点事实若不按**宏定义时间线**过滤（用展开器的最终宏表）⇒ 后置定义 / 重定义"
+               "前的合法调用点被误判成宏调用（`int F(int);` 之后才 `#define F(a,b)` 的合法 C 报 arity 错）",
+        "file": "preprocessor/_expand.py",
+        "old": "        if macro_events:\n",
+        "new": "        if False:  # 变异：不按定义时间线过滤\n",
+        "test": "tests/languages/c/test_c_macro_args_checks.py",
     },
 ]
 

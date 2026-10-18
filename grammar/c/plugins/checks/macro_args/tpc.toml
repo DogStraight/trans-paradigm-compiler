@@ -1,0 +1,26 @@
+# macro_args — C 函数宏**实参个数**语义检查（MAC001，本包第三个 L2 check 组件）
+#
+# 定位（作者对齐 2026-10-17）：宏的**形式化语法**走 linter（AST 前，`linter/macro_syntax.py`
+# 对原始源码查 `#define` 形态）；**语义级**（实参个数等，需宏表 + 调用点上下文）走
+# **插件侧 check 族**——即本组件。条款原文与 GCC 16.1 逐档对拍见 `rules/macro_args.toml`。
+#
+# 机制：`[[analyzer.postpasses]]` + **`ast_optional = true`**。后者是关键——
+# 实参不足时展开结果常是非法语法（`#define F(a,b) a+b` + `F(1)` → `1+`）⇒ 解析失败
+# ⇒ 常规语义阶段会整文件跳过。而本检查的输入是**展开期事实**（引擎
+# `CTX_MACRO_INVOCATIONS`：谁在哪儿被调用、给了几槽实参），不依赖 AST ⇒ 声明
+# `ast_optional` 后 `ProjectChecker` 在 `fr.ast is None` 时也执行它（见
+# `analyzer/traversal.py::analyze_file_facts`）。没有这个键的语言包行为不变。
+#
+# 规则数据在 `rules/macro_args.toml`（id/severity/default/message + 条款引文与档位）；
+# 判定逻辑在 `rules/_macro_args_check.py`（读激活规则 `analyzer.checks.active_rule_ids`，
+# 与 labels/storage_class 同一激活面——用户可在 `config/tpc_config.json` 的 checks 段
+# 关闭或提级）。
+#
+# 能力声明：`[analyzer]` 段 ⇒ `analyzer.primitives.v1`、`rules/*.toml` ⇒ `checks.rules.v1`，
+# 两者 `grammar/c/tpc.toml [engine] uses` 均已声明 ⇒ **本组件不需要新的 uses/enabled 条目**。
+
+[analyzer]
+[[analyzer.postpasses]]
+run = "rules/_macro_args_check.py:run_macro_arg_checks"
+produces = ["c_macro_args"]
+ast_optional = true

@@ -113,6 +113,22 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 派生（不另写标识符字符类）；`[expand] max_iterations` 只是**资源上限守卫**
 （同一算法上的预算，不是第二套算法）。
 
+**函数宏调用点事实（引擎给 check 族的输入）**：`expand_tokens(..., out_invocations=[...])`
+在函数宏调用被识别时追加一项 `{name, slots, single_empty, params, line, column}`
+（`slots` = 实参槽数：顶层逗号 + 1，`F()` 也是 1 槽；`single_empty` = 单槽时该槽
+不含预处理 token——空白/**注释**算空；`params` = 展开期宏表形参表快照）。行/列是
+**输入文本（clean 源）坐标**，回源由调用方用 **`_expand.map_invocations_to_source`**
+一次性完成：clean→原始源行 + 过滤（include 内容行 / 行拼接段首行 / 当时不是函数宏的
+点）+ **按 `macro_timeline` 覆写 `params` 为调用点时点值**。引擎只记事实、**不判
+"实参个数对不对"**——判定归语言包 check 族（C 包 `plugins/checks/macro_args/`；
+机制见 `analyzer/semantic_checks.md`「事实型 postpass」）。不产生事实的形态 = 函数宏名
+未跟 `(`（不是调用）、对象宏、`#if 0` 等被压缩分支内、实参跨行（见下边界）、
+被包含文件内的调用点、行拼接段内的调用点。
+**定义时间线**（`macro_timeline.py`）：`scan_directives(out_macro_events=...)` 输出
+`{line(原始源行), name, params: list|None}`（`None` = 非函数宏，含 `#undef`/对象宏）；
+`#include` 的定义按 **include 行处最终状态快照**并入宿主。展开器仍用**最终宏表**
+（历史近似），检查侧的顺序语义靠这条时间线修正（后置定义/重定义/undef 前后不误判）。
+
 **阶段 4 首片 A/B 的已知边界**：`#line`/`#error`/`#pragma`/`_Pragma` 与 C23 项
 （`#warning`/`#elifdef`/`#embed`/`__VA_OPT__`/`__has_include`）**未实现**（范围基线见
 `docs/gaps/gap-c-preprocessor-scope.md`）；`-E` 字节保真不承诺；`__DATE__`/`__TIME__`
@@ -147,8 +163,9 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 
 | 文件 | 一句话 |
 |------|--------|
-| `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 |
+| `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 + 函数宏**调用点事实**（`out_invocations`；行/列为 clean 源坐标） |
 | `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析：前缀 token 文本 + 名字候选 + 实参形态 + `call_shape`/算子；`[macro_syntax]` 定义侧形式语法，未声明 ⇒ 不启用） |
+| `macro_timeline.py` | 宏**定义/取消事件**时间线（调用点时点可见形参表；展开用最终宏表，检查侧顺序语义靠它修正） |
 | `macro_expand.py` | 宏展开核心（hideset 重扫描 + `#`/`##`/变参 + 掩码；`#` 字符串化的 token 间空白折叠） |
 | `condition.py` | 条件指令（`#if`/`#elif`）**整型常量表达式求值**（`[condition]` 声明驱动：算子/常量/字符/`defined`；未声明 ⇒ 不接线） |
 | `_reverse.py` | 宏反向（统一位置桥：锚 + 原文回插） |

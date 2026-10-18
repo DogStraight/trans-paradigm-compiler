@@ -104,7 +104,30 @@ class AnalysisTraversal:
         self._run_postpasses()
         return ast
 
-    def _run_postpasses(self) -> None:
+    def analyze_file_facts(self) -> None:
+        """**解析失败文件**的事实型分析：只跑声明 `ast_optional` 的 postpass。
+
+        `tpc check` 的语义阶段通常要求 parse 成功；但有些检查的输入是**展开期
+        事实**（如宏调用点 `CTX_MACRO_INVOCATIONS`），解析失败与否不影响判定
+        （实参个数错常使展开结果语法非法 ⇒ 正是解析失败的那批文件不能被漏掉）。
+        故语言包可给 postpass 声明 `ast_optional = true`：本方法在没有 AST 时
+        执行它们（不做符号遍历 / 不跑符号分发的声明式规则），诊断照常进
+        `context.diagnostics`。
+
+        约束：`ast_optional` postpass 不得声明 `requires = ["scope"]`（引擎在
+        加载期 fail-fast——没有遍历就没有 scope）。
+        """
+        self._ast = None
+        self._root_scope = None
+        self._current_scope = None
+        self._all_symbols.clear()
+        self._context = AnalysisContext()
+        if self._external_extra:
+            self._context.extra.update(self._external_extra)
+        self.postpass_trace.clear()
+        self._run_postpasses(ast_optional_only=True)
+
+    def _run_postpasses(self, *, ast_optional_only: bool = False) -> None:
         """遍历后统一执行插件的 post-pass 链（ADR-0004）+ 链内契约校验。
 
         节点锚定原语在遍历期收集，postpass 在遍历结束后走查跨节点/跨文件
@@ -122,13 +145,21 @@ class AnalysisTraversal:
         postpass 同形态，但规则行为全在语言包 TOML（core/check_registry），
         引擎只做通用执行（analyzer/checks.py）。
 
+        `ast_optional_only=True` = **无 AST 的事实型执行**（见
+        `analyze_file_facts`）：只跑声明 `ast_optional` 的 postpass；`available`
+        只来自 `context.extra`（无 `scope`）；不跑符号分发的声明式规则。
+
         执行记录（`postpass_trace`）供管线进单元轨迹：链也是**时点**，
         哪一环跑了、报了几条诊断应可见（同 ADR-0015 §2 姿态）。
         """
         from core.plugin_loader import get_analyzer_postpass_decls
 
         decls = get_analyzer_postpass_decls()
-        available = set(self._context.extra) | {"scope"}
+        if ast_optional_only:
+            decls = [d for d in decls if d.get("ast_optional")]
+        available = set(self._context.extra)
+        if not ast_optional_only:
+            available.add("scope")
         for decl in decls:
             missing = [r for r in decl["requires"] if r not in available]
             if missing:
@@ -147,6 +178,8 @@ class AnalysisTraversal:
                     "diagnostics": len(self._context.diagnostics) - before,
                 }
             )
+        if ast_optional_only:
+            return
         # 声明式规则执行器（无规则表时零开销返回）
         from analyzer.checks import check_rules_pass
 

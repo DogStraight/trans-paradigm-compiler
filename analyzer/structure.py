@@ -98,6 +98,10 @@ class FileResult:
     # 文本的展开行区间（1-based）+ 宏调用原文行（1-based，不可映射 None）；
     # 诊断归因（加 "macro" 字段）反查用。顿路径（非 semantic）空表。
     macro_regions: list = field(default_factory=list)
+    # 函数宏**调用点事实**（`expand_tokens` 的 out_invocations）：{name, slots,
+    # single_empty, params, line, column}；line 已回源到**原始源行**（1-based）、
+    # column 为 0-based 宏名起列。供 postpass 检查消费（`CTX_MACRO_INVOCATIONS`）。
+    macro_invocations: list = field(default_factory=list)
 
 
 # ── 常量表达式求值 ────────────────────────────────────────
@@ -261,7 +265,12 @@ class FilePipeline:
         # parse 全在展开后文本上）。无宏文件空表零影响。同时接收行映射
         # （展开行→原始源行）与宏区间表（展开行区间，诊断归因用）。
         if self._ctx.expand_macros:
-            source, fr.line_map, fr.macro_regions = self._expand_source(source, path)
+            (
+                source,
+                fr.line_map,
+                fr.macro_regions,
+                fr.macro_invocations,
+            ) = self._expand_source(source, path)
 
         # 阶段 1：语法检查（token 级）。有**阻断类**诊断 → 语义阶段跳过
         # （用户决策——保留原语义“语法错则语义不可靠”）；卫生/风格类
@@ -321,21 +330,26 @@ class FilePipeline:
         fr.parse_ok = True
         return fr
 
-    def _expand_source(self, source: str, path: str) -> tuple[str, list, list]:
+    def _expand_source(self, source: str, path: str) -> tuple[str, list, list, list]:
         """宏展开（scan_directives 提取宏表 + expand_tokens 纯文本展开）。
 
         与 run_pipeline 的 _stage_macro_scan/_stage_expand 同语义；无宏
-        文件空表 → 原样返回。返回 (展开文本, 行映射, 宏区间表)：行映射 =
+        文件空表 → 原样返回。返回 (展开文本, 行映射, 宏区间表, 调用点事实)：行映射 =
         **展开行（0-based）→ 原始源行（1-based）**，由两级变换的行表复合
         （scan_directives 删条件编译行 → clean；expand_tokens 铺多行宏体
         → 展开后）；不可映射（include 拼接行）为 None，消费方保守回退
         展开行号，不做错误回填（映射可能不准时宁保留诚实偏移）。宏区间表
         （语义展开时 = _macro_line_spans 产出）：宏体铺进的展开行区间 +
-        宏调用原始行，诊断归因（加 "macro" 字段）反查用。
+        宏调用原始行，诊断归因（加 "macro" 字段）反查用。调用点事实 =
+        `expand_tokens` 的 out_invocations，经 `map_invocations_to_source` 回源
+        并过滤：include 内容行（无本文件坐标）、行拼接段首（位置不可靠）丢弃；
+        `params` 按宏定义时间线取**调用点时点**值（非函数宏则丢弃该点）。
         """
         try:
             from preprocessor import expand_tokens, scan_directives
+            from preprocessor._expand import map_invocations_to_source
 
+            macro_events: list = []
             macro_table, func_macros, _, _, _, clean, clean_to_raw = scan_directives(
                 source,
                 self._ctx.rules_dir,
@@ -343,8 +357,10 @@ class FilePipeline:
                 search_dirs=self._ctx.include_dirs,
                 predefined=None,
                 undefine=None,
+                out_macro_events=macro_events,
             )
             if macro_table:
+                invocations: list = []
                 # 语句体宏展开宏体（check 需宏体语义，不要保真注释锚——否则宏体
                 # 不可分析 + 注释锚被 W002 误报）
                 clean, _, regions, exp_to_clean = expand_tokens(
@@ -352,16 +368,20 @@ class FilePipeline:
                     macro_table,
                     rules_dir=self._ctx.rules_dir,
                     func_macros=func_macros,
+                    out_invocations=invocations,
                 )
                 exp_to_raw = [
                     clean_to_raw[c - 1] if 1 <= c <= len(clean_to_raw) else None
                     for c in exp_to_clean
                 ]
                 spans = self._macro_line_spans(clean, regions, clean_to_raw)
-                return clean, exp_to_raw, spans
-            return clean, clean_to_raw, []
+                map_invocations_to_source(
+                    invocations, clean_to_raw, source, macro_events
+                )
+                return clean, exp_to_raw, spans, invocations
+            return clean, clean_to_raw, [], []
         except Exception:  # noqa: BLE001 — 展开失败回退原文（lint 兜底）
-            return source, [], []
+            return source, [], [], []
 
     @staticmethod
     def _macro_line_spans(text: str, regions: list, clean_to_raw: list) -> list:

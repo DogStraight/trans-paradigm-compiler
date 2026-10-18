@@ -57,6 +57,15 @@ CTX_ANALYZED_FILE = "analyzed_file"
 （如 `容器["connections"][本文件]`）。这是**语言无关的文件层事实**（引擎给出的当前
 文件路径），不是语言知识——故由引擎注入，而不是让插件去猜/反查 AST。"""
 
+CTX_MACRO_INVOCATIONS = "macro_invocations"
+"""**函数宏调用点事实**列表（`context.extra` 中的 key）。
+
+每项 = `{name, slots, single_empty, params, line, column}`（`expand_tokens` 的
+`out_invocations` 记录，行/列已回源到原始源坐标；`slots` = 实参槽数、
+`single_empty` = 单槽是否不含预处理 token、`params` = 该调用点的宏表形参表）。
+这是**语言无关的展开期事实**：引擎只记录"谁在哪儿被调用、给了几槽实参"，
+"个数合不合规"属语言包 check 族的判定。parse 失败的文件也能拿到（展开先于解析）。"""
+
 # ── 组件元数据 key（component.toml 字段名）──
 META_NAME = "name"
 META_LANG = "lang"

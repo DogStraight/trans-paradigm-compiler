@@ -13,6 +13,7 @@
     "tools",
     "tests",
     "grammar/verilog/plugins",
+    "grammar/c/plugins",
     "grammar/c4/plugins"
   ],
   "exclude": ["**/__pycache__", "**/dist"],

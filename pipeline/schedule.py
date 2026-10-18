@@ -618,8 +618,15 @@ def _run_pass_analyze(state: "PassState") -> None:
     error 级诊断 → 置 ctx.result["error"] 并抛 _ScheduleStop（见
     `_raise_on_analyze_errors`）。
     """
+    from core._protocol import CTX_MACRO_INVOCATIONS
+
     ctx = state.ctx
     analyzer = AnalysisTraversal(ctx.rules)
+    # 语言无关事实注入：函数宏调用点（由预处理器在展开期记录）——引擎只给
+    # 事实，语义判定归语言包 check 族（postpass 从 context.extra 读）。
+    analyzer._external_extra[CTX_MACRO_INVOCATIONS] = list(
+        getattr(ctx, "macro_invocations", ()) or ()
+    )
     state.ast = analyzer.analyze(state.ast)
     state.analyzer = analyzer
     state.scope = analyzer.root_scope

@@ -660,11 +660,16 @@ def _load_postpasses(cdir: str, postpass_specs: list) -> list[dict[str, Any]]:
         run = "_expand_ports.py:run_expand_ports"
         produces = ["resolved_ports"]   # 可选：本环节产出名
         requires = ["resolved_ports"]   # 可选：本环节依赖名
+        ast_optional = true             # 可选：解析失败文件也执行（事实型检查）
 
     契约语义 = **链内时点可达性**：`requires` 须由链上更早环节的 `produces`、
     `scope` 或链开始时 `context.extra` 已有的键提供，否则 fail-fast。
     不核验物化（postpass 产物写在符号表/context 上，引擎不懂其语义）——
     与 transform 单元契约的区别见 `analyzer/semantic_checks.md`。
+    `ast_optional`（2026-10-18 加）：本 postpass 不依赖 AST、输入是展开期事实
+    （如 `CTX_MACRO_INVOCATIONS`），故 `tpc check` 在**解析失败**的文件上也执行它
+    （`AnalysisTraversal.analyze_file_facts`）。与 `requires = ["scope"]` 互斥
+    （无遍历即无 scope，声明矛盾直接 fail-fast）。
     fail-fast（ADR-0003）：非表 / 未知键 / `run` 格式 / 模块 / 函数任一不合法即报错。
     """
     decls: list[dict[str, Any]] = []
@@ -674,11 +679,11 @@ def _load_postpasses(cdir: str, postpass_specs: list) -> list[dict[str, Any]]:
                 f"[plugin] postpass 声明须为表（[[analyzer.postpasses]] + run），"
                 f"收到: {spec!r} ({cdir})"
             )
-        unknown = set(spec) - {"run", "produces", "requires"}
+        unknown = set(spec) - {"run", "produces", "requires", "ast_optional"}
         if unknown:
             raise ValueError(
                 f"[plugin] postpass 声明含未知键: {', '.join(sorted(unknown))}"
-                f"（支持 run/produces/requires）({cdir})"
+                f"（支持 run/produces/requires/ast_optional）({cdir})"
             )
         run = spec.get("run")
         if not isinstance(run, str) or ":" not in run:
@@ -687,6 +692,17 @@ def _load_postpasses(cdir: str, postpass_specs: list) -> list[dict[str, Any]]:
             )
         produces = _name_list(spec.get("produces"), "produces", run, cdir)
         requires = _name_list(spec.get("requires"), "requires", run, cdir)
+        ast_optional = spec.get("ast_optional", False)
+        if not isinstance(ast_optional, bool):
+            raise ValueError(
+                f"[plugin] postpass '{run}' ast_optional 须为布尔值: "
+                f"{ast_optional!r} ({cdir})"
+            )
+        if ast_optional and "scope" in requires:
+            raise ValueError(
+                f"[plugin] postpass '{run}' 声明 ast_optional 却又 requires "
+                f"['scope']（解析失败文件没有作用域，契约矛盾）({cdir})"
+            )
         fname, fn_name = run.split(":", 1)
         modules = _load_python_handlers(cdir, [fname])
         if not modules:
@@ -697,7 +713,13 @@ def _load_postpasses(cdir: str, postpass_specs: list) -> list[dict[str, Any]]:
                 f"[plugin] postpass 函数 {fn_name} 不存在于 {fname} ({cdir})"
             )
         decls.append(
-            {"name": run, "fn": fn, "produces": produces, "requires": requires}
+            {
+                "name": run,
+                "fn": fn,
+                "produces": produces,
+                "requires": requires,
+                "ast_optional": ast_optional,
+            }
         )
     return decls
 

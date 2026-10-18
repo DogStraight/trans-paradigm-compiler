@@ -43,6 +43,7 @@ def handle_define(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     rest = arg[m.end() :]
 
     call_args = ctx.get("_call_args")
+    params: list[str] | None = None
     if call_args is not None and rest.startswith(call_args.open):
         # function-like：`define NAME(a, b) body
         matched = call_args.match_args(rest, 0)
@@ -59,3 +60,12 @@ def handle_define(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         ctx.setdefault("_func_params", {})[def_name] = params
     else:
         ctx["macro_defs"][def_name] = rest.strip()
+    # 定义事件（原始源行号；`params=None` = 非函数宏）——供调用点事实的**顺序
+    # 语义**修正（见 `preprocessor/macro_timeline.py`）。
+    ctx.setdefault("_macro_events", []).append(
+        {
+            "line": int(ctx.get("_cur_raw_line") or ctx.get("_cur_line_no") or 0),
+            "name": def_name,
+            "params": list(params) if params is not None else None,
+        }
+    )

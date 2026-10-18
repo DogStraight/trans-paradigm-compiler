@@ -17,7 +17,7 @@ Doc: analyzer/semantic_checks.md（跨文件语义检查）
 import os
 
 from core.define import GrammarRulesRegister, DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
-from core._protocol import CTX_ANALYZED_FILE
+from core._protocol import CTX_ANALYZED_FILE, CTX_MACRO_INVOCATIONS
 
 from analyzer.structure import (
     FilePipeline,
@@ -212,9 +212,12 @@ class ProjectChecker:
         self._elaborator.run(source, self._elab_extra, service)
 
     def _analyze(self, fr: FileResult) -> None:
-        if fr.ast is None:
-            return
         from analyzer import AnalysisTraversal
+
+        # 解析失败文件默认跳过语义阶段（语法错则语义不可靠）。例外 = 语言包声明了
+        # `ast_optional` 的事实型 postpass（输入不是 AST，如宏调用点）——见下方分支。
+        if fr.ast is None and not _has_ast_optional_postpass():
+            return
 
         shared = self._ensure_shared()
         analyzer = AnalysisTraversal(shared["rules"], rules_dir=self._ctx.rules_dir)
@@ -230,10 +233,26 @@ class ProjectChecker:
         analyzer._external_extra["inout_dirs"] = sorted(self._ctx.dirs("inout_dirs"))
         # 当前分析文件（语言无关的文件层事实）：插件据此按文件取精化产物**切片**
         analyzer._external_extra[CTX_ANALYZED_FILE] = fr.path
+        # 函数宏调用点（语言无关的展开期事实）：语义判定归语言包 check 族
+        analyzer._external_extra[CTX_MACRO_INVOCATIONS] = list(fr.macro_invocations)
         # 精化产物容器（ADR-0019）：条目名与值形状由插件定，引擎只保证容器；
         # 未声明精化能力 → 无此键（插件侧按 .get 缺省处理）。
         analyzer._external_extra.update(self._elab_extra)
+        if fr.ast is None:
+            # 事实型 postpass（`ast_optional = true`）：解析失败也执行——实参个数
+            # 错常使展开结果语法非法，正是这批文件不能被漏掉。无此声明 ⇒ 上面已
+            # 提前返回（既有语义：语法有错 → 语义阶段跳过）。
+            analyzer.analyze_file_facts()
+            fr.analyzer = analyzer
+            return
         analyzer.analyze(fr.ast)
         fr.analyzer = analyzer
+
+
+def _has_ast_optional_postpass() -> bool:
+    """当前语言包是否声明了 `ast_optional` postpass（解析失败也执行的事实型检查）。"""
+    from core.plugin_loader import get_analyzer_postpass_decls
+
+    return any(d.get("ast_optional") for d in get_analyzer_postpass_decls())
 
 

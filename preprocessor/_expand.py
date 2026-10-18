@@ -25,7 +25,7 @@ from .primitives.include import resolve_source_dir
 from .primitives.ifdef import condition_syntax, outer_active
 from ._bridge import make_marker
 from ._markers import inline_marker, line_marker
-from . import macro_expand
+from . import macro_expand, macro_timeline
 from .macro_policy import (
     MODE_INLINE,
     MODE_LINE,
@@ -60,6 +60,11 @@ _directives_cfg: dict = declare_cfg("preprocessor.directives", {}, __name__, "_d
 #   #sym:config = [continuation]
 #   格式: dict — { enabled: bool, character: str }
 _continuation_cfg: dict = declare_cfg("preprocessor.continuation", {}, __name__, "_continuation_cfg")
+
+
+def continuation_character() -> str:
+    """行拼接字符（语言包 `[continuation].character`；默认 `\\`）。"""
+    return str(_continuation_cfg.get("character", "\\") or "\\")
 
 
 def _join_continuation_lines(
@@ -343,6 +348,7 @@ def scan_directives(
     undefine: set[str] | None = None,
     seq_box: list[int] | None = None,
     out_diags: list[dict] | None = None,
+    out_macro_events: list[dict] | None = None,
 ) -> tuple[
     dict[str, str],
     dict[str, list[str]],
@@ -366,6 +372,11 @@ def scan_directives(
                           取段首行、增删行按实际归属记账；include 拼接行不属
                           本源文件 → None（不可映射，消费方保守回退）。诊断
                           回源时与 `expand_tokens` 的展开级映射复合使用。
+        out_macro_events（可选出参）：宏**定义/取消事件**列表，每项
+                          `{line: 原始源行号, name, params: list | None}`（None =
+                          非函数宏，含 `#undef` 与对象宏定义）；顺序 = 源码序。
+                          供 `preprocessor.macro_timeline` 取调用点时点状态——
+                          展开器用最终宏表，检查侧的顺序语义靠它修正。
     """
     prefix, directives_set = _load_config(rules_dir)
     ctx = _build_scan_ctx(
@@ -382,7 +393,7 @@ def scan_directives(
     # 账本：每条输出行携带其**原始行号**（行与行号成对入列表）——clean 行数
     # 与原始行数不同（条件压缩/续行合并），行映射只能逐行记账，不能事后对齐。
     source, join_map = _join_continuation_lines(source)
-    _scan_lines(source.split("\n"), ctx, prefix, directives_set, rules_dir)
+    _scan_lines(source.split("\n"), ctx, prefix, directives_set, rules_dir, join_map)
     _report_unclosed_conditions(ctx)
 
     result = _collect_scan_result(ctx, join_map)
@@ -390,6 +401,8 @@ def scan_directives(
         # 结构化诊断由调用方持有（管线转成 `preprocessor_errors`）——返回元组不变
         out_diags.extend(ctx.get("_include_diags", []))
         out_diags.extend(ctx.get("_cond_diags", []))
+    if out_macro_events is not None:
+        out_macro_events.extend(ctx.get("_macro_events", []))
     # 宏体**不再预展开**（③）：`macro_defs` 保持原始体，替换文本由调用点用
     # `macro_expand.expand_text(..., hideset={name})` 现算 ⇒ 消除"扫描期预展开 +
     # 调用点正则插入"的双算法路径（P0-8/P0-10/P2-1 同一根因）。
@@ -454,6 +467,9 @@ def _build_scan_ctx(
         "_directive_placeholders": {},
         # include 问题诊断（按语言包 `on_missing` 策略：error 时记此，warn 时打印）
         "_include_diags": [],
+        # 宏定义/取消事件（原始源行号 + 形参表；解析见 macro_timeline.py）：
+        # 展开用**最终宏表**，检查侧靠事件取**调用点时点**的可见形参表。
+        "_macro_events": [],
         "_predefined": dict(predefined) if predefined else {},
         "_undefine": set(undefine) if undefine else set(),
         "directive_lines": [],
@@ -497,7 +513,12 @@ def _collect_scan_result(ctx: dict, join_map: list) -> tuple:
 
 
 def _scan_lines(
-    lines: list[str], ctx: dict, prefix: str, directives_set: set[str], rules_dir: str
+    lines: list[str],
+    ctx: dict,
+    prefix: str,
+    directives_set: set[str],
+    rules_dir: str,
+    join_map: list,
 ) -> None:
     """逐行扫描：指令行分派到处理器，非指令行按条件栈归属。
 
@@ -510,6 +531,10 @@ def _scan_lines(
 
     for jno, line in enumerate(lines, 1):
         ctx["_cur_line_no"] = jno  # 控制指令 handler 记账用（边界行归属）
+        # 行拼接账本：本逻辑行的**原始源行号**（段首；定义/取消事件按原始源坐标记）
+        ctx["_cur_raw_line"] = (
+            join_map[jno - 1] if 1 <= jno <= len(join_map) else jno
+        )
         ctx["_cur_line_indent"] = len(line) - len(line.lstrip())
         stack: list = ctx.get("_ifdef_stack", [])
         inside_block = block_state is not None
@@ -795,6 +820,11 @@ class _MacroExpandCtx:
     restoration_stack: list[dict] = field(default_factory=list)
     regions_by_line: dict[int, list[dict]] = field(default_factory=dict)
     seq: int = 0
+    #: 函数宏**调用点事实**收集器（调用方传 `out_invocations` 才启用；None =
+    #: 不记录）。每项 = `{name, slots, single_empty, params, line, column}`，
+    #: 行/列是**本函数输入文本**（clean 源）坐标——调用方负责回源到原始源
+    #: （`clean_line_map` / `clean_to_raw`），引擎不猜语言坐标。
+    invocations: list[dict] | None = None
 
     def next_seq(self) -> int:
         """锚序号（自增；`make_marker` 的唯一性来源）。"""
@@ -811,6 +841,7 @@ def expand_tokens(
     func_macros: dict[str, list[str]] | None = None,
     include_line_flags: list[bool] | None = None,
     out_include_regions: list[dict] | None = None,
+    out_invocations: list[dict] | None = None,
 ) -> tuple[str, list[dict], list[dict], list[int]]:
     """在源码文本中展开宏调用（纯文本层），并注册统一锚 / 宏区间表。
 
@@ -843,6 +874,11 @@ def expand_tokens(
             一个换行，见下）。
             它是外层处理宏的单一事实源（ADR-0017 决策 3）：定位"哪些内容来自
             哪条宏"→ 渲染侧 raw 拼接、诊断宏归因都靠它。
+        out_invocations — 可选**函数宏调用点事实**收集器（传 list 才记录；None =
+            零开销不记）。每项 = `{name, slots, single_empty, params, line, column}`：
+            行/列是本函数输入文本（clean 源）坐标，`params` 是该调用点的宏表形参表
+            （含语言包声明的变参占位），调用方负责回源到原始源坐标。引擎只记事实，
+            不判定"实参个数对不对"（语义判定归语言包 check 族）。
     """
     if prefix is None:
         # 调用前缀从语言包 call 形态推导（kind 分派；不读第二份配置）
@@ -876,6 +912,7 @@ def expand_tokens(
         call_prefix=prefix,
         operators=operators,
         lines=source.split("\n"),
+        invocations=out_invocations,
     )
     lines = ctx.lines
     # 掩码**整段一次性**算再落到各行（行内区间）：逐行重算会漏掉跨行块注释的
@@ -888,7 +925,9 @@ def expand_tokens(
     )
 
     for line_no, line in enumerate(lines, 1):
-        macro_matches = _collect_macro_matches(ctx, line, line_masks[line_no - 1])
+        macro_matches = _collect_macro_matches(
+            ctx, line, line_masks[line_no - 1], line_no
+        )
         if not macro_matches:
             continue
 
@@ -908,7 +947,7 @@ def expand_tokens(
                     len(macro_matches) == 1,
                 ),
             )
-            for col, end, body, name, is_func, args_text in macro_matches
+            for col, end, body, name, is_func, args_text, _slots, _empty in macro_matches
         ]
 
         if _try_line_mode(ctx, line_no, line, plans, len(macro_matches)):
@@ -1002,14 +1041,18 @@ def _raw_variadic_for(
 
 def _match_one(
     ctx: "_MacroExpandCtx", line: str, m
-) -> tuple[int, str, str, bool, str] | None:
-    """单个正则命中 → `(end, body, name, is_func, args_text)`；不可展开 → None。
+) -> tuple[int, str, str, bool, str, int, bool] | None:
+    """单个正则命中 → `(end, body, name, is_func, args_text, slots, single_empty)`；
+    不可展开 → None。
 
     **函数宏**（名字在 `func_macros`）：名字后允许**空白/注释/换行**再接 `(`；
     实参切分走 **token 级** `macro_expand.collect_args_tokens`（掩码内逗号/括号
     不是分隔符）。名字后**没有 `(`** ⇒ **不展开**（标准：函数的宏名不调用就
     不替换，不得回退成对象宏）。
-    对象宏：按宏表替换（无参）。
+    对象宏：按宏表替换（无参）；`slots`/`single_empty` 恒 0/False（无实参表）。
+    `slots` = 实参槽数（顶层分隔符数 + 1；`F()` 也是 1 槽）；
+    `single_empty` = 仅当 `slots == 1` 时该槽是否**不含预处理 token**（空白/注释）。
+    两者都是**通用事实**：个数合不合规由语言包 check 族判（引擎不判）。
     """
     name = m.group(1)
     if ctx.call_args is not None and name in ctx.func_macros:
@@ -1033,7 +1076,11 @@ def _match_one(
             ),
         )
         end = _extend_macro_chain(line, close_idx, ctx.macro_re, ctx.suffix_re)
-        return end, body, name, True, line[m.end() : close_idx]
+        slots = len(args)
+        single_empty = slots == 1 and macro_expand.arg_tokens_blank(
+            args[0], ctx.syntax
+        )
+        return end, body, name, True, line[m.end() : close_idx], slots, single_empty
     body = ctx.macro_defs.get(name)
     if body is None:
         return None
@@ -1051,7 +1098,7 @@ def _match_one(
         hideset=frozenset({name}),
     )
     end = _extend_macro_chain(line, m.end(), ctx.macro_re, ctx.suffix_re)
-    return end, expanded, name, False, ""
+    return end, expanded, name, False, "", 0, False
 
 
 def _line_masks(
@@ -1081,12 +1128,16 @@ def _collect_macro_matches(
     ctx: "_MacroExpandCtx",
     line: str,
     masks: list[tuple[int, int]] | None = None,
+    line_no: int = 0,
 ) -> list[tuple]:
-    """本行的宏调用（原起列, 原止列, 宏体, 名字, 是否带参, 实参文本）。
+    """本行的宏调用（原起列, 原止列, 宏体, 名字, 是否带参, 实参文本, 实参槽数,
+    单槽是否空）。
 
     `masks` = 该行的**行内**掩码区间（由整段源文本一次性算出，见 `_line_masks`）：
     跨行块注释的续行没有起始定界符，逐行重算会漏算 ⇒ 调用方必须传（P1-3）。
     缺省按本行现算（仅单行上下文用）。
+    `line_no` = 本行在输入文本里的 1-based 行号——只用于**调用点事实**记录
+    （`ctx.invocations`；函数宏调用成功识别时记一条），不参与展开。
     """
     matches: list[tuple] = []
     consumed_until = -1
@@ -1115,9 +1166,22 @@ def _collect_macro_matches(
         hit = _match_one(ctx, line, m)
         if hit is None:
             continue
-        end, body, name, is_func, args_text = hit
+        end, body, name, is_func, args_text, slots, single_empty = hit
+        if is_func and ctx.invocations is not None:
+            ctx.invocations.append(
+                {
+                    "name": name,
+                    "slots": slots,
+                    "single_empty": single_empty,
+                    "params": list(ctx.func_macros.get(name, ())),
+                    "line": line_no,
+                    "column": m.start(),
+                }
+            )
         consumed_until = max(consumed_until, end)
-        matches.append((m.start(), end, body, name, is_func, args_text))
+        matches.append(
+            (m.start(), end, body, name, is_func, args_text, slots, single_empty)
+        )
     return matches
 
 
@@ -1164,7 +1228,7 @@ def _run_plans(
     parts = list(line)
     forward_entries: list[dict] = []
     line_regions: list[tuple] = []
-    for (col, end, body, name, is_func, _args), plan in reversed(
+    for (col, end, body, name, is_func, _args, _slots, _empty), plan in reversed(
         list(zip(macro_matches, plans))
     ):
         source_text = line[col:end]  # 宏调用原文（含反引号与实参）
@@ -1229,3 +1293,51 @@ def _out_to_src_map(lines: list[str]) -> list[int]:
     for src_no, text in enumerate(lines, 1):
         out_to_src.extend([src_no] * (text.count("\n") + 1))
     return out_to_src
+
+
+def map_invocations_to_source(
+    invocations: list[dict],
+    clean_to_raw: list,
+    raw_source: str,
+    macro_events: list[dict] | None,
+) -> None:
+    """调用点事实：clean 行 → **原始源行** + 宏时间线过滤（就地去留）。
+
+    三步（顺序即去留判据）：
+      1. 行映射不可用（`clean_to_raw` 为 None = include 拼接内容行，属别的文件
+         坐标系）⇒ 丢弃；
+      2. 原始行是**行拼接段首**（行尾仍有 continuation 字符）⇒ 该行由多条物理行
+         合并，调用点列/行不可靠 ⇒ 丢弃（守卫式边界：不报位置错误的诊断）；
+      3. 有事件表时按 `preprocessor.macro_timeline` 取该行时点的可见形参表：
+         当时不是函数宏（后置定义 / `#undef` 后 / 对象宏）⇒ 丢弃；是则覆写
+         `params`（**顺序语义**修正：展开器用最终宏表）。
+    `macro_events` 为 None/空 ⇒ 第 3 步跳过（保留展开期快照）。
+    """
+    if not invocations:
+        return
+    raw_lines = raw_source.split("\n")
+    cont = continuation_character()
+    kept: list[dict] = []
+    for inv in invocations:
+        line = int(inv.get("line") or 0)
+        raw = (
+            clean_to_raw[line - 1]
+            if 1 <= line <= len(clean_to_raw)
+            else None
+        )
+        if raw is None:
+            continue
+        raw = int(raw)
+        if cont and 1 <= raw <= len(raw_lines):
+            if raw_lines[raw - 1].rstrip().endswith(cont):
+                continue  # 行拼接段首：位置不可靠
+        if macro_events:
+            visible = macro_timeline.params_at(
+                macro_events, raw, str(inv.get("name") or "")
+            )
+            if visible is None:
+                continue  # 该时点不是函数宏
+            inv["params"] = list(visible)
+        inv["line"] = raw
+        kept.append(inv)
+    invocations[:] = kept

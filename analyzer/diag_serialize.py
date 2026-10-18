@@ -93,7 +93,11 @@ def _related_diags(fr: FileResult, d) -> list:
     for msg, rnode in d.related:
         rl = getattr(rnode, "_pos_line", None)
         rc = getattr(rnode, "_pos_col", None)
-        if rl is not None and getattr(rnode, "_file", None) in (None, fr.path):
+        if (
+            rl is not None
+            and getattr(rnode, "_file", None) in (None, fr.path)
+            and not getattr(rnode, "_pos_original", False)
+        ):
             mapped = map_diag_line(fr, rl - 1)
             if mapped is not None:
                 rl = mapped + 1
@@ -113,16 +117,23 @@ def semantic_diag(fr: FileResult, d) -> dict:
 
     severity 由 `d.level` 映射（error/warning/info → 1/2/3，未知按 warning）；
     range 由节点 `_pos_line`/`_pos_col` 推出（无位置 → range=None）。
+
+    **合成节点的原始坐标**：没有 AST 位置的检查（如宏调用点）会构造一个只带
+    位置的替身节点，其 `_pos_*` 已是**原始源**坐标，并以 `_pos_original = True`
+    标记 ⇒ **不再经 `line_map` 回源**（那是"展开坐标→原始源"的映射，对已经
+    在原坐标系里的位置再做一次会错位）。真 AST 节点无此标记，行为不变。
     """
     node = d.node
     line = getattr(node, "_pos_line", None)
     col = getattr(node, "_pos_col", None)
+    original = bool(getattr(node, "_pos_original", False))
     sev = {"error": 1, "warning": 2, "info": 3}.get(d.level, 2)
-    # 行号回源：仅对本文件节点用行表（跨文件节点行号属另一文件坐标系）
+    # 行号回源：仅对本文件节点用行表（跨文件节点行号属另一文件坐标系）；
+    # 已标原始坐标的合成节点跳过（见 docstring）。
     same_file = getattr(node, "_file", None) in (None, fr.path)
     if line is not None:
         line0 = (line - 1) if line else 0
-        if same_file:
+        if same_file and not original:
             line0 = map_diag_line(fr, line0)
         rng = {
             "start": {"line": line0, "character": col or 0},
@@ -139,7 +150,7 @@ def semantic_diag(fr: FileResult, d) -> dict:
         "level": d.level,
         "range": rng,
     }
-    if line is not None and same_file:
+    if line is not None and same_file and not original:
         macro = _macro_of_line(fr, (line - 1) if line else 0)
         if macro:
             out["macro"] = macro

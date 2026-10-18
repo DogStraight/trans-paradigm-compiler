@@ -5,6 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **A2 ①：宏实参个数检查（插件侧 check 族，MAC001）**（2026-10-18，循环 #21）：作者定"语义级走插件侧
+  check 族"的首个预处理器语义检查。**引擎侧只给事实**：`expand_tokens(out_invocations=...)` 记录函数宏
+  调用点 `{name, slots, single_empty, params, line, column}`（行/列为 clean 源坐标）；`map_invocations_to_source`
+  一次完成回源 + 过滤（被包含内容行 / 行拼接段首行 / 当时不是函数宏的点）+ **宏定义时间线**
+  （`scan_directives(out_macro_events=...)` 事件表 → `macro_timeline.params_at`）把 `params` 修正为**调用点
+  时点**值——展开器仍用最终宏表（历史近似），检查侧顺序语义不跟着错（后置定义 / 重定义 / `#undef` 前后
+  不误判；审计反例实测修复）。`[[analyzer.postpasses]]` 增同族键 **`ast_optional`**（解析失败文件也执行
+  ——实参不足常使展开结果语法非法，正是该报的那批）＋ `AnalysisTraversal.analyze_file_facts` ＋
+  `core._protocol` 新键 `CTX_MACRO_INVOCATIONS` ＋ 合成节点 `_pos_original`（位置已是原始源坐标 ⇒
+  序列化不再经行表回源）。**C 包** `plugins/checks/macro_args/`：`MAC001`（A 档：C99+TC N1124 §6.10.3
+  段 1903/1904/1918 原文；gcc 16.1 四档 `-pedantic-errors` 对拍）——非变参宏 `slots == 形参数`（0 形参
+  的唯一合法形态 `Z()`，`Z(/*c*/)` 注释算空）、变参宏 `slots >= 具名数`。**行为变化（C 输入、`tpc check`）**：
+  多给实参（`F(1,2,3)`，展开后语法合法、此前静默 rc=0）现报 `[warning](MAC001)`；零形参宏传参 `Z(2)`、
+  变参缺具名 `W(1)` 现报；**少给**（`F(1)` → `1+` 使 parse 失败）在语法诊断之外**新增** MAC001，位置指
+  **原始源行**（条件块压缩后仍对）。severity=warning（不阻断管线；`checks.overrides` 可提级为 error）。
+  **配套修正**：`main._apply_check_suppressions` 对 parse 失败文件只跳过**语法**豁免——语义诊断
+  （本检查的 too-few 场景）仍可 `tpc-check: disable-line` 豁免；`pyrightconfig.strict.json` 补
+  `grammar/c/plugins`（先前 C 包插件不在 strict 检查面）。**边界**（规则表登记不实现）：变参"恰好具名"
+  （C99–C17 pedantic 级、C23 起接受）、宏体替换产生的嵌套调用、`#if` 表达式内调用、实参跨行调用、
+  被包含文件内调用点（头文件定义按 include 行快照）、行拼接段内调用点、`#undef` 之前的调用点
+  （展开器最终宏表 ⇒ 根本不展开）。验证：新增 `test_macro_call_sites.py` 17 / `test_macro_timeline.py` 13 /
+  `test_c_macro_args_checks.py` 19 / `test_postpass_ast_optional.py` 5 / 合成坐标用例 2；门禁变异
+  **82 → 87**（调用点事实 / `ast_optional` 执行 / 零参判定 / 原始坐标跳过回源 / 定义时间线过滤）；
+  PRE（HEAD 代码）新判据 **30 failed + 1 error / 16 passed** → POST 全绿；全量 **3952 passed / 7 skipped**；
+  policy **458 passed**；pyright strict **0**（本包插件已纳入 strict 面）；A/B verilog **0/144**。
+
 ### Fixed
 
 - **A2 两路径统一：预处理硬错误在 `tpc lint` / `tpc check` 下同类诊断、都不抛异常**（2026-10-17）：

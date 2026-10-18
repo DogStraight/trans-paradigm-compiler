@@ -186,6 +186,19 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
             ctx.setdefault("_include_diags", []).extend(child_diags)
         ctx["macro_defs"].update(inc_macros)
         ctx.setdefault("_func_params", {}).update(inc_funcs)
+        # 定义事件快照：被包含文件里的定义行属**另一坐标系**（子扫描事件不向上
+        # 传播），故按"include 行处、子文件最终状态"并入宿主时间线——本行之后
+        # 的宿主调用点即可见（与 C 的 include 语义一致）。`params=None` = 非函数宏。
+        include_line = int(ctx.get("_cur_raw_line") or ctx.get("_cur_line_no") or 0)
+        events = ctx.setdefault("_macro_events", [])
+        for name in inc_macros:
+            events.append(
+                {
+                    "line": include_line,
+                    "name": name,
+                    "params": list(inc_funcs[name]) if name in inc_funcs else None,
+                }
+            )
         ctx.setdefault("_cond_blocks", []).extend(inc_blocks)
         ctx.setdefault("_cond_placeholders", {}).update(inc_placeholders)
         ctx["directive_lines"].extend(inc_dirs_raw)

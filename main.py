@@ -327,8 +327,10 @@ def _cmd_check(args: argparse.Namespace) -> None:
 def _apply_check_suppressions(report: dict, rules_dir: str) -> None:
     """应用源码内 tpc-check 豁免注释（analyzer/suppress.py），并重算 exit_code。
 
-    豁免面向"检查通过但故意非标"的生成代码——解析失败的文件不豁免
-    （parse_error 是坏文件信号，不掩盖）。豁免指令以注释形态书写，标点从
+    豁免面向"检查通过但故意非标"的生成代码——**解析失败**的文件不豁免**语法**
+    诊断（parse_error 是坏文件信号，不掩盖），但其**语义**诊断仍可豁免：事实型
+    check（如宏实参个数 `ast_optional`）在解析失败文件上也会报，且其位置已是
+    原始源坐标（README 的豁免规则同样适用）。豁免指令以注释形态书写，标点从
     语言包声明取（引擎不认识 `//` / `/* */`）。
     """
     from analyzer.suppress import apply_suppressions, build_suppress_map
@@ -336,16 +338,15 @@ def _apply_check_suppressions(report: dict, rules_dir: str) -> None:
 
     syntax = load_comment_syntax(rules_dir)
     for f in report["files"]:
-        if not f.get("parse_ok", True):
-            continue
         try:
             with open(f["path"], encoding="utf-8") as fh:
                 text = fh.read()
         except OSError:
             continue
         smap = build_suppress_map(text, syntax)
-        f["syntax"] = apply_suppressions(f["syntax"], smap)
         f["semantic"] = apply_suppressions(f["semantic"], smap)
+        if f.get("parse_ok", True):
+            f["syntax"] = apply_suppressions(f["syntax"], smap)
     # 豁免后重算：任一 error 级诊断（severity 1）存在 → exit 1
     report["exit_code"] = 1 if any(
         d.get("severity") == 1

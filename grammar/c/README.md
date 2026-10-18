@@ -384,6 +384,40 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
 **边界**：VLA 跳入（需类型面）、`case` 值重复 / 多个 `default`（原文未取得 + 需常量求值）、
 label 未使用（无条款约束，风格）、宏展开产生的标签、扩展语法（`__label__`/`asm goto`）、跨 TU。
 
+## 宏实参个数（MAC · 本包第四个 check 组件，走 `ast_optional` postpass）
+
+**分工**（作者 2026-10-17）：宏的**形式化语法**（`#define` 的宏名/形参表/宏体算子形态）
+走 linter（`linter/macro_syntax.py`，AST 前，对原始源码）；**语义级**（实参个数，需宏表 +
+调用点上下文）走本组件。规则 **A 档**：C99+TC §6.10.3 原文（段 1903/1904/1918）⇒
+`default = true`、`severity = "warning"`（不阻断管线；需退出码 1 用 `checks.overrides` 提级）。
+
+| 落点 | 作用 |
+|---|---|
+| `plugins/checks/macro_args/tpc.toml` | `[analyzer] + [[analyzer.postpasses]] run = "rules/_macro_args_check.py:run_macro_arg_checks"`、**`ast_optional = true`**（解析失败也执行的关键）、`produces = ["c_macro_args"]` |
+| `plugins/checks/macro_args/rules/macro_args.toml` | 规则数据 `MAC001`（`kind = "macro_call"` = 本组件自用标记，符号 kind 分发天然 no-op）+ 条款原文/档位/**不实现**登记 |
+| `plugins/checks/macro_args/rules/_macro_args_check.py` | postpass：读引擎注入的 `CTX_MACRO_INVOCATIONS`（展开期事实），逐调用点判 arity；诊断挂**调用点替身节点**（`_pos_original = True`，位置已是原始源坐标） |
+
+**为什么必须 `ast_optional`**：实参不足时展开结果常是非法语法（`F(1)` → `1+`）⇒ parse 失败
+⇒ 常规语义阶段跳过整文件。事实型 postpass 不依赖 AST，故解析失败也跑（机制见
+`analyzer/semantic_checks.md` §5.4）；`test_too_few_args_reported_even_when_parse_fails`
+是该键的直接判据。
+
+**判定口径**（gcc 16.1.0 `-pedantic-errors` 四档对拍）：非变参宏 `slots == 形参数`（n == 0 的
+合法形态只有 `Z()`：括号内空 token 序列 = 0 个实参；`Z(/*c*/)` 同——注释在翻译阶段已换成
+空白）；变参宏 `slots >= 具名形参数`。合法零误报形态：`Z()` / `Z( )` / `Z(/*c*/)` / `O()` /
+`F(,)` / 变参恰好具名 / 头文件宏在本文件调用 / 后置定义前的同名调用 / 重定义前后各按其时形参。
+**顺序语义**：形参表取**调用点时点**的可见值（`preprocessor/macro_timeline.py`：`scan_directives`
+输出的定义/取消事件按原始源行号记账；引擎在 `map_invocations_to_source` 里回源+过滤）——展开器
+仍用最终宏表（历史近似），检查侧不跟着误判。
+**边界（登记不实现）**：变参"恰好具名个数"（C99–C17 pedantic 级、C23 起接受 ⇒ 无档位感知
+不判）、宏体替换才产生的嵌套调用、`#if` 表达式内调用、实参跨行调用（A1 已声明边界）、
+被包含文件内的调用点（无本文件坐标；头文件定义按 include 行快照）、行拼接段内调用点
+（行列不可靠 ⇒ 丢弃）、`#undef` **之前**的调用点（展开器最终宏表 ⇒ 根本不展开 ⇒ 无事实）。
+判据：`tests/languages/c/test_c_macro_args_checks.py`（19 条：少给/多给/零参/变参缺具名 +
+合法零误报 + 原始行定位 + 规则可关闭 + include 两向 + 定义时间线四态 + 豁免 + 边界守卫）；
+`tests/engine/preprocessor/test_macro_timeline.py` 13 条（事件记账/时点解析/回源过滤）；缺陷态变红 = 门禁变异
+（去掉调用点事实 / 去掉 `ast_optional` 执行 / 去掉零参判定 / 去掉原始坐标跳过映射 / 去掉定义时间线过滤）。
+
 ## 预处理面（阶段 4 首片 A）
 
 配置挂载：`tpc.toml` 的 `[preprocessor] macro_config` / `directives` / `expand` 均指向
@@ -401,8 +435,11 @@ label 未使用（无条款约束，风格）、宏展开产生的标签、扩�
 
 **当前支持**：对象/函数/变参宏、`#` 字符串化（token 间空白折叠、字面量内部不动）、
 `##` 粘贴（**未展开拼写**）、hideset 重扫描（自引用/互递归抑制）、`#undef`、
-字符串/字符/行注释/块注释**掩码（含宏体内部）**。
-**不含**：`#if`/`#elif` 整型常量表达式、`#include`（A2）、`#line`/`#error`/`#pragma`/`_Pragma`、
+字符串/字符/行注释/块注释**掩码（含宏体内部）**、**`#include` 真实包含**（内容进分析流、
+渲染前剪枝）、**`#if`/`#elif` 整型常量表达式**（声明面 `[condition]`，交付面见
+`docs/gaps/gap-c-preprocessor-scope.md` ㉑）、**宏实参个数检查**（`plugins/checks/macro_args/`，
+见上节 MAC）。
+**不含**：`#line`/`#error`（`#pragma`/`_Pragma` 走保真穿透 + marker）、
 C23 项（`#warning`/`#elifdef`/`#embed`/`__VA_OPT__`/`__has_include`）。
 边界档案：`docs/gaps/gap-c-preprocessor-scope.md`；门禁：`tests/engine/preprocessor/test_macro_*.py`。
 **已声明边界**（详情与用例见 `preprocessor/README.md`「已知边界」）：替换结果里再现的调用不重扫

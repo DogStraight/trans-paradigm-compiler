@@ -1,0 +1,63 @@
+# ============================================================================
+# macro_args 规则表 — C 函数宏实参个数（MAC001）
+# ============================================================================
+# 规则=数据：id / kind / severity / default / message 全在此；判定逻辑在
+# `_macro_args_check.py`（postpass，读引擎注入的**展开期事实**）。
+#
+# **档位 = A**（取得条款原文句 ⇒ `default = true`）。原文（C99+TC，WG14 N1124
+# §6.10.3，c0x 逐字镜像；C11/C17/C23 同名节句子稳定）：
+#   §6.10.3p4（段 1903）：
+#     "If the identifier-list in the macro definition does not end with an
+#      ellipsis, the number of arguments (including those arguments consisting of
+#      no preprocessing tokens) in an invocation of a function-like macro shall
+#      equal the number of parameters in the macro definition."
+#   §6.10.3p4（段 1904）：
+#     "Otherwise, there shall be more arguments in the invocation than there are
+#      parameters in the macro definition (excluding the ...)."
+#   §6.10.3p7（段 1918）：
+#     "The sequence of preprocessing tokens bounded by the outside-most matching
+#      parentheses forms the list of arguments for the function-like macro."
+#
+# 判定口径（含上面 1903 的括号句）：实参可以"不含任何预处理 token"（空实参），
+# 故计的是**实参槽数**（顶层逗号数 + 1）；`Z()` 的括号内是空 token 序列 ⇒ 0 个
+# 实参（不是 1 个空实参），而 `O()`（1 个形参）是 1 个空实参 ⇒ 两形态都合法。
+# **顺序语义**：形参表取**调用点时点**的可见值（`preprocessor/macro_timeline.py`：
+# 定义事件/取消事件按原始源行号记账）——后置定义、重定义、`#undef` 前后不以最终
+# 宏表一概而论；当时不是函数宏（定义前 / undef 后 / 同名对象宏）的调用点不算宏调用。
+# GCC 16.1 实测（`--std=<c99|c11|c17|c23> -pedantic-errors -E`，本机 MinGW 16.1.0）：
+#   `F(a,b)` + `F(1)` / `F(1,2,3)` / `F(1,2,)` / `F((1,2))` → error（全档）
+#   `Z()` + `Z()`（空）/ `Z(/*c*/)` → OK（全档）；`Z()` + `Z(1)` → error（全档）
+#   `W(a,b,...)` + `W(1)` / `W()` → error（全档）
+#
+# **不实现（边界登记，不是"看起来支持"）**：
+#   · 变参宏"恰好具名个数"（`V(a,...)` + `V(1)`）：C99/C11/C17 为 **pedantic 级**
+#     （`ISO C99 requires at least one argument for the '...'`），**C23 起接受**
+#     （GCC 16.1 c23 实测 OK）⇒ 无档位感知时不进本规则（否则 c23 档误报）。
+#   · 嵌套/宏体替换才产生的调用（`#define A F(1)` + `A`）：GCC 报错并给 expansion
+#     note，但引擎只记录**源文本里的调用点**（体展开产生的调用无源坐标）⇒ 可能漏报。
+#   · `#if` 表达式内的调用（`#if F(1)`）：GCC 为准备阶段硬错；本检查只覆盖源码
+#     展开路径（条件求值面另见 `preprocessor/condition.py` 的已声明边界）。
+#   · 实参跨行的调用（`F(1,` 换行 `2)`）：A1 已声明边界（展开器不展开）⇒ 无事实可检。
+#   · 被包含文件（`#include` 内容）内的调用点：内容行没有本文件源坐标 ⇒ 丢弃；
+#     头文件里的宏定义按 **include 行处的最终状态快照**并入宿主时间线。
+#   · 行拼接（反斜杠续行）**段内**的调用点：合并后行列不可靠 ⇒ 丢弃（不报错位置）。
+#   · `#undef` **之前**的调用点：展开器用最终宏表 ⇒ 根本不会展开（既有近似）⇒
+#     无事实可检（GCC 会按当时的定义报；属展开器口径边界，非本规则遗漏）。
+# ============================================================================
+
+# ── MAC001 · 函数宏实参个数与形参表不符 ──
+# ⚠ 可达性门禁注：`tests/policy/test_rule_coverage.py` 只扫 `grammar/verilog` 的规则表
+# （verilog 有 `check_accuracy` 样本资产），**不覆盖本码** ⇒ 本规则的可达性由
+# `tests/languages/c/test_c_macro_args_checks.py` 直接守（少给/多给/零参/变参缺具名四族各一条）。
+# kind = "macro_call" 是**本组件自用的分发标记**：符号分发器（analyzer/checks.py）
+# 按 sym.kind 查表时永不命中（没有该 kind 的符号）⇒ 只有本 postpass 消费此表
+# （与 labels 的 label/goto/switch_label 同口径）。
+# severity = warning：与 CSC/LAB 同口径（A 档默认开、不阻断管线）；需要"退出码 1"
+# 的用户配置 `checks.overrides` 提升为 error（data 决策，不写死）。
+[[checks]]
+id = "MAC001"
+kind = "macro_call"
+category = "macro"
+severity = "warning"
+default = true
+message = "{name}: 宏调用实参个数与形参表不符（形参 {expected}，实参 {given}）"
