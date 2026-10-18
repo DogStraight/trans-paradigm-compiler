@@ -35,6 +35,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A2 ②：`tpc check` 语法阶段接 linter 语法诊断（原始源宏定义形式语法面）**（2026-10-18，循环 #22）：此前
+  `tpc lint` 对畸形 `#define`（宏名缺失 / 形参表空项·未闭合 / 宏体 `#`·`##` 误用）报 blocking 诊断 rc=1，
+  `tpc check` 却「No issues found」rc=0——check 的语法阶段 lint 的是**展开后**文本，而 `#define` 定义行在扫
+  指令时已被消费。修法：`FilePipeline` 语法阶段在**原始源**上补跑 `linter/macro_syntax.py`
+  （`analyzer/structure.py::raw_source_macro_diags`，与 `tpc lint` 同一函数）；宏形式错为 blocking ⇒ 早退
+  （不解析、不跑展开文本 lint，避免次生噪声）。**行为变化（C 输入、`tpc check`）**：四类形式错由 rc=0 静默 →
+  `[syntax]` 诊断 + rc=1，code/行/列与 `tpc lint` **逐项一致**；宏定义合法 + 代码有错的混合文件仍照常走展开
+  文本 lint。**同批受控化**（未闭合形参表的 `ConfigError` 冒泡）：`preprocessor.scan_diagnostics` 转
+  `directive` 诊断（两 CLI 路径同一 `[preprocessor]` 报文 rc=1，不再 traceback）、`LinterScanner.scan` 转
+  blocking `preprocessor-error`（直接 API 不发异常）、管线 `_stage_macro_scan` 转受控 `error`
+  （`tpc format`/`tpc expand` rc=1）。**verilog 零变化**（未声明 `[macro_syntax]` ⇒ 空；A/B 0/144）。
+  验证：`test_c_macro_syntax_check_path.py` 9 条 + 受控错误 3 条；门禁变异 87→88；全量/精度/A-B 见下。
+
 - **A2 两路径统一：预处理硬错误在 `tpc lint` / `tpc check` 下同类诊断、都不抛异常**（2026-10-17）：
   此前 `tpc lint` 直连 `LinterScanner`（**不过预处理**）、`tpc check` 走 `ProjectChecker`，同一 C 输入
   （缺头文件 / 循环 / 深度超限）两条 CLI 路径表现不同（check 静默 rc=0）。新增共用入口

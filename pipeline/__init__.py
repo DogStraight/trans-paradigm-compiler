@@ -37,6 +37,7 @@ from core.define import (
     DEFAULT_EXT_DIRS,
 )
 from core.config_registry import ConfigRegistry
+from core.errors import ConfigError
 from core.utils import ensure_dir, save_json
 from parser.rule_selector import RuleSelector
 
@@ -452,29 +453,41 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
 
 
 def _stage_macro_scan(ctx: _PipelineContext) -> None:
-    """宏指令扫描（仅提取宏表，不展开字符串）。"""
+    """宏指令扫描（仅提取宏表，不展开字符串）。
+
+    指令处理器的 fail-fast（如未闭合 `#define` 形参表）产生的 `ConfigError`
+    转**受控 error**（非异常冒泡）：CLI 打成 traceback 与"输入问题给诊断"
+    惯例相悖；报文点名原因、退出码 1，不静默。
+    """
     if not ctx.expand_macros:
         return
     ctx.raw_source = ctx.source  # 剪枝退化路径要原文（宏展开会改写 ctx.source）
     include_diags: list[dict] = []
-    (
-        ctx.macro_table,
-        ctx.func_macros,
-        _,
-        ctx.placeholders,
-        ctx.directive_lines,
-        ctx.source,
-        ctx.clean_line_map,
-    ) = scan_directives(
-        ctx.source,
-        ctx.rules_dir,
-        source_path=ctx.input_path,
-        search_dirs=ctx.include_dirs,
-        predefined=ctx.predefined,
-        undefine=ctx.undefine,
-        out_diags=include_diags,
-        out_macro_events=ctx.macro_events,
-    )
+    try:
+        (
+            ctx.macro_table,
+            ctx.func_macros,
+            _,
+            ctx.placeholders,
+            ctx.directive_lines,
+            ctx.source,
+            ctx.clean_line_map,
+        ) = scan_directives(
+            ctx.source,
+            ctx.rules_dir,
+            source_path=ctx.input_path,
+            search_dirs=ctx.include_dirs,
+            predefined=ctx.predefined,
+            undefine=ctx.undefine,
+            out_diags=include_diags,
+            out_macro_events=ctx.macro_events,
+        )
+    except ConfigError as exc:
+        ctx.result["preprocessor_errors"] = [
+            {"kind": "directive", "message": str(exc)}
+        ]
+        ctx.result["error"] = f"preprocessor: {exc}"
+        return
     if include_diags:
         # 预处理硬问题（include 缺文件/循环/深度 + 条件表达式/配对错误）：结构化暴露；
         # 硬错误同时写成受控 `error`（非异常，`tpc check` 可见），管线在扫描后即停。

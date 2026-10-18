@@ -56,8 +56,9 @@
 - [ ] **阶段 4 预处理器**：**A1 已收口**（`partial`：3 条已声明边界，证据见 gap ⑰）；**A2 在途**（细项与
       验收见 `TODO.md`「一」）。**已交付**：`#include` 真实实现 + 渲染剪枝、CLI 两路径硬错误面、宏形式
       语法诊断（linter）、**`#if`/`#elif` 整型常量表达式**（首片 B，声明驱动，gap ㉑）、**宏实参个数检查**
-      （插件侧 check 族 `checks/macro_args/`，`ast_optional` 事实型 postpass，gap ㉒）。**剩余**：check 路径
-      接 linter 语法诊断、token 级重扫、include 顺序偏差。**范围（作者
+      （插件侧 check 族 `checks/macro_args/`，`ast_optional` 事实型 postpass，gap ㉒）、**check 路径接
+      linter 语法诊断**（原始源宏定义形式语法面，两路径同函数，gap ㉓）。**剩余**：token 级重扫、
+      include 顺序偏差。**范围（作者
       2026-10-17）**：只做 **C 标准宏**（C99/C11/C23 §6.10），编译器扩展（`#pragma once`/`#include_next`/
       `__COUNTER__`/GNU `, ##`）不做；只做**文本级**（卫生宏/过程宏归语法结构与插件能力）；`#if` 求值语义
       放语言包声明面（已裁定）；"保留宏引用"输出档属 tpc 自身需求。

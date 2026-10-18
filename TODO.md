@@ -9,15 +9,13 @@
 ## 一、在途批次：阶段 4 A2（当前主线唯一在做的块）
 
 - [ ] **A2 预处理器收尾（剩余片）**：
-      **② check 路径接 linter 语法诊断**（两路径统一剩余）：`tpc lint` 报宏形式语法诊断（rc=1），
-      `tpc check` 仍「No issues found」（rc=0）⇒ check 的语法阶段未接 LinterScanner。
       **顺带**：**token 级重扫**（A1 两条已声明边界：替换后再现的调用 / 实参跨行），以 **A/B 0/144 +
       后缀链**为独立检查点。
       （已完成移出：`expand_macros` 默认口径统一 ✅、gap ⑮ 文档漂移 ✅、`#include` 真实实现 + 渲染剪枝 ✅、
       两路径统一（CLI 硬错误面）✅、**宏形式语法诊断（linter AST 前）✅**、**`#if`/`#elif` 整型常量表达式（首片 B）✅**、
-      **宏实参个数检查（插件侧 check 族，MAC001）✅**）
+      **宏实参个数检查（插件侧 check 族，MAC001）✅**、**check 路径接 linter 语法诊断（原始源宏定义形式语法面）✅**）
       **待修的已知偏差**：include 内容行排在 marker **前**（修正 ⇒ 内容行号 ±1 ⇒ verilog A/B 0→2/144）。
-      链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒；`preprocessor/README.md`「已知边界」
+      链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓；`preprocessor/README.md`「已知边界」
 
 ## 二、C 包缺陷（A2 之外，能做的）
 

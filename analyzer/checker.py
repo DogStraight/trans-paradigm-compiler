@@ -4,8 +4,11 @@
 （`analyzer/structure.py`，协议见语言包 `[structure] protocol`）建立跨文件索引，
 再对每个文件跑语义分析（插件 postpass 做联动检查），汇总**分阶段**错误：
 
-    stage=syntax   — linter 产出（token 级语法错误，阶段 1）
-    stage=semantic — analyzer 插件产出（parse 成功后符号级 + 跨文件联动检查）
+    stage=syntax   — linter 产出（token 级语法错误，阶段 1）；展开文本的 lint +
+                     **原始源宏定义形式语法面**（`structure.raw_source_macro_diags`，
+                     与 `tpc lint` 同一实现——定义行不进展开文本，只能查原文）
+    stage=semantic — analyzer 插件产出（parse 成功后符号级 + 跨文件联动检查；声明
+                     `ast_optional` 的事实型 postpass 在 parse 失败文件上也会跑）
 
 本文件只做**检查编排与诊断汇总**：结构提取的六个协作者（见 structure.py）、
 会话上下文 `StructureCtx`、语言包 `[structure]` 协议声明点全在那里；门面把它们

@@ -18,7 +18,8 @@ generate 条件求值都是**语言知识**，现归语言包插件精化项
 
     StructureCtx        会话上下文：环境开关 + 索引 + 协议读取（唯一状态归属点）
     ModuleIndexer       发现：入口 → 实例化链（+ 目录关键字文本扫描兜底）→ 索引
-    FilePipeline        单文件装配：读源 → 宏展开 → 解析 → 提单元（名字/文件/节点）
+    FilePipeline        单文件装配：读源 → 宏展开 → 语法阶段（展开文本 lint + 原始源
+                        宏定义形式语法）→ 解析 → 提单元
     ModuleExtractor     单元注册表（**只剩**名字 / 文件 / 声明节点——语言形状全在插件）
 
 组合方向（无环）：`FilePipeline` 含 `ModuleExtractor`；`ModuleIndexer` 含 `FilePipeline`；
@@ -102,6 +103,20 @@ class FileResult:
     # single_empty, params, line, column}；line 已回源到**原始源行**（1-based）、
     # column 为 0-based 宏名起列。供 postpass 检查消费（`CTX_MACRO_INVOCATIONS`）。
     macro_invocations: list = field(default_factory=list)
+
+
+def raw_source_macro_diags(source: str, rules_dir: str) -> list:
+    """原始源上的**宏定义形式语法**诊断（`tpc check` 语法阶段用）。
+
+    宏 `#define` 行在扫指令时被消费、不进展开后文本 ⇒ 展开文本的 lint 看不到
+    定义行的形式问题。故 check 的语法阶段额外在**原始源**上跑一次
+    `linter/macro_syntax.py`——与 `tpc lint` **同一实现、同一判定**（作者对齐：
+    形式化语法走 linter）；语言包未声明 `[macro_syntax]`（verilog）⇒ 空，零变化。
+    诊断坐标 = 原始源坐标（check 报告出口即原始源坐标系）。
+    """
+    from linter.macro_syntax import macro_syntax_diagnostics
+
+    return macro_syntax_diagnostics(source, rules_dir)
 
 
 # ── 常量表达式求值 ────────────────────────────────────────
@@ -259,6 +274,9 @@ class FilePipeline:
             source = f.read()
         fr = FileResult(path=path, source=source)
         shared = self._ctx.ensure_shared()
+        # 原始源（展开前）保留：宏**定义行**在扫指令时被消费、不进展开后文本，
+        # 其形式化语法只能在原文上检查（见下方"原始源语法面"）。
+        raw_source = source
 
         # 宏展开（真实工程含 `ifdef/`define；对齐 run_pipeline 语义——
         # scan_directives 提取宏表 + expand_tokens 纯文本展开，lex/lint/
@@ -275,7 +293,18 @@ class FilePipeline:
         # 阶段 1：语法检查（token 级）。有**阻断类**诊断 → 语义阶段跳过
         # （用户决策——保留原语义“语法错则语义不可靠”）；卫生/风格类
         # （blocking=False，如 ST 族排版提示）不影响解析，继续跑。
-        fr.lint_diags = shared["linter"].scan(source)
+        # **原始源语法面**（A2 ②，两路径统一）：宏定义的形式化语法（宏名/形参表/
+        # 宏体算子）在**展开前**的原文上检查——`#define` 行被扫指令消费后展开文本
+        # 里已无定义行，展开文本的 lint 看不到它们。与 `tpc lint` 走同一个函数
+        # （`linter/macro_syntax.py`，语言包 `[macro_syntax]` 声明驱动 ⇒ verilog
+        # 未声明 = 空、零变化）。位置是**原始源坐标**（与 check 报告出口一致）。
+        raw_macro_diags = raw_source_macro_diags(raw_source, self._ctx.rules_dir)
+        if any(d.blocking for d in raw_macro_diags):
+            # 宏定义形式错 = 语法阶段阻断：不再跑展开文本 lint（定义行被消费 /
+            # 展开可能已回退原文）——诊断已够定位，避免次生噪声与展开期异常。
+            fr.lint_diags = raw_macro_diags
+            return fr
+        fr.lint_diags = raw_macro_diags + shared["linter"].scan(source)
         # raw 位点（P3c/M2，**内部机制**）：紧接 scan 取走本轮"合格位点"，与
         # pipeline 侧**同形**接线（最小通道：纯 dict + 一份源文本，不传 context）。
         # 这里 lint 与词法都作用在**同一份 `source`**（上面的宏展开后文本）⇒ 位点

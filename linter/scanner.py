@@ -20,6 +20,7 @@ import os
 
 from core.define import GrammarRule, Token
 from core.config_registry import ConfigRegistry, declare_cfg
+from core.errors import ConfigError
 from core.token_protocol import (
     BRACKET_L_PREFIX,
     BRACKET_R_PREFIX,
@@ -276,9 +277,22 @@ class LinterScanner:
         """
         self._internal_warnings = []
         errors: list = []
-        macro_defs, func_macros, _, _, _, clean_source, _ = scan_directives(
-            source, self._rules_dir, predefined=predefined, undefine=undefine
-        )
+        try:
+            macro_defs, func_macros, _, _, _, clean_source, _ = scan_directives(
+                source, self._rules_dir, predefined=predefined, undefine=undefine
+            )
+        except ConfigError as exc:
+            # 指令处理器 fail-fast（如未闭合 `#define` 形参表）转**受控诊断**：
+            # lint API 的用户（CLI/编辑器）不该收到 traceback（同下方 lexer 防御
+            # 的姿态；报文点名原因、blocking ⇒ 退出码 1）。
+            return [
+                LintDiagnostic(
+                    range=(Position(0, 0), Position(0, 0)),
+                    message=f"preprocessor: {exc}",
+                    severity=1,
+                    code="preprocessor-error",
+                )
+            ]
         if macro_defs:
             # 宏体文本铺进流（与 pipeline 的 lint 输入、analyzer 的
             # `_expand_source` 同一条路）：语法是否成立由语法自己判。token 替身形态

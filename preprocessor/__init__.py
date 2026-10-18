@@ -37,20 +37,37 @@ def scan_diagnostics(
     按语言包策略产生：C 包声明 `error` ⇒ 有诊断；verilog 默认 `warn` / 未声明
     条件面 ⇒ 返回空（保持既有行为）。返回 `[{kind, message, line, column}]`；
     用户可见面（打印/退出码）由调用方负责。
+
+    `ConfigError` 转**受控诊断**（`kind="directive"`）：指令处理器的 fail-fast
+    （如未闭合的 `#define` 形参表）冒泡到 CLI 会打成 traceback，与本文档"不抛
+    异常"契约相悖；语言配置错误同样是 ConfigError——统一转受控报文（rc=1、
+    点名原因，仍非静默）。
     """
+    from core.errors import ConfigError
+
     diags: list[dict] = []
-    scan_directives(
-        source,
-        rules_dir,
-        source_path=source_path,
-        search_dirs=include_dirs,
-        out_diags=diags,
-    )
+    try:
+        scan_directives(
+            source,
+            rules_dir,
+            source_path=source_path,
+            search_dirs=include_dirs,
+            out_diags=diags,
+        )
+    except ConfigError as exc:
+        diags.append({"kind": "directive", "message": str(exc)})
     return [
         d
         for d in diags
         if d.get("kind")
-        in ("missing", "cycle", "depth", "condition", "condition-balance")
+        in (
+            "missing",
+            "cycle",
+            "depth",
+            "condition",
+            "condition-balance",
+            "directive",
+        )
     ]
 
 

@@ -900,6 +900,14 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        if False:  # 变异：不按定义时间线过滤\n",
         "test": "tests/languages/c/test_c_macro_args_checks.py",
     },
+    {
+        "why": "`tpc check` 语法阶段若不查**原始源**宏定义形式语法 ⇒ 定义行被扫指令消费后"
+               "展开文本里看不到它们，`tpc lint` 报的宏形式错在 check 里重新静默（两路径分叉）",
+        "file": "analyzer/structure.py",
+        "old": "        raw_macro_diags = raw_source_macro_diags(raw_source, self._ctx.rules_dir)\n",
+        "new": "        raw_macro_diags = []  # 变异：不查原始源宏语法面\n",
+        "test": "tests/languages/c/test_c_macro_syntax_check_path.py",
+    },
 ]
 
 
