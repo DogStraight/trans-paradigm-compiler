@@ -5,8 +5,8 @@
 字面量/注释整体算一个 token）——不直接调 `macro_expand` 私有函数。
 
 分三类：
-- `GREEN`：期望 = GCC 输出（应在 P1-1/P1-3 落地后全绿）；
-- `BOUNDARY`：**已声明边界**（token 级重扫 / 跨行调用未实现）⇒ 断言**当前输出**
+- `GREEN`：期望 = GCC 输出（含循环 #23 落地的**接缝重扫** P0-8/P0-10）；
+- `BOUNDARY`：**已声明边界**（实参跨行未实现）⇒ 断言**当前输出**
   （守卫式，不用 xfail——边界落地时必须显式改这里）；
 - `MULTILINE_COMMENT`：真实语料里块注释续行内的宏名不得展开（P1-3）。
 """
@@ -72,6 +72,11 @@ GREEN: list[tuple[str, str, str, str]] = [
     ("P2-2", "字符串化内注释→空格",
      "#define S(a) #a\nconst char *p = S(a /* c */ b);\n",
      'const char *p = "a b";'),
+    ("P0-8", "接缝重扫：替换出的函数宏名 + 源码实参（别名调用）",
+     "#define f(x) x+1\n#define g f\nint r = g(2);\n", "int r = 2+1;"),
+    ("P0-10", "接缝重扫：互递归别名（hideset 交集口径）",
+     "#define f(a) a*g\n#define g(a) f(a)\nint r = f(2)(9);\n",
+     "int r = 2*9*g;"),
 ]
 
 #: P1-1：`#__VA_ARGS__` 用**实参原文切片**（GCC 16.1.0 实测四例）
@@ -89,16 +94,11 @@ P11: list[tuple[str, str, str, str]] = [
      'const char *p = "";'),
 ]
 
-#: **已声明边界**：断言当前输出（token 级重扫 / 跨行调用落地时必须重新审视）
+#: **已声明边界**：断言当前输出（实参跨行未实现；落地时必须重新审视）
 BOUNDARY: list[tuple[str, str, str, str]] = [
-    ("P0-8", "边界①：替换结果里再现的调用不重扫（别名调用）",
-     "#define f(x) x+1\n#define g f\nint r = g(2);\n", "int r = f(2);"),
     ("P0-9", "边界②：实参跨行的调用不展开",
      "#define F(a,b) a+b\nint r = F(1,\n            2);\n",
      "int r = F(1, | 2);"),
-    ("P0-10", "边界①：替换结果里的函数宏调用不重扫",
-     "#define f(a) a*g\n#define g(a) f(a)\nint r = f(2)(9);\n",
-     "int r = 2*g(9);"),
 ]
 
 
@@ -124,8 +124,8 @@ def test_end_to_end_hash_varargs(cid: str, desc: str, src: str, expected: str) -
 def test_declared_boundary_guard(cid: str, desc: str, src: str, expected: str) -> None:
     """**已声明边界**：断言当前输出（守卫式，不用 xfail）。
 
-    边界落地（token 级重扫 / 跨行调用）时**必须显式改这里**——不要让"当前输出"
-    静默漂移。边界说明见 `preprocessor/README.md`「已知边界」。
+    边界落地（实参跨行）时**必须显式改这里**——不要让"当前输出"静默漂移。
+    边界说明见 `preprocessor/README.md`「已知边界」。
     """
     del cid
     actual = _engine(src)

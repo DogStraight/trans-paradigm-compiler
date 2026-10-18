@@ -150,17 +150,30 @@ def _is_ident(tok: _Tok) -> bool:
     return not tok.masked and bool(IDENT_RE.fullmatch(tok.text))
 
 
+def _skip_blank_or_comment(toks: list[_Tok], j: int, syntax: Any) -> int:
+    """`j` 起跳过**空白或注释** token（名字与 `(` 之间允许空白/注释，C99 §6.10.3）。
+
+    注释在翻译阶段 3 已换成空白（GCC 16.1.0 实测 `f /*c*/ (2)` 正常展开），
+    `_collect_args`/`_find_open` 的前导跳过必须把 masked 注释 token 当空白；
+    只跳注释（`_is_comment_text` 判定），字符串/字符字面量掩码仍是 token。
+    """
+    while j < len(toks) and (
+        not toks[j].text.strip()
+        or (toks[j].masked and _is_comment_text(toks[j].text, syntax))
+    ):
+        j += 1
+    return j
+
+
 def _collect_args(
-    toks: list[_Tok], start: int, call_args: MacroCallArgs
+    toks: list[_Tok], start: int, call_args: MacroCallArgs, syntax: Any = None
 ) -> tuple[list[list[_Tok]] | None, int]:
     """从 `start`（名字之后）收集实参 → (实参 token 列表, 闭括号后下标)。
 
-    形如 `( a , b(c) )`：跳过名字与 `(` 间空白；顶层分隔符切分；括号对配平计深。
+    形如 `( a , b(c) )`：跳过名字与 `(` 间空白/注释；顶层分隔符切分；括号对配平计深。
     非调用形态（没有开括号 / 未配平）→ (None, start)（调用方按非调用处理）。
     """
-    j = start
-    while j < len(toks) and not _is_ident(toks[j]) and not toks[j].text.strip():
-        j += 1
+    j = _skip_blank_or_comment(toks, start, syntax)
     if j >= len(toks) or toks[j].text != call_args.open:
         return None, start
     openers = {o for o, _ in call_args.nesting}
@@ -265,12 +278,10 @@ def _tokenize_masked(
 
 
 def _find_open(
-    toks: list[_Tok], start: int, call_args: MacroCallArgs
+    toks: list[_Tok], start: int, call_args: MacroCallArgs, syntax: Any = None
 ) -> int | None:
-    """名字之后（跳过空白）的开括号 token 下标；非调用形态 → None（同 `_collect_args`）。"""
-    j = start
-    while j < len(toks) and not _is_ident(toks[j]) and not toks[j].text.strip():
-        j += 1
+    """名字之后（跳空白/注释）的开括号 token 下标；非调用形态 → None（同 `_collect_args`）。"""
+    j = _skip_blank_or_comment(toks, start, syntax)
     if j < len(toks) and toks[j].text == call_args.open:
         return j
     return None
@@ -321,6 +332,7 @@ def _call_raw_variadic(
     func_macros: dict[str, list[str]],
     operators: MacroOperators | None,
     macro_defs: dict[str, str],
+    syntax: Any = None,
 ) -> str | None:
     """token 流里的调用 → 变参区原文拼写（`#__VA_ARGS__` 用）；不适用 → None。"""
     if operators is None or operators.variadic is None:
@@ -329,7 +341,7 @@ def _call_raw_variadic(
         return None
     if not _body_mentions(macro_defs.get(name, ""), operators.variadic, operators):
         return None
-    open_idx = _find_open(toks, name_idx + 1, call_args)
+    open_idx = _find_open(toks, name_idx + 1, call_args, syntax)
     if open_idx is None or after <= open_idx:
         return None
     named = [p for p in func_macros[name] if p != "..."]
@@ -348,7 +360,7 @@ def variadic_raw_text(
     给文本层（`_expand.py::_match_one`）用：`#__VA_ARGS__` 必须取原文（P1-1）。
     """
     toks = _tokenize_masked(text, operators, syntax)
-    open_idx = _find_open(toks, 0, call_args)
+    open_idx = _find_open(toks, 0, call_args, syntax)
     if open_idx is None:
         return None
     return _variadic_raw(toks, open_idx, named_count, call_args)
@@ -389,7 +401,7 @@ def _expand_one(
                 out.append(tok)
                 i += 1
                 continue
-            args, after = _collect_args(work, i + 1, call_args)
+            args, after = _collect_args(work, i + 1, call_args, syntax)
             if args is None:
                 out.append(tok)
                 i += 1
@@ -399,7 +411,8 @@ def _expand_one(
                 out.extend(work[i:])
                 break
             raw_variadic = _call_raw_variadic(
-                work, i, after, name, call_args, func_macros, operators, macro_defs
+                work, i, after, name, call_args, func_macros, operators, macro_defs,
+                syntax,
             )
             body = _substitute(
                 macro_defs.get(name, ""),
@@ -703,7 +716,7 @@ def collect_args_tokens(
     （P0-B；调用点不再走文本级 `MacroCallArgs.match_args/split`）。
     """
     toks = _tokenize_masked(text, operators, syntax)
-    args, after = _collect_args(toks, 0, call_args)
+    args, after = _collect_args(toks, 0, call_args, syntax)
     if args is None:
         return None
     return args, sum(len(t.text) for t in toks[:after])
@@ -726,9 +739,44 @@ def substitute_call_tokens(
     `raw_args` = 调用**实参列表原文**（名字之后到闭括号，含括号）里变参区的
     原文切片，供 `#__VA_ARGS__` 用（`V(a, b)` → `"a, b"` 的逗号后空白不丢）。
     """
+    return join(
+        substitute_call_tokens_tokens(
+            name,
+            args,
+            macro_defs,
+            func_macros,
+            call_args,
+            operators=operators,
+            syntax=syntax,
+            budget=budget,
+            raw_args=raw_args,
+        )
+    )
+
+
+def substitute_call_tokens_tokens(
+    name: str,
+    args: list[list[_Tok]],
+    macro_defs: dict[str, str],
+    func_macros: dict[str, list[str]],
+    call_args: MacroCallArgs | None,
+    *,
+    operators: MacroOperators | None = None,
+    syntax=None,
+    budget: int = DEFAULT_BUDGET,
+    raw_args: str | None = None,
+    hideset: frozenset[str] = frozenset(),
+    prefix: str = "",
+) -> list[_Tok]:
+    """`substitute_call_tokens` 的 **token 返回**版本（接缝重扫用：保留 hideset）。
+
+    `hideset` = 调用区间的 hideset **交集**（Prosser：替换文本 hide = 交集 ∪
+    {宏名}）；缺省 ∅ ⇒ 与文本层原口径 `{name}` 一致。`prefix` = 调用前缀文本
+    （替换文本/实参内部再展开用；C 为 `""`，verilog 为声明前缀）。
+    """
     body = macro_defs.get(name)
     if body is None:
-        return ""
+        return []
     text = _substitute(
         body,
         func_macros.get(name, []),
@@ -737,20 +785,18 @@ def substitute_call_tokens(
         func_macros,
         call_args,
         budget,
-        "",
+        prefix,
         operators,
         syntax,
         raw_variadic=raw_args,
     )
-    hide = frozenset({name})
+    hide = hideset | {name}
     toks = [
         replace(t, hide=t.hide | hide)
         for t in _tokenize_masked(text, operators, syntax)
     ]
-    return join(
-        _expand_one(
-            toks, macro_defs, func_macros, call_args, budget, "", operators, syntax
-        )
+    return _expand_one(
+        toks, macro_defs, func_macros, call_args, budget, prefix, operators, syntax
     )
 
 
@@ -776,6 +822,38 @@ def expand_text(
     `hideset` = **初始 hideset**（种子）：调用点替换传 `{name}` 防自递归
     ——公开 API，调用方/测试不必碰私有函数。
     """
+    return join(
+        expand_text_tokens(
+            text,
+            macro_defs,
+            func_macros,
+            call_args,
+            prefix=prefix,
+            budget=budget,
+            operators=operators,
+            syntax=syntax,
+            hideset=hideset,
+        )
+    )
+
+
+def expand_text_tokens(
+    text: str,
+    macro_defs: dict[str, str],
+    func_macros: dict[str, list[str]],
+    call_args: MacroCallArgs | None = None,
+    *,
+    prefix: str = "",
+    budget: int = DEFAULT_BUDGET,
+    operators: MacroOperators | None = None,
+    syntax=None,
+    hideset: frozenset[str] = frozenset(),
+) -> list[_Tok]:
+    """`expand_text` 的 **token 返回**版本（接缝重扫用：保留各 token 的 hideset）。
+
+    语义与参数同 `expand_text`（同一实现，无第二套）；差别只在返回值 = token 列表，
+    供文本层在"替换文本 + 源码后续"的接缝处继续重扫。
+    """
     ops = operators
     masks = (
         mask_spans(
@@ -790,8 +868,19 @@ def expand_text(
     toks = tokenize(text, ops, masks)
     if hideset:
         toks = [replace(t, hide=t.hide | hideset) for t in toks]
-    return join(
-        _expand_one(
-            toks, macro_defs, func_macros, call_args, budget, prefix, ops, syntax,
-        )
+    return _expand_one(
+        toks, macro_defs, func_macros, call_args, budget, prefix, ops, syntax,
     )
+
+
+def collect_args_at(
+    toks: list[_Tok], start: int, call_args: MacroCallArgs, syntax: Any = None
+) -> tuple[list[list[_Tok]], int] | None:
+    """从 token 流 `start` 处收实参（接缝重扫用；与 `_collect_args` 同一实现）。
+
+    非调用形态（无开括号/未配平）→ None（与 `collect_args_tokens` 同口径）。
+    """
+    args, after = _collect_args(toks, start, call_args, syntax)
+    if args is None:
+        return None
+    return args, after

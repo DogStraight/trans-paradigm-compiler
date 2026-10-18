@@ -284,3 +284,51 @@ def test_multiline_call_not_reported(tmp_path, c_check) -> None:
         "#define F(a, b) a + b\nint x = F(1,\n            2);\n",
     )
     assert _mac_diags(fr) == []
+
+
+# ── 接缝重扫出的调用（循环 #23）────────────────────────────
+
+
+def test_junction_call_arity_is_checked(tmp_path, c_check) -> None:
+    """别名宏在接缝处展开出的函数宏调用也进事实面 ⇒ 实参个数照常判。"""
+    fr = _run(
+        tmp_path,
+        "#define f(a, b) a + b\n#define g f\nint x = g(1, 2, 3);\n",
+    )
+    diags = _mac_diags(fr)
+    assert len(diags) == 1
+    assert "f" in diags[0]["message"]
+    assert "形参 2" in diags[0]["message"] and "实参 3" in diags[0]["message"]
+
+
+def test_junction_and_outer_call_same_point_two_facts(tmp_path, c_check) -> None:
+    """已知形态：外层调用与接缝调用**同一文本点**各一条事实/诊断（不合并）。
+
+    判定按事实（每事实至多一条）；同一 (line, column) 可有多条——外层宏自己的
+    实参错、接缝出的内层宏也错时两条都报（GCC 同样两层都诊断）。
+    """
+    fr = _run(
+        tmp_path,
+        "#define g() f\n#define f(a, b) a + b\nint x = g(2)(9);\n",
+    )
+    diags = _mac_diags(fr)
+    names = [d["message"] for d in diags]
+    assert len(diags) == 2, names
+    assert any("g" in m for m in names) and any("f" in m for m in names)
+    positions = {
+        (d["range"]["start"]["line"], d["range"]["start"]["character"])
+        for d in diags
+    }
+    assert len(positions) == 1  # 同一文本点（外层调用起点）
+
+
+def test_junction_use_before_define_boundary(tmp_path, c_check) -> None:
+    """已声明边界：接缝事实按定义时间线过滤 ⇒ 定义前的 `g(2)` 展开但无 MAC001。
+
+    展开器仍用最终宏表（既有近似，接缝面随之扩大）；检查侧保持"调用点时点"
+    口径不误报。落地时若改顺序语义，须同步改本守卫。
+    """
+    fr = _run(tmp_path, "int x = g(2);\n#define f(a, b) a + b\n#define g f\n")
+    assert fr["parse_ok"] is False
+    assert _mac_diags(fr) == []
+

@@ -181,6 +181,6 @@ def test_call_in_inactive_condition_is_not_recorded() -> None:
 def test_multiline_call_is_not_recorded() -> None:
     """已声明边界（A1 ②）：实参跨行的调用不展开 ⇒ 无事实。
 
-    守卫式断言当前行为；边界落地（token 级重扫）时必须显式改这里。
+    守卫式断言当前行为；边界落地（跨行实参）时必须显式改这里。
     """
     assert _slots("#define F(a,b) a+b\nint x = F(1,\n            2);\n") == []

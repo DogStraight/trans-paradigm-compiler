@@ -908,6 +908,28 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        raw_macro_diags = []  # 变异：不查原始源宏语法面\n",
         "test": "tests/languages/c/test_c_macro_syntax_check_path.py",
     },
+    {
+        "why": "接缝重扫若失效（替换文本末尾的函数宏名不再与源码后续 `(...)` 合成调用）⇒ "
+               "`#define g f` + `g(2)` 停在 `f(2)`、`f(2)(9)` 停在 `2*g(9)`（C99 §6.10.3.4 "
+               "替换列表连同其余源码重扫描缺失；verilog 前缀接缝同）",
+        "file": "preprocessor/_expand.py",
+        "old": "    budget = int(_get_expand_config().get(\"max_iterations\", 128))\n",
+        "new": "    return body_toks, end  # 变异：禁接缝重扫\n",
+        "test": "tests/engine/preprocessor/test_macro_rescan.py",
+    },
+    {
+        "why": "接缝处的 hideset 若不取**交集**（名字 token ∩ 实参/闭括号 token）⇒ 互递归"
+               "别名 `f(2)(9)` 停在 `2*f(9)`（GCC `2*9*g`）——实参来自源码、hide 为空，"
+               "交集才能让名字 token 的 hide 不传给替换文本",
+        "file": "preprocessor/_expand.py",
+        "old": "        hideset = cand.hide\n"
+               "        for arg in args:\n"
+               "            for t in arg:\n"
+               "                hideset = hideset & t.hide\n"
+               "        hideset = hideset & rest_toks[after - 1].hide\n",
+        "new": "        hideset = cand.hide  # 变异：接缝 hideset 不取交集\n",
+        "test": "tests/engine/preprocessor/test_macro_rescan.py",
+    },
 ]
 
 

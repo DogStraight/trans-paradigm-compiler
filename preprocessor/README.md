@@ -113,6 +113,15 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 派生（不另写标识符字符类）；`[expand] max_iterations` 只是**资源上限守卫**
 （同一算法上的预算，不是第二套算法）。
 
+**接缝重扫**（`_expand.py::_rescan_junction`，循环 #23）：C99 §6.10.3.4 要求替换
+列表**连同其余源码**一起重扫描。文本层在"宏体 + 源码后续"的接缝处补齐：
+宏体展开结果的**最后一个函数宏名**（前缀语言还要求其前是声明的前缀 token）与源码
+后续（跳空白/注释）的 `(...)` 合成一次新调用继续展开——`#define g f` + `g(2)` ⇒
+`2+1`；`f(2)(9)` ⇒ `2*9*g`。接缝调用的 hideset 按 **Prosser 交集口径**
+（名字 token ∩ 实参/闭括号 token；替换文本 hide = 交集 ∪ {宏名}）；消费的源码字符并入该调用区间（区域/锚/行映射不新增机制，输出行数
+不变）；接缝处展开出的函数宏调用**照记调用点事实**（MAC001 的收入面）。名字与
+`(` 之间允许注释（翻译阶段 3 换成空白，`_collect_args` 一并跳过——GCC 实测一致）。
+
 **函数宏调用点事实（引擎给 check 族的输入）**：`expand_tokens(..., out_invocations=[...])`
 在函数宏调用被识别时追加一项 `{name, slots, single_empty, params, line, column}`
 （`slots` = 实参槽数：顶层逗号 + 1，`F()` 也是 1 槽；`single_empty` = 单槽时该槽
@@ -136,12 +145,13 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 
 已声明边界（端到端用例里以**守卫断言**锁住，落地时必须显式改断言）：
 
-- **替换结果里再出现的调用不重扫**（token 级 hideset 重扫留 A2）：`#define g f` +
-  `#define f(x) x+1` + `g(2)` ⇒ 当前 `f(2)`（GCC `2+1`）；`#define f(a) a*g` +
-  `#define g(a) f(a)` + `f(2)(9)` ⇒ 当前 `2*g(9)`（GCC `2*9*g`）。
 - **实参跨行的调用不展开**（替换区间跨行会改输出行数/行映射，冻结契约面未动）：
   `#define F(a,b) a+b` + `int r = F(1,` + `            2);` ⇒ 当前原样保留
   （GCC `int r = 1+2;`）。
+- **名字与实参括号跨行**（`g` + 换行 + `(2)`）⇒ 逐行展开不接（GCC 会展开；与上条
+  同属行映射面，随跨行实参一起落地）。
+- **接缝重扫沿用最终宏表**（既有近似）：定义前/`#undef` 后的调用若在接缝处形成
+  新调用，展开器仍会重扫（检查侧按定义时间线过滤，不误报）。
 - 宏算子字符串化按**实参原文切片**（`#__VA_ARGS__` 的间隔空白保留：`V(a ,  b)` ⇒
   `"a , b"`，与 GCC 一致）；体展开里的嵌套调用无原文时退回 token 拼接。
 
@@ -163,10 +173,10 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 
 | 文件 | 一句话 |
 |------|--------|
-| `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 + 函数宏**调用点事实**（`out_invocations`；行/列为 clean 源坐标） |
+| `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 + 函数宏**调用点事实**（`out_invocations`；行/列为 clean 源坐标）+ **接缝重扫**（`_rescan_junction`） |
 | `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析：前缀 token 文本 + 名字候选 + 实参形态 + `call_shape`/算子；`[macro_syntax]` 定义侧形式语法，未声明 ⇒ 不启用） |
 | `macro_timeline.py` | 宏**定义/取消事件**时间线（调用点时点可见形参表；展开用最终宏表，检查侧顺序语义靠它修正） |
-| `macro_expand.py` | 宏展开核心（hideset 重扫描 + `#`/`##`/变参 + 掩码；`#` 字符串化的 token 间空白折叠） |
+| `macro_expand.py` | 宏展开核心（hideset 重扫描 + `#`/`##`/变参 + 掩码；token 返回变体供接缝重扫） |
 | `condition.py` | 条件指令（`#if`/`#elif`）**整型常量表达式求值**（`[condition]` 声明驱动：算子/常量/字符/`defined`；未声明 ⇒ 不接线） |
 | `_reverse.py` | 宏反向（统一位置桥：锚 + 原文回插） |
 | `_bridge.py` | 统一位置桥（Anchor Bridge）——锚 + 原文消耗式回插引擎 |

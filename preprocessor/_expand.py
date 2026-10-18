@@ -1040,7 +1040,7 @@ def _raw_variadic_for(
 
 
 def _match_one(
-    ctx: "_MacroExpandCtx", line: str, m
+    ctx: "_MacroExpandCtx", line: str, m, line_no: int = 0
 ) -> tuple[int, str, str, bool, str, int, bool] | None:
     """单个正则命中 → `(end, body, name, is_func, args_text, slots, single_empty)`；
     不可展开 → None。
@@ -1053,6 +1053,11 @@ def _match_one(
     `slots` = 实参槽数（顶层分隔符数 + 1；`F()` 也是 1 槽）；
     `single_empty` = 仅当 `slots == 1` 时该槽是否**不含预处理 token**（空白/注释）。
     两者都是**通用事实**：个数合不合规由语言包 check 族判（引擎不判）。
+
+    **接缝重扫**（C 标准 §6.10.3.4：替换列表连同其余源码一起重扫描）：宏体
+    展开后的**最后一个函数宏名**可能与源码后续 `(...)` 合成新调用（`#define g f`
+    + `g(2)` → `f(2)` 再展开）⇒ 交给 `_rescan_junction`，消费的源码字符并入
+    `end`。`line_no` 只用于重扫调用的**调用点事实**记录。
     """
     name = m.group(1)
     if ctx.call_args is not None and name in ctx.func_macros:
@@ -1063,7 +1068,8 @@ def _match_one(
             return None  # 函数宏名未调用（P0-6/7；不得回退对象宏）
         args, consumed = got
         close_idx = m.end() + consumed
-        body = macro_expand.substitute_call_tokens(
+        arg_text = line[m.end() : close_idx]
+        body_toks = macro_expand.substitute_call_tokens_tokens(
             name,
             args,
             ctx.macro_defs,
@@ -1071,22 +1077,34 @@ def _match_one(
             ctx.call_args,
             operators=ctx.operators,
             syntax=ctx.syntax,
-            raw_args=_raw_variadic_for(
-                ctx, name, line[m.end() : close_idx], ctx.call_args
-            ),
+            raw_args=_raw_variadic_for(ctx, name, arg_text, ctx.call_args),
+            prefix=ctx.call_prefix if ctx.call_prefix is not None else "",
         )
-        end = _extend_macro_chain(line, close_idx, ctx.macro_re, ctx.suffix_re)
+        end = close_idx
+        body_toks, end = _rescan_junction(
+            ctx, body_toks, line, end, line_no, m.start()
+        )
+        # 接缝消费后再做宏链扩展（后缀/相邻宏调用并入同一区间；顺序 = 接缝→链）
+        end = _extend_macro_chain(line, end, ctx.macro_re, ctx.suffix_re)
         slots = len(args)
         single_empty = slots == 1 and macro_expand.arg_tokens_blank(
             args[0], ctx.syntax
         )
-        return end, body, name, True, line[m.end() : close_idx], slots, single_empty
+        return (
+            end,
+            macro_expand.join(body_toks),
+            name,
+            True,
+            arg_text,
+            slots,
+            single_empty,
+        )
     body = ctx.macro_defs.get(name)
     if body is None:
         return None
     # 对象宏：替换文本由 hideset 展开器**现算**（初始 hideset={name} 防自递归；
     # 体里再出现的宏调用在此一并展开 ⇒ P0-8/P0-10/P2-1 同一根因消解）
-    expanded = macro_expand.expand_text(
+    body_toks = macro_expand.expand_text_tokens(
         body,
         ctx.macro_defs,
         ctx.func_macros,
@@ -1097,8 +1115,115 @@ def _match_one(
         syntax=ctx.syntax,
         hideset=frozenset({name}),
     )
-    end = _extend_macro_chain(line, m.end(), ctx.macro_re, ctx.suffix_re)
-    return end, expanded, name, False, "", 0, False
+    end = m.end()
+    body_toks, end = _rescan_junction(ctx, body_toks, line, end, line_no, m.start())
+    end = _extend_macro_chain(line, end, ctx.macro_re, ctx.suffix_re)
+    return end, macro_expand.join(body_toks), name, False, "", 0, False
+
+
+def _last_meaningful(body_toks: list) -> int:
+    """宏体里最后一个有意义 token 下标（跳纯空白；无 → -1）。"""
+    i = len(body_toks) - 1
+    while i >= 0 and not body_toks[i].text.strip():
+        i -= 1
+    return i
+
+
+def _rescan_junction(
+    ctx: "_MacroExpandCtx",
+    body_toks: list,
+    line: str,
+    end: int,
+    line_no: int,
+    call_col: int,
+) -> tuple[list, int]:
+    """**接缝重扫**：宏体末尾的函数宏名 + 源码后续 `(...)` → 合成一次调用继续展开。
+
+    标准依据（C99 §6.10.3.4p2）：宏替换后"替换列表**连同其余源码**一起重扫描"
+    ⇒ `#define g f` 后 `g(2)` 里替换出的 `f` 与源码 `(2)` 在接缝处形成 `f(2)`，
+    应继续展开（GCC 16.1.0 实测 `2 +1`）；`#define f(a) a*g` + `#define g(a) f(a)`
+    + `f(2)(9)` ⇒ `2*9*g`。本函数只处理这一条接缝：宏体最后一个有意义 token 是
+    **可展开的函数宏名**（前缀语言还要求其前是声明的调用前缀 token），且源码后续
+    （跳空白/注释）以实参开括号开始。消费的源码字符并入该调用的 `end`——区域/锚/
+    行映射**不新增机制**（输出行数不变）。循环到不再形成接缝，预算
+    `max_iterations` 兜底；函数宏调用点事实照记（供语言包 check 族）。
+
+    不处理：实参跨行（A1 已声明边界②：替换区间跨行会改输出行数/行映射，冻结
+    契约面未动）；宏体**内部**的替换重扫已由 `macro_expand` 的 hideset 引擎负责。
+    """
+    budget = int(_get_expand_config().get("max_iterations", 128))
+    prefix = ctx.call_prefix if ctx.call_prefix is not None else ""
+    while budget > 0:
+        budget -= 1
+        li = _last_meaningful(body_toks)
+        if li < 0:
+            break
+        cand = body_toks[li]
+        if cand.masked or not IDENT_RE.fullmatch(cand.text):
+            break
+        if prefix:
+            if li == 0 or body_toks[li - 1].text != prefix:
+                break
+            call_start = li - 1  # 前缀 token 随调用一并消费
+        else:
+            call_start = li
+        if cand.text not in ctx.macro_defs or cand.text in cand.hide:
+            break
+        if cand.text not in ctx.func_macros or ctx.call_args is None:
+            break
+        rest = line[end:]
+        rest_toks = macro_expand.tokenize(
+            rest,
+            ctx.operators,
+            macro_expand.mask_spans(
+                rest, ctx.string_delimiters, ctx.escape, ctx.syntax
+            ),
+        )
+        got = macro_expand.collect_args_at(rest_toks, 0, ctx.call_args, ctx.syntax)
+        if got is None:
+            break
+        args, after = got
+        consumed = sum(len(t.text) for t in rest_toks[:after])
+        # hideset 交集（Prosser）：调用区间各 token 的 hide 集交集 ∪ {宏名}
+        hideset = cand.hide
+        for arg in args:
+            for t in arg:
+                hideset = hideset & t.hide
+        hideset = hideset & rest_toks[after - 1].hide
+        named = [p for p in (ctx.func_macros.get(cand.text) or []) if p != "..."]
+        expanded = macro_expand.substitute_call_tokens_tokens(
+            cand.text,
+            args,
+            ctx.macro_defs,
+            ctx.func_macros,
+            ctx.call_args,
+            operators=ctx.operators,
+            syntax=ctx.syntax,
+            raw_args=macro_expand.variadic_raw_text(
+                rest[:consumed],
+                ctx.call_args,
+                len(named),
+                ctx.operators,
+                ctx.syntax,
+            ),
+            hideset=hideset,
+            prefix=prefix,
+        )
+        if ctx.invocations is not None:
+            ctx.invocations.append(
+                {
+                    "name": cand.text,
+                    "slots": len(args),
+                    "single_empty": len(args) == 1
+                    and macro_expand.arg_tokens_blank(args[0], ctx.syntax),
+                    "params": list(ctx.func_macros.get(cand.text, ())),
+                    "line": line_no,
+                    "column": call_col,
+                }
+            )
+        body_toks = body_toks[:call_start] + expanded
+        end += consumed
+    return body_toks, end
 
 
 def _line_masks(
@@ -1163,7 +1288,7 @@ def _collect_macro_matches(
             or (m.end() < len(line) and _is_ident_char(line[m.end()]))
         ):
             continue  # 裸调用须整词匹配（`FOOBAR` 不被 `FOO` 误伤）
-        hit = _match_one(ctx, line, m)
+        hit = _match_one(ctx, line, m, line_no)
         if hit is None:
             continue
         end, body, name, is_func, args_text, slots, single_empty = hit

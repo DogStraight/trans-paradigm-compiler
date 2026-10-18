@@ -1,8 +1,8 @@
 # Gap — C 预处理器范围基线（宏与预处理指令集；`ROADMAP.md` 阶段 4）
 
 - 状态：**A1 收口**（`partial`：3 条已声明边界，见 ⑰）；**A2 大部分交付**：默认口径（⑬）、`#include`（⑱）、
-  CLI 两路径（⑲）、宏形式语法诊断（⑳）、**`#if` 族**（㉑）、**宏实参个数检查**（㉒）、**check 接语法诊断**（㉓）；
-  剩 token 重扫 / include 顺序（`TODO.md` 一）。范围基线 = 作者 2026-10-17 裁定（只做 **C 标准宏**、文本级；卫生宏=语法结构、
+  CLI 两路径（⑲）、宏形式语法诊断（⑳）、**`#if` 族**（㉑）、**宏实参个数检查**（㉒）、**check 接语法诊断**（㉓）、
+  **接缝重扫**（㉔）；剩实参跨行 / include 顺序（`TODO.md` 一）。范围基线 = 作者 2026-10-17 裁定（只做 **C 标准宏**、文本级；卫生宏=语法结构、
   过程宏=能力位，均不在此范围）。
 - 关联：`ROADMAP.md`「C 语言包」阶段 4；`preprocessor/README.md`（跨语言文本能力原型）
 - 接受面证据：`tools/c_acceptance.py`（当前 **42 条 / 接受 42 / 空洞 0**）——**口径注**：两条预处理
@@ -137,23 +137,17 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 ⑭ **拆步信号修正（因 ⑪ 放宽判据）**：`--only-gaps` 计数在放宽后**不可再用**作拆步信号——`#include <stdio.h>` 在 A1 阶段（`include` 未接线、只 `print` 警告）会因"被消费 ⇒ 空 TU ⇒ 接受"而**显示 0 空洞**，**掩盖"未实现"**。修正：**A1 信号 = 引擎核判据**（E.1 与 GCC 对拍的正样本 + E.4 的 5 条缺陷态变红）；**A2 信号 = `#include` 被真实处理**（`path_forms` 解析生效 + 缺文件**报诊断** + 内容确实被消费进流），**不是"空洞归零"**。
 ⑮ **文档漂移复核（2026-10-17 A2 期间已收口）**：task-50 的 5 处已全部更新（档首状态 → A1 收口；缺口表 ①② → 能；「`[symbol.base]` 无 `#`」根因 → 已消除；首片 A 判据 → 按 ⑭ 口径；gap-language-pack-scope 已知偏差 #5 → 现状）。
 
-⑯ **A1 交付实录（循环 #15）——已被 ⑰ 更正，仅留历史指针**：首版判据不成立（审计 15 反例；根因 = 双路径），A1 最终见 ⑰；A2 诊断面：⑳ + ㉒ + ㉓。
-
 ⑰ **A1 返工收口（2026-10-17 同日，循环 #16）**：审计 15 反例 → **3 偏差**，全部为已声明边界。
 **已修**（均以端到端用例锁住）：`#`/`##` 两侧空格；调用点**token 级实参切分**（字面量/注释内逗号与括号不当分隔/收束符）；裸调用**长名优先**；
 函数宏无 `(` 不展开（不回退对象宏）；`#undef` 清形参表；**去掉宏体预展开**（替换文本一律 hideset 现算，取消第二条路径）；跨行块注释
 **整段掩码**（P1-3）；`#__VA_ARGS__` **实参原文切片**（P1-1；见「诚实边界」末条）。
-**边界①（P0-8/P0-10）替换结果里再现的调用不重扫**：单趟展开下文本层插入后不再做 token 重扫。
-**案 (A)**（整行一次 token 展开 + 回调保位置映射）在**实现前**判定撞 verilog 后缀链（`_extend_macro_chain`/
-`suffix_after_call` 在替换前扩调用区间，ADR-0017）⇒ **裁定 (B)**：单趟保留、边界声明，token 级重扫**归 A2
-「两路径统一」**，以 **verilog A/B 0/144 + 后缀链**为独立检查点。
+**边界①（P0-8/P0-10）替换结果里再现的调用不重扫**：当时裁定 (B) 单趟保留（案 (A) 整行 token 展开撞 verilog
+后缀链/ADR-0017）；2026-10-18 循环 #23 已以**接缝重扫**落地（见 ㉔），检查点 = verilog A/B 0/144 + 后缀链。
 **边界②（P0-9）实参跨行的调用不展开**：替换区间跨行 ⇒ 输出行数变化 ⇒ 触行映射/`out_to_src` **冻结契约面**，A1 不动。
 **证据**：边界守卫 = `test_c_macro_end_to_end.py` 18 条（守卫式断言当前输出、不用 xfail）；门禁变异 **65→69**（4 条端到端，逐条 `--only` 变红）；
 审计 3 偏差；`preprocessor` 186；A/B **0/144**；pyright **0**。**教训**：双路径只能靠**同一算法**收敛；边界用**守卫断言**锁住（不用 xfail）。
 
-⑱ **A2 ②③ 落档（循环 #17）**：`#include` 机制真实（内容本就在流里）——① 诊断策略声明面（`on_missing`/`max_depth`；C=error/32、verilog
-默认 warn ⇒ A/B 0/144）② 渲染前剪枝（分析面见内容 / 渲染面只出原行；无法整节点覆盖 ⇒ 整文件原文退化）③ CLI 两路径（`scan_diagnostics`
-+ `_preprocessor_gate` ⇒ 同类诊断/同 rc=1）。**剩余**：include 顺序偏差（修则 A/B 0→2/144）、lint 吃未展开源码；check 语法阶段已接（㉓）。证据：`test_c_include_e2e.py` 10 条、`c_acceptance` 42/0。
+⑱ **A2 ②③ 落档（循环 #17）**：`#include` 机制真实（内容本就在流里）——① 诊断策略声明面（`on_missing`/`max_depth`；C=error/32、verilog 默认 warn ⇒ A/B 0/144）② 渲染前剪枝（分析面见内容 / 渲染面只出原行；无法整节点覆盖 ⇒ 整文件原文退化）③ CLI 两路径（`scan_diagnostics` + `_preprocessor_gate` ⇒ 同类诊断/同 rc=1）。**剩余**：include 顺序偏差（修则 A/B 0→2/144）、lint 吃未展开源码；check 语法阶段已接（㉓）。证据：`test_c_include_e2e.py` 10 条、`c_acceptance` 42/0。
 
 ⑳ **A2 ④ 形式化宏语法检查落地 linter（2026-10-17；作者对齐：形式化语法走 linter、语义级走 check 插件族）**：新增
 `linter/macro_syntax.py` —— 对**原始源码**检 `#define` 形式约束（宏名/形参表/宏体 `#`·`##`），每类带位置 blocking 诊断；
@@ -175,10 +169,17 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 段 1903/1904/1918；gcc 16.1 四档对拍），判定 = 非变参 `slots==形参数`（n=0 仅 `Z()`）、变参 `slots>=具名数` ⇒ 先前静默
 的多给 / 零参传参 / 变参缺具名现报；少给在 parse 失败文件上仍报（ast_optional）。证据：`test_macro_call_sites.py` 17、
 `test_macro_timeline.py` 13、`test_c_macro_args_checks.py` 19、`test_postpass_ast_optional.py` 5、变异 82→87。
-**边界**：变参恰好具名（C23 起接受）、宏体替换产生的嵌套调用、`#if` 表达式内调用、实参跨行、被包含文件内调用点
+**边界**：变参恰好具名（C23 起接受）、宏体**内部**替换产生的嵌套调用（接缝处的已由 ㉔ 覆盖）、`#if` 表达式内调用、实参跨行、被包含文件内调用点
 （头文件定义按 include 行快照）、行拼接段内调用点、`#undef` 之前的调用点（展开器不展开 ⇒ 无事实）。
 
 ㉓ **A2 ② 交付：check 路径接 linter 语法诊断（原始源宏定义形式语法面；2026-10-18，循环 #22）**：`tpc lint` 早报宏定义形式错（rc=1）而 `tpc check`静默（rc=0）——check 语法阶段 lint 的是展开后文本，定义行已被扫指令消费。修法 = `FilePipeline` 语法阶段在原文上补跑 `linter/macro_syntax.py`（`analyzer/structure.py::raw_source_macro_diags`，与 lint 同一函数）；宏形式错为 blocking ⇒ 早退（不解析、不跑展开文本 lint）。**行为**：四类形式错由 rc=0静默 → check `[syntax]` + rc=1，code/行/列与 `tpc lint` 逐项一致；未闭合形参表此前在三面抛 `ConfigError`（lint/check 的 CLI traceback 与管线冒泡）→ 全部转受控诊断（scan_diagnostics 的 `directive` / scanner 的 `preprocessor-error` / 管线 error）。verilog 零变化（A/B 0/144）。证据：`test_c_macro_syntax_check_path.py` 9 条 + 受控错误 3 条、变异 87→88（全量/精度/A-B 见 CHANGELOG）。
+
+㉔ **接缝重扫交付（token 级重扫的边界①；2026-10-18，循环 #23）**：替换文本末尾的函数宏名 + 源码后续 `(...)` 合成新调用继续展开
+（C99 §6.10.3.4：替换列表连同其余源码一起重扫描）——`#define g f` + `g(2)` ⇒ `2+1`、`f(2)(9)` ⇒ `2*9*g`、verilog 前缀接缝同；
+hideset 按 **Prosser 交集**口径（名字 token ∩ 实参/闭括号；替换文本 hide = 交集 ∪ {宏名}；自引用仍 `2*f(9)`）；名字与 `(` 间注释按
+空白跳过（GCC 实测一致）；消费的源码字符并入本调用区间（区域/锚/行映射复用），接缝调用**照记事实**（MAC001 覆盖，同点可两条）。
+证据：`test_macro_rescan.py` 14 条（4 判据改前红 + 守卫/边界）+ e2e 守卫改期望（P0-8/P0-10）、变异 88→90、全量/精度/A-B 见 CHANGELOG。
+**边界**：实参跨行、名字-括号跨行、接缝沿用最终宏表（定义前调用也重扫）；㉒ 的"宏体替换产生的嵌套调用"现仅指宏体**内部**替换（无坐标不记事实）。
 
 ## 诚实边界（统一"待抽检"，不得当实测结论用）
 
