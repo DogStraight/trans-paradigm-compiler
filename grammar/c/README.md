@@ -265,7 +265,7 @@ _api.declaration_view(at)                  # **声明位置派生视图**（见�
 
 两处**当前仍成立**的基座偏差（下节）正是该视图存在的原因；N2 同时把三元组写进 `Symbol.attrs`
 （**不进产物**，先例 = `phase` 落 attrs 的作者裁决）。判据 `tests/languages/c/test_c_declaration_view.py`
-+ 逐字节对照 `_drafts/probe_n1n2_view.py --compare`（11 源 76 记录 IDENTICAL）。
+（开发期一次性对拍核验 **11 源 / 76 记录 IDENTICAL**，探针不入库；结论以判据为回归守卫）。
 
 ## 符号基座两处错位（**当前仍成立的偏差**）
 
@@ -313,7 +313,8 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
 只能绑一个 `kind`，故 CSC001 只覆盖对象声明；`static extern int f(void);`（函数位）**未覆盖**（登记）。
 
 判据：`tests/languages/c/test_c_storage_class_checks.py`（正/负样本逐条 × 默认开关 + 多声明符去重 +
-真实语料零误报 + 语法宽进不回归）；缺陷态变红（去例外表 / 去去重）见 `_drafts/task36_defect.py`。
+真实语料零误报 + 语法宽进不回归）；缺陷态变红（去例外表 / 去去重 各一次；对应变异见
+`tools/check_gate_efficacy.py`）。
 
 ## 结构类型语义（TAG/ENUM · 本包第二个 check 组件）
 
@@ -341,8 +342,8 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
 本实现的去重口径下缺陷态复现 3 条）。
 
 判据：`tests/languages/c/test_c_type_semantics_checks.py`（13 正样本 × 全规则启用 + 9 负样本逐条 +
-位置 + 三次定义去重 + 两档语料零误报 + 默认开关按档位）；缺陷态变红（去"双方带体" / 去作用域判定）
-见 `_drafts/task38_defect.py`。**边界**：成员重名（C99 原文无约束句）、不完整类型使用、位域宽度、
+位置 + 三次定义去重 + 两档语料零误报 + 默认开关按档位）；缺陷态变红（去"双方带体" / 去作用域判定
+各一次；对应变异见 `tools/check_gate_efficacy.py`）。**边界**：成员重名（C99 原文无约束句）、不完整类型使用、位域宽度、
 枚举值 representable-as-int、跨 TU；C23 固定底层类型枚举（`enum E : int;`）本包语法面**尚未支持**
 （lint 拒）⇒ ENUM003 的"固定底层类型恒完整"豁免暂不适用，将来支持时需同步。
 
@@ -376,8 +377,9 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
    goto 合法；LAB003 按"**存在外层 `SwitchStmt` 体**"判 ⇒ Duff's device（switch→do/while→case）合法。
 
 判据：`tests/languages/c/test_c_label_checks.py`（11 正样本 × 全规则启用 + 7 负样本逐条 + 位置 +
-三次重复去重口径"第 2..n 处各一条" + 两档语料零误报 + `c_labels` 产物 + postpass 轨迹）；缺陷态变红
-见 `_drafts/task41_defect.py`。**测试注意**：`plugin_loader._loaded_components` 是**测试级全局态**
+三次重复去重口径"第 2..n 处各一条" + 两档语料零误报 + `c_labels` 产物 + postpass 轨迹）；缺陷态变红：
+上列三条硬要求逐条去掉（重复 label / switch 归属两例由 `tools/check_gate_efficacy.py` 变异覆盖；实测后果
+见上）。**测试注意**：`plugin_loader._loaded_components` 是**测试级全局态**
 （`tests/conftest.py` 逐测试还原）⇒ 依赖 postpass 的测试须逐测试 `load_all_components(plugins_dir)`。
 **能力声明**：`[analyzer]` 段 ⇒ `analyzer.primitives.v1`、`rules/*.toml` ⇒ `checks.rules.v1`，
 均已声明 ⇒ **本组件不需要新的 `[engine] uses` / `[plugins] enabled` 条目**。

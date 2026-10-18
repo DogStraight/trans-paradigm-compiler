@@ -8,13 +8,10 @@
 
 ## 一、在途批次：阶段 4 A2（当前主线唯一在做的块）
 
-- [ ] **A2 预处理器收尾（剩余片）**：
-      **顺带**：**token 级重扫**（A1 两条已声明边界：替换后再现的调用 / 实参跨行），以 **A/B 0/144 +
-      后缀链**为独立检查点。
-      （已完成移出：`expand_macros` 默认口径统一 ✅、gap ⑮ 文档漂移 ✅、`#include` 真实实现 + 渲染剪枝 ✅、
-      两路径统一（CLI 硬错误面）✅、**宏形式语法诊断（linter AST 前）✅**、**`#if`/`#elif` 整型常量表达式（首片 B）✅**、
-      **宏实参个数检查（插件侧 check 族，MAC001）✅**、**check 路径接 linter 语法诊断（原始源宏定义形式语法面）✅**）
-      **待修的已知偏差**：include 内容行排在 marker **前**（修正 ⇒ 内容行号 ±1 ⇒ verilog A/B 0→2/144）。
+- [ ] **A2 预处理器收尾（剩余两片）**：
+      **① token 级重扫**（A1 两条已声明边界：替换后再现的调用 / 实参跨行），以 **A/B 0/144 + 后缀链**
+      为独立检查点。
+      **② include 顺序偏差**：include 内容行排在 marker **前**（修正 ⇒ 内容行号 ±1 ⇒ verilog A/B 0→2/144）。
       链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓；`preprocessor/README.md`「已知边界」
 
 ## 二、C 包缺陷（A2 之外，能做的）
@@ -60,9 +57,6 @@
       语法，无则记既定取舍。链：`grammar/verilog/01_module/`
 - [ ] **`tpc check` 跨盘输入崩栈**：`main.py:361 os.path.relpath` 对 C:↔E: 跨盘路径抛 `ValueError`（同盘
       正常）⇒ 报错非受控。判据：跨盘文件给受控诊断或正常处理。来源：A1 审计返工实测（既有缺陷）
-- [ ] **跟踪文档指向 `_drafts/` 具体草稿（死链）**：`preprocessor/README.md` 1 处、`grammar/c/README.md`
-      4 处 ⇒ 对 clone 者是死链，且违反 `policy/structural_budget.md`「不许写"见某草稿某节"」。
-      判据：**指向具体草稿文件**的引用清零（"描述草稿区本身"的提及保留）。
 - [ ] **跨语言同进程后 C 包 postpass 静默丢失**：C→verilog→C（同进程两个 `ProjectChecker`）时
       `setup_grammar` 清空 `_loaded_components`、`SharedComponents` 缓存命中不重装 ⇒ 第二次 C 的
       CSC/LAB/MAC 诊断全丢（循环 #21 审计实测；单语言 CLI 不复现，库入口受影响）。判据：C→V→C

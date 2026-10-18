@@ -92,8 +92,8 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
   `define` / `undef`、**包含** `include`、**条件** `ifdef`（`kind="control"`）。
 - 语言包"接上去"走**声明**（不写 py）：`[macro_recognition]`（关键字拼写 / 形态 / 实参 /
   后缀）、`[directive_handlers.include] path_forms`（路径策略；未声明 ⇒ 引擎默认两形态）。
-- **仍在代码侧的只有"处置判定"**（`[capabilities] macro_policy`）。评估（2026-10-17，
-  `_drafts/preprocessor_prototype_assessment.md`）结论：**今天不上提**——按
+- **仍在代码侧的只有"处置判定"**（`[capabilities] macro_policy`）。评估（2026-10-17）结论：
+  **今天不上提**——按
   `component_protocol.md`「语言间分布」判据，上提要"多语言共有且形态稳定"，而实测只有 verilog
   一个声明方；且"**不用依赖插件**"的准确表述是"**加语言不写代码**"（6 项成本中 5 项不免除，
   真收益 = 无 py 即无模块缓存 + 非法检查可前置到装载期）。**触发条件**：第二个语言包出现
