@@ -122,6 +122,16 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 不变）；接缝处展开出的函数宏调用**照记调用点事实**（MAC001 的收入面）。名字与
 `(` 之间允许注释（翻译阶段 3 换成空白，`_collect_args` 一并跳过——GCC 实测一致）。
 
+**跨行调用**（`_expand.py::_collect_call_args` / `_apply_cross_line`，循环 #24）：预处理
+token 不区分换行 ⇒ 函数宏的**实参列表**、以及**名字与开括号之间**都可跨物理行
+（`F(1,` + 下一行 `2)`；`F` + 换行 + `(2)`）。收集 = 单行优先，未闭合时逐行拼接
+（跳空白/注释同前；首个显著 token 非 `(` 立即止损；上限 **256 行 / 8192 字符**）。
+展开保持**行数不变**：首行 = 行首~调用列 + 宏体；中间被吞行 = 空串；尾行 = 闭括号后
+原文（换行 = 预处理空白）⇒ `out_to_src` 仍按"clean 源行 → 输出行"对齐，新增行（宏体
+含 `\n`，如实参里的跨行块注释）映射到调用起始行；区域 `source_text` = 完整跨行原文、
+`src_end_line`/`src_end_col` = 闭括号行列。仅 **splice** 处置支持（line/inline 处置
+如 verilog 空体宏保持旧行为不展开）；接缝重扫**不跨行**（宏体末名字 + 下一行 `(` 不接）。
+
 **函数宏调用点事实（引擎给 check 族的输入）**：`expand_tokens(..., out_invocations=[...])`
 在函数宏调用被识别时追加一项 `{name, slots, single_empty, params, line, column}`
 （`slots` = 实参槽数：顶层逗号 + 1，`F()` 也是 1 槽；`single_empty` = 单槽时该槽
@@ -131,7 +141,7 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 点）+ **按 `macro_timeline` 覆写 `params` 为调用点时点值**。引擎只记事实、**不判
 "实参个数对不对"**——判定归语言包 check 族（C 包 `plugins/checks/macro_args/`；
 机制见 `analyzer/semantic_checks.md`「事实型 postpass」）。不产生事实的形态 = 函数宏名
-未跟 `(`（不是调用）、对象宏、`#if 0` 等被压缩分支内、实参跨行（见下边界）、
+未跟 `(`（不是调用）、对象宏、`#if 0` 等被压缩分支内、
 被包含文件内的调用点、行拼接段内的调用点。
 **定义时间线**（`macro_timeline.py`）：`scan_directives(out_macro_events=...)` 输出
 `{line(原始源行), name, params: list|None}`（`None` = 非函数宏，含 `#undef`/对象宏）；
@@ -145,13 +155,15 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 
 已声明边界（端到端用例里以**守卫断言**锁住，落地时必须显式改断言）：
 
-- **实参跨行的调用不展开**（替换区间跨行会改输出行数/行映射，冻结契约面未动）：
-  `#define F(a,b) a+b` + `int r = F(1,` + `            2);` ⇒ 当前原样保留
-  （GCC `int r = 1+2;`）。
-- **名字与实参括号跨行**（`g` + 换行 + `(2)`）⇒ 逐行展开不接（GCC 会展开；与上条
-  同属行映射面，随跨行实参一起落地）。
-- **接缝重扫沿用最终宏表**（既有近似）：定义前/`#undef` 后的调用若在接缝处形成
-  新调用，展开器仍会重扫（检查侧按定义时间线过滤，不误报）。
+- **line/inline 处置的跨行调用不展开**（如 verilog 空体宏的整行/行内锚；锚语义与
+  跨行冲突，保持旧行为）。
+- **接缝重扫不跨行**（宏体末名字 + 下一行 `(` 不接；跨行调用本身已支持）。
+- **前瞻上限外不展开、不部分消费**：实参列表到 256 行 / 8192 字符仍未配平 ⇒ 按
+  未闭合调用原样保留（GCC 会展开；登记为资源上限，非静默降级）。
+- **展开/接缝沿用最终宏表**（既有近似）：定义前/`#undef` 后的调用仍会展开
+  （检查侧按定义时间线过滤，不误报）。
+- **渲染面行结构不保证逐字保留**：splice 原文回插（多行 `source_text`）后闭括号后
+  的 token 可能被排到新行（token 序列保真、行结构可重排）。
 - 宏算子字符串化按**实参原文切片**（`#__VA_ARGS__` 的间隔空白保留：`V(a ,  b)` ⇒
   `"a , b"`，与 GCC 一致）；体展开里的嵌套调用无原文时退回 token 拼接。
 
@@ -173,7 +185,7 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 
 | 文件 | 一句话 |
 |------|--------|
-| `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 + 函数宏**调用点事实**（`out_invocations`；行/列为 clean 源坐标）+ **接缝重扫**（`_rescan_junction`） |
+| `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 + 函数宏**调用点事实**（`out_invocations`；行/列为 clean 源坐标）+ **接缝重扫**（`_rescan_junction`）+ **跨行调用**（`_collect_call_args`/`_apply_cross_line`） |
 | `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析：前缀 token 文本 + 名字候选 + 实参形态 + `call_shape`/算子；`[macro_syntax]` 定义侧形式语法，未声明 ⇒ 不启用） |
 | `macro_timeline.py` | 宏**定义/取消事件**时间线（调用点时点可见形参表；展开用最终宏表，检查侧顺序语义靠它修正） |
 | `macro_expand.py` | 宏展开核心（hideset 重扫描 + `#`/`##`/变参 + 掩码；token 返回变体供接缝重扫） |

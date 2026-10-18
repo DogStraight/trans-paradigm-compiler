@@ -412,14 +412,14 @@ label 未使用（无条款约束，风格）、宏展开产生的标签、扩�
 输出的定义/取消事件按原始源行号记账；引擎在 `map_invocations_to_source` 里回源+过滤）——展开器
 仍用最终宏表（历史近似），检查侧不跟着误判。
 **边界（登记不实现）**：变参"恰好具名个数"（C99–C17 pedantic 级、C23 起接受 ⇒ 无档位感知
-不判）、宏体**内部替换**产生的嵌套调用（无源码坐标，不记事实）、`#if` 表达式内调用、实参跨行调用（A1 已声明边界）、
+不判）、宏体**内部替换**产生的嵌套调用（无源码坐标，不记事实）、`#if` 表达式内调用、
 被包含文件内的调用点（无本文件坐标；头文件定义按 include 行快照）、行拼接段内调用点
 （行列不可靠 ⇒ 丢弃）、`#undef` **之前**的调用点（展开器最终宏表 ⇒ 根本不展开 ⇒ 无事实）。
-**接缝重扫出的调用**（`#define g f` + `g(2)` 展开出的 `f(2)`）**有**事实、照常判（同一文本点
-可能两条事实：外层与内层各一条，不合并）。
-判据：`tests/languages/c/test_c_macro_args_checks.py`（22 条：少给/多给/零参/变参缺具名 +
+**接缝重扫出的调用**（`#define g f` + `g(2)` 展开出的 `f(2)`）与**跨行调用**（`F(1,`
++ 下一行 `2)`）**有**事实、照常判（同一文本点可能两条事实：外层与内层各一条，不合并）。
+判据：`tests/languages/c/test_c_macro_args_checks.py`（25 条：少给/多给/零参/变参缺具名 +
 合法零误报 + 原始行定位 + 规则可关闭 + include 两向 + 定义时间线四态 + 豁免 + 边界守卫 +
-接缝三态）；`tests/engine/preprocessor/test_macro_timeline.py` 13 条（事件记账/时点解析/回源过滤）；
+接缝三态 + 跨行两态）；`tests/engine/preprocessor/test_macro_timeline.py` 13 条（事件记账/时点解析/回源过滤）；
 缺陷态变红 = 门禁变异
 （去掉调用点事实 / 去掉 `ast_optional` 执行 / 去掉零参判定 / 去掉原始坐标跳过映射 / 去掉定义时间线过滤）。
 
@@ -441,7 +441,7 @@ label 未使用（无条款约束，风格）、宏展开产生的标签、扩�
 **当前支持**：对象/函数/变参宏、`#` 字符串化（token 间空白折叠、字面量内部不动）、
 `##` 粘贴（**未展开拼写**）、hideset 重扫描（自引用/互递归抑制）、
 **接缝重扫**（替换文本 + 源码后续一起重扫：`g(2)` 别名 / `f(2)(9)` ⇒ GCC 同语义；接缝 hideset
-按 Prosser 交集口径）、
+按 Prosser 交集口径）、**跨行调用**（实参列表 / 名字-开括号跨物理行，行数不变展开）、
 `#undef`、字符串/字符/行注释/块注释**掩码（含宏体内部）**、名字与 `(` 间注释、
 **`#include` 真实包含**（内容进分析流、渲染前剪枝）、**`#if`/`#elif` 整型常量表达式**
 （声明面 `[condition]`，交付面见 `docs/gaps/gap-c-preprocessor-scope.md` ㉑）、
@@ -449,9 +449,9 @@ label 未使用（无条款约束，风格）、宏展开产生的标签、扩�
 **不含**：`#line`/`#error`（`#pragma`/`_Pragma` 走保真穿透 + marker）、
 C23 项（`#warning`/`#elifdef`/`#embed`/`__VA_OPT__`/`__has_include`）。
 边界档案：`docs/gaps/gap-c-preprocessor-scope.md`；门禁：`tests/engine/preprocessor/test_macro_*.py`。
-**已声明边界**（详情与用例见 `preprocessor/README.md`「已知边界」）：**实参跨行的调用不展开**、
-**名字与实参括号跨行**、接缝重扫沿用最终宏表（定义前的调用也会重扫）——以端到端守卫断言锁在
-`tests/engine/preprocessor/test_c_macro_end_to_end.py` / `test_macro_rescan.py`。
+**已声明边界**（详情与用例见 `preprocessor/README.md`「已知边界」）：跨行调用仅 splice 处置、
+接缝重扫不跨行、前瞻上限外不展开（256 行 / 8192 字符）、沿用最终宏表、渲染行结构可重排
+——以守卫断言锁在 `tests/engine/preprocessor/test_macro_multiline_call.py` / `test_macro_rescan.py`。
 
 ## P4 理解路径（两段协作）
 

@@ -332,3 +332,42 @@ def test_junction_use_before_define_boundary(tmp_path, c_check) -> None:
     assert fr["parse_ok"] is False
     assert _mac_diags(fr) == []
 
+
+def test_multiline_call_too_many_reported(tmp_path, c_check) -> None:
+    """实参跨行（循环 #24）的多给照常报；位置 = 调用首行。"""
+    fr = _run(
+        tmp_path, "#define F(a, b) a + b\nint x = F(1,\n            2, 3);\n"
+    )
+    diags = _mac_diags(fr)
+    assert len(diags) == 1
+    assert "f" in diags[0]["message"].lower() or "F" in diags[0]["message"]
+    assert "实参 3" in diags[0]["message"]
+    assert diags[0]["range"]["start"]["line"] + 1 == 2
+
+
+def test_multiline_call_too_few_reported_on_parse_failed_file(
+    tmp_path, c_check
+) -> None:
+    """实参跨行的少给：展开成 `1+` 使 parse 失败，MAC001 仍报（ast_optional）。"""
+    fr = _run(tmp_path, "#define F(a, b) a + b\nint x = F(1\n);\n")
+    assert fr["parse_ok"] is False
+    diags = _mac_diags(fr)
+    assert len(diags) == 1
+    assert "形参 2" in diags[0]["message"] and "实参 1" in diags[0]["message"]
+    assert diags[0]["range"]["start"]["line"] + 1 == 2
+
+
+def test_position_after_cross_line_call_maps_to_own_line(tmp_path, c_check) -> None:
+    """跨行调用之后的诊断仍映射到**自己的源行**（审计 E2：不能靠 parse 失败诊断）。"""
+    src = (
+        "#define F(a, b) a + b\n"
+        "#define G(a, b) a + b\n"
+        "int x = F(1,\n"
+        " 2);\n"
+        "int q = G(1);\n"
+    )
+    fr = _run(tmp_path, src)
+    diags = _mac_diags(fr)
+    assert len(diags) == 1
+    assert diags[0]["range"]["start"]["line"] + 1 == 5  # G(1) 在源第 5 行
+

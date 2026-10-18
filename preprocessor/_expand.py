@@ -29,6 +29,7 @@ from . import macro_expand, macro_timeline
 from .macro_policy import (
     MODE_INLINE,
     MODE_LINE,
+    MODE_SPLICE,
     load_macro_policy,
     plan_macro,
 )
@@ -60,6 +61,13 @@ _directives_cfg: dict = declare_cfg("preprocessor.directives", {}, __name__, "_d
 #   #sym:config = [continuation]
 #   格式: dict — { enabled: bool, character: str }
 _continuation_cfg: dict = declare_cfg("preprocessor.continuation", {}, __name__, "_continuation_cfg")
+
+#: 跨行实参收集的**前瞻上限**（行数）：未闭合调用最多向后拼这么多行，
+#: 超限/EOF 仍不配平 ⇒ 按"未闭合调用"原样保留（既有边界，不把整文件拼进来）。
+_MAX_JOINED_LINES = 256
+#: 跨行实参收集的**前瞻上限**（字符数）：防"未闭合调用在后缀里拖全文件"的
+#: 二次代价；超限同样按未闭合调用原样保留（不部分消费）。
+_MAX_JOINED_CHARS = 8192
 
 
 def continuation_character() -> str:
@@ -868,10 +876,11 @@ def expand_tokens(
         restoration_stack — 统一锚列表（`line`/`inline` 置位用），每项含
             marker/source_text/mode。
         macro_regions — **宏区间表**：每条"宏体被铺进文本"的调用一项，含它在
-            **源文本**里的区间（`src_line`/`src_col`/`src_end_col`）与它在**展开
-            结果**里的字符区间（`offset`/`end_offset`），以及 `name`/`source_text`
-            （宏调用原文）/`body`（实际铺进的内容；宏体末行含行注释时末尾补了
-            一个换行，见下）。
+            **源文本**里的区间（`src_line`/`src_col`/`src_end_line`/`src_end_col`；
+            跨行调用时 src_end_line 是闭括号所在行、src_end_col 是该行列）与它在
+            **展开结果**里的字符区间（`offset`/`end_offset`），以及 `name`/
+            `source_text`（宏调用原文，跨行时为多行原文段）/`body`（实际铺进的内容；
+            宏体末行含行注释时末尾补了一个换行，见下）。
             它是外层处理宏的单一事实源（ADR-0017 决策 3）：定位"哪些内容来自
             哪条宏"→ 渲染侧 raw 拼接、诊断宏归因都靠它。
         out_invocations — 可选**函数宏调用点事实**收集器（传 list 才记录；None =
@@ -879,6 +888,12 @@ def expand_tokens(
             行/列是本函数输入文本（clean 源）坐标，`params` 是该调用点的宏表形参表
             （含语言包声明的变参占位），调用方负责回源到原始源坐标。引擎只记事实，
             不判定"实参个数对不对"（语义判定归语言包 check 族）。
+
+    **跨行调用**（循环 #24；C 预处理 token 不区分换行）：函数宏的实参列表、或
+    名字与开括号可跨物理行。展开保持**行数不变**：首行 = 行首~调用列 + 宏体，
+    中间被吞行 = 空串，尾行 = 闭括号后原文（换行 = 预处理空白）⇒ `out_to_src`
+    仍按"clean 源行 → 输出行"对齐；区域 `source_text` = 完整跨行原文。仅
+    **splice** 处置支持（line/inline 保持旧行为不展开）。
     """
     if prefix is None:
         # 调用前缀从语言包 call 形态推导（kind 分派；不读第二份配置）
@@ -932,6 +947,9 @@ def expand_tokens(
             continue
 
         # ── 处置方案（引擎给事实、语言包策略给枚举；见 macro_policy.py）──
+        # `only_call_in_line` 按**旧视野**（不含跨行匹配）计：line/inline 处置的
+        # 行为与跨行支持落地前一致（跨行匹配只在 splice 下生效）
+        visible = sum(1 for mm in macro_matches if mm[8] is None)
         plans = [
             plan_macro(
                 ctx.policy,
@@ -944,11 +962,31 @@ def expand_tokens(
                     name,
                     is_func,
                     args_text,
-                    len(macro_matches) == 1,
+                    visible == 1,
                 ),
             )
-            for col, end, body, name, is_func, args_text, _slots, _empty in macro_matches
+            for col, end, body, name, is_func, args_text, _slots, _empty, _cross in macro_matches
         ]
+        # 跨行调用只在 splice 处置下展开；line/inline 保持旧行为（原样不展开）
+        kept = [
+            (mm, plan)
+            for mm, plan in zip(macro_matches, plans)
+            if mm[8] is None or plan["mode"] == MODE_SPLICE
+        ]
+        # 同行还有 MODE_LINE（整行占位）处置的调用 ⇒ 整行占位语义与跨行冲突：
+        # 退化为"不展开跨行调用"（旧行为），单行匹配仍走既有 `_try_line_mode`
+        if any(
+            mm[8] is not None and plan["mode"] == MODE_SPLICE
+            for mm, plan in kept
+        ) and any(plan["mode"] == MODE_LINE for mm, plan in kept if mm[8] is None):
+            kept = [(mm, plan) for mm, plan in kept if mm[8] is None]
+        macro_matches = [mm for mm, _ in kept]
+        plans = [plan for _, plan in kept]
+        if not macro_matches:
+            continue
+        if any(mm[8] is not None for mm in macro_matches):
+            _apply_cross_line(ctx, line_no, line, macro_matches, plans, line_masks)
+            continue
 
         if _try_line_mode(ctx, line_no, line, plans, len(macro_matches)):
             continue
@@ -1039,16 +1077,89 @@ def _raw_variadic_for(
     )
 
 
+def _collect_call_args(
+    ctx: "_MacroExpandCtx", line: str, line_no: int, start: int
+) -> tuple[list[list], dict] | None:
+    """名字之后收实参：**单行优先**，未闭合则逐行前瞻拼接（跳空白/注释同前）。
+
+    返回 `(args, info)`；非调用形态（无开括号 / 到前瞻上限仍未配平）→ None。
+    info 键：`call_text`（名字之后到闭括号的原文段，跨行用 `\\n` 连接）、
+    `close_idx`（单行时闭括号后的行内下标；跨行为 None）、`cross`、
+    `last_line`/`close_col`/`last_after`（闭括号所在行 1-based、行内列、其后原文）。
+
+    跨行收集原理：`mask_spans` 对含换行的文本本就正确（行注释止于换行、块注释
+    跨行；匹配起点不在掩码内 ⇒ 起点后掩码态为 plain），故直接对
+    `首行后缀 + "\\n" + 后续行…` 调 `collect_args_tokens` 即可，无需第二套 tokenizer。
+    """
+    suffix = line[start:]
+    got = macro_expand.collect_args_tokens(
+        suffix, ctx.call_args, ctx.operators, ctx.syntax
+    )
+    if got is not None:
+        args, consumed = got
+        end = start + consumed
+        return args, {
+            "call_text": line[start:end],
+            "close_idx": end,
+            "cross": False,
+            "last_line": line_no,
+            "close_col": end - 1,
+            "last_after": line[end:],
+        }
+    # 提前止损：名字后第一个显著 token 不是开括号 ⇒ 再拼行也不可能是调用
+    first = macro_expand.first_significant_token(
+        suffix, ctx.operators, ctx.syntax
+    )
+    if first is not None and first != ctx.call_args.open:
+        return None
+    joined = suffix
+    segs = [suffix]
+    for ln in range(line_no + 1, min(len(ctx.lines), line_no + _MAX_JOINED_LINES) + 1):
+        nxt = ctx.lines[ln - 1]
+        if len(joined) + 1 + len(nxt) > _MAX_JOINED_CHARS:
+            return None  # 字符上限：不展开（不部分消费）
+        segs.append(nxt)
+        joined = joined + "\n" + nxt
+        got = macro_expand.collect_args_tokens(
+            joined, ctx.call_args, ctx.operators, ctx.syntax
+        )
+        if got is None:
+            # 提前止损：拼上来的文本里第一个显著 token 已经不是开括号 ⇒
+            # 再往后拼也不可能成为调用（中间 token 不会消失），O(1) 退出。
+            first = macro_expand.first_significant_token(
+                joined, ctx.operators, ctx.syntax
+            )
+            if first is not None and first != ctx.call_args.open:
+                return None
+            continue
+        args, consumed = got
+        offset = consumed - 1 - len(segs[0])  # 闭括号在后续段中的偏移（先减首行）
+        for k in range(1, len(segs)):
+            offset -= 1  # 段间换行符占 1 字符
+            if offset < len(segs[k]):
+                return args, {
+                    "call_text": joined[:consumed],
+                    "close_idx": None,
+                    "cross": True,
+                    "last_line": line_no + k,
+                    "close_col": offset,
+                    "last_after": segs[k][offset + 1 :],
+                }
+            offset -= len(segs[k])
+    return None
+
+
 def _match_one(
     ctx: "_MacroExpandCtx", line: str, m, line_no: int = 0
-) -> tuple[int, str, str, bool, str, int, bool] | None:
-    """单个正则命中 → `(end, body, name, is_func, args_text, slots, single_empty)`；
-    不可展开 → None。
+) -> tuple[int, str, str, bool, str, int, bool, dict | None] | None:
+    """单个正则命中 → `(end, body, name, is_func, args_text, slots, single_empty,
+    cross)`；不可展开 → None。
 
     **函数宏**（名字在 `func_macros`）：名字后允许**空白/注释/换行**再接 `(`；
-    实参切分走 **token 级** `macro_expand.collect_args_tokens`（掩码内逗号/括号
-    不是分隔符）。名字后**没有 `(`** ⇒ **不展开**（标准：函数的宏名不调用就
-    不替换，不得回退成对象宏）。
+    实参切分走 **token 级** `collect_args_tokens`（掩码内逗号/括号不是分隔符）；
+    单行未闭合时**逐行前瞻**（`_collect_call_args`，上限 `_MAX_JOINED_LINES`）。
+    名字后**没有 `(`** ⇒ **不展开**（标准：函数的宏名不调用就不替换，不得回退成
+    对象宏）。
     对象宏：按宏表替换（无参）；`slots`/`single_empty` 恒 0/False（无实参表）。
     `slots` = 实参槽数（顶层分隔符数 + 1；`F()` 也是 1 槽）；
     `single_empty` = 仅当 `slots == 1` 时该槽是否**不含预处理 token**（空白/注释）。
@@ -1058,17 +1169,18 @@ def _match_one(
     展开后的**最后一个函数宏名**可能与源码后续 `(...)` 合成新调用（`#define g f`
     + `g(2)` → `f(2)` 再展开）⇒ 交给 `_rescan_junction`，消费的源码字符并入
     `end`。`line_no` 只用于重扫调用的**调用点事实**记录。
+
+    **跨行调用**（A1 边界②落地）：实参跨行收集成功时 `cross` = 闭括号所在行
+    信息（`{"last_line", "close_col", "call_text", "last_after"}`）、`end` 取
+    `len(line)`（消费本行余下文本）；接缝重扫/宏链扩展**不跨行**（嵌套边界）。
     """
     name = m.group(1)
     if ctx.call_args is not None and name in ctx.func_macros:
-        got = macro_expand.collect_args_tokens(
-            line[m.end() :], ctx.call_args, ctx.operators, ctx.syntax
-        )
-        if got is None:
+        collected = _collect_call_args(ctx, line, line_no, m.end())
+        if collected is None:
             return None  # 函数宏名未调用（P0-6/7；不得回退对象宏）
-        args, consumed = got
-        close_idx = m.end() + consumed
-        arg_text = line[m.end() : close_idx]
+        args, call = collected
+        arg_text = call["call_text"]
         body_toks = macro_expand.substitute_call_tokens_tokens(
             name,
             args,
@@ -1080,16 +1192,33 @@ def _match_one(
             raw_args=_raw_variadic_for(ctx, name, arg_text, ctx.call_args),
             prefix=ctx.call_prefix if ctx.call_prefix is not None else "",
         )
-        end = close_idx
+        slots = len(args)
+        single_empty = slots == 1 and macro_expand.arg_tokens_blank(
+            args[0], ctx.syntax
+        )
+        if call["cross"]:
+            # 跨行：不接接缝/宏链（嵌套边界；行映射按"首行展开 + 中间行置空"）
+            return (
+                len(line),
+                macro_expand.join(body_toks),
+                name,
+                True,
+                arg_text,
+                slots,
+                single_empty,
+                {
+                    "last_line": call["last_line"],
+                    "close_col": call["close_col"],
+                    "call_text": line[m.start() : m.end()] + arg_text,
+                    "last_after": call["last_after"],
+                },
+            )
+        end = call["close_idx"]
         body_toks, end = _rescan_junction(
             ctx, body_toks, line, end, line_no, m.start()
         )
         # 接缝消费后再做宏链扩展（后缀/相邻宏调用并入同一区间；顺序 = 接缝→链）
         end = _extend_macro_chain(line, end, ctx.macro_re, ctx.suffix_re)
-        slots = len(args)
-        single_empty = slots == 1 and macro_expand.arg_tokens_blank(
-            args[0], ctx.syntax
-        )
         return (
             end,
             macro_expand.join(body_toks),
@@ -1098,6 +1227,7 @@ def _match_one(
             arg_text,
             slots,
             single_empty,
+            None,
         )
     body = ctx.macro_defs.get(name)
     if body is None:
@@ -1118,7 +1248,7 @@ def _match_one(
     end = m.end()
     body_toks, end = _rescan_junction(ctx, body_toks, line, end, line_no, m.start())
     end = _extend_macro_chain(line, end, ctx.macro_re, ctx.suffix_re)
-    return end, macro_expand.join(body_toks), name, False, "", 0, False
+    return end, macro_expand.join(body_toks), name, False, "", 0, False, None
 
 
 def _last_meaningful(body_toks: list) -> int:
@@ -1148,8 +1278,9 @@ def _rescan_junction(
     行映射**不新增机制**（输出行数不变）。循环到不再形成接缝，预算
     `max_iterations` 兜底；函数宏调用点事实照记（供语言包 check 族）。
 
-    不处理：实参跨行（A1 已声明边界②：替换区间跨行会改输出行数/行映射，冻结
-    契约面未动）；宏体**内部**的替换重扫已由 `macro_expand` 的 hideset 引擎负责。
+    不处理：接缝重扫**不跨行**（宏体末名字 + 下一行 `(` 不接；跨行调用本身由
+    `_match_one` 的跨行实参收集处理）；宏体**内部**的替换重扫已由
+    `macro_expand` 的 hideset 引擎负责。
     """
     budget = int(_get_expand_config().get("max_iterations", 128))
     prefix = ctx.call_prefix if ctx.call_prefix is not None else ""
@@ -1291,7 +1422,7 @@ def _collect_macro_matches(
         hit = _match_one(ctx, line, m, line_no)
         if hit is None:
             continue
-        end, body, name, is_func, args_text, slots, single_empty = hit
+        end, body, name, is_func, args_text, slots, single_empty, cross = hit
         if is_func and ctx.invocations is not None:
             ctx.invocations.append(
                 {
@@ -1305,7 +1436,8 @@ def _collect_macro_matches(
             )
         consumed_until = max(consumed_until, end)
         matches.append(
-            (m.start(), end, body, name, is_func, args_text, slots, single_empty)
+            (m.start(), end, body, name, is_func, args_text, slots, single_empty,
+             cross)
         )
     return matches
 
@@ -1353,7 +1485,7 @@ def _run_plans(
     parts = list(line)
     forward_entries: list[dict] = []
     line_regions: list[tuple] = []
-    for (col, end, body, name, is_func, _args, _slots, _empty), plan in reversed(
+    for (col, end, body, name, is_func, _args, _slots, _empty, _cross), plan in reversed(
         list(zip(macro_matches, plans))
     ):
         source_text = line[col:end]  # 宏调用原文（含反引号与实参）
@@ -1375,6 +1507,101 @@ def _run_plans(
     return "".join(parts), forward_entries, line_regions
 
 
+def _shift_masks(
+    masks: list[tuple[int, int]], shift: int
+) -> list[tuple[int, int]]:
+    """掩码区间左移 `shift` 字符并裁到新行界（跨行调用截断尾行用）。"""
+    return [(max(0, a - shift), b - shift) for a, b in masks if b > shift]
+
+
+def _apply_cross_line(
+    ctx: "_MacroExpandCtx",
+    line_no: int,
+    line: str,
+    matches: list[tuple],
+    plans: list[dict],
+    line_masks: list[list[tuple[int, int]]],
+) -> None:
+    """含**跨行调用**的行：splice 展开（行数不变）。
+
+    接法（A1 边界②落地，保持行映射冻结面）：
+    - 首行 = 行首~调用列 + 宏体（宏体可含换行 ⇒ 输出行数按既有 splice 口径增加）；
+    - 中间被吞行 = 空串（行数不变 ⇒ `out_to_src` 仍按"clean 源行 → 输出行"对齐）；
+    - 尾行 = 闭括号后原文（token 相邻关系由换行隔开，语义不变）。
+    跨行调用**不接**接缝重扫/宏链扩展（嵌套边界）。尾行掩码按截断量左移，
+    避免"被吞前缀的掩码偏移"误判尾行的字符串/注释。
+    """
+    parts = list(line)
+    forward_entries: list[dict] = []
+    line_regions: list[tuple] = []
+    for (col, end, body, name, is_func, _args, _slots, _empty, cross), plan in reversed(
+        list(zip(matches, plans))
+    ):
+        if cross is None:
+            source_text = line[col:end]
+            if plan["mode"] == MODE_INLINE:
+                marker = make_marker("macro", ctx.next_seq())
+                parts[col:end] = inline_marker(ctx.syntax, marker)
+                forward_entries.append(
+                    {
+                        "marker": marker,
+                        "source_text": source_text,
+                        "mode": MODE_INLINE,
+                        "kind": "macro",
+                    }
+                )
+                continue
+            spliced = _splice_body(body, ctx.syntax)
+            parts[col:end] = spliced
+            line_regions.append(
+                (col, end, name, is_func, spliced, None, None, line_no)
+            )
+            continue
+        # 跨行调用：本行余下文本 + 中间行 + 尾行前缀全部由该调用消费
+        spliced = _splice_body(body, ctx.syntax)
+        parts[col:] = [spliced]
+        last_line = int(cross["last_line"])
+        for k in range(line_no + 1, last_line):
+            ctx.lines[k - 1] = ""
+        ctx.lines[last_line - 1] = cross["last_after"]
+        # 尾行掩码左移（截掉被吞前缀）：否则字符串/注释掩码偏移会误判尾行
+        line_masks[last_line - 1] = _shift_masks(
+            line_masks[last_line - 1], int(cross["close_col"]) + 1
+        )
+        line_regions.append(
+            (col, len(line), name, is_func, spliced, cross["call_text"],
+             int(cross["close_col"]), last_line)
+        )
+    ctx.lines[line_no - 1] = "".join(parts)
+    ctx.restoration_stack.extend(reversed(forward_entries))
+    if line_regions:
+        entries: list[dict] = []
+        delta = 0
+        for s_col, s_end, name, is_func, body, src_override, close_col, end_line in sorted(
+            line_regions, key=lambda r: r[0]
+        ):
+            cross = src_override is not None
+            entries.append(
+                {
+                    "name": name,
+                    "source_text": src_override if cross else line[s_col:s_end],
+                    "is_func": is_func,
+                    "body": body,
+                    "src_line": line_no,
+                    "src_col": s_col,
+                    # 跨行：`src_end_col` = 闭括号在**尾行**的列，`src_end_line` 给
+                    # 出尾行号（同行条目恒等于 src_line）；消费方以 source_text 为准。
+                    "src_end_col": close_col if cross else s_end,
+                    "src_end_line": end_line,
+                    "in_line_col": s_col + delta,
+                    "in_line_len": len(body),
+                }
+            )
+            if not cross:  # 跨行是行内最后一个匹配，其长度增量不影响后续列
+                delta += len(body) - (s_end - s_col)
+        ctx.regions_by_line[line_no] = entries
+
+
 def _line_region_entries(
     line: str, line_no: int, line_regions: list[tuple]
 ) -> list[dict]:
@@ -1391,6 +1618,7 @@ def _line_region_entries(
                 "src_line": line_no,
                 "src_col": s_col,
                 "src_end_col": s_end,
+                "src_end_line": line_no,
                 "in_line_col": s_col + delta,
                 "in_line_len": len(body),
             }

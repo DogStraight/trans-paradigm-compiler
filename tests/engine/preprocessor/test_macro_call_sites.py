@@ -178,9 +178,11 @@ def test_call_in_inactive_condition_is_not_recorded() -> None:
     assert _slots(src) == []
 
 
-def test_multiline_call_is_not_recorded() -> None:
-    """已声明边界（A1 ②）：实参跨行的调用不展开 ⇒ 无事实。
+def test_multiline_call_is_recorded() -> None:
+    """实参跨行的调用（循环 #24）也记事实：槽数/形参表/首行位置。
 
-    守卫式断言当前行为；边界落地（跨行实参）时必须显式改这里。
+    跨行调用在"首行 + 中间行置空 + 尾行留闭括号后原文"的展开口径下落成事实；
+    检查侧（MAC001）据此照常判 arity。
     """
-    assert _slots("#define F(a,b) a+b\nint x = F(1,\n            2);\n") == []
+    _, inv = _expand("#define F(a,b) a+b\nint x = F(1,\n            2);\n")
+    assert [(i["name"], i["slots"], i["line"]) for i in inv] == [("F", 2, 2)]

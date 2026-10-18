@@ -1,14 +1,13 @@
 """C 宏 A1：**端到端**用例（生产同路：`scan_directives` → `expand_tokens`）。
 
 来源 = 独立对抗审计的 14 条反例 + 1 条真实语料（多行块注释）。
-**口径**：写死 GCC 16.1.0 的期望输出；比较用 token 序列（token 间空白不计，
+**口径**：写死 GCC 16.1.0 的期望输出；比较用 token 序列（token 间空白/换行不计，
 字面量/注释整体算一个 token）——不直接调 `macro_expand` 私有函数。
 
-分三类：
-- `GREEN`：期望 = GCC 输出（含循环 #23 落地的**接缝重扫** P0-8/P0-10）；
-- `BOUNDARY`：**已声明边界**（实参跨行未实现）⇒ 断言**当前输出**
-  （守卫式，不用 xfail——边界落地时必须显式改这里）；
+分两类：
+- `GREEN`：期望 = GCC 输出（含循环 #23 接缝重扫 P0-8/P0-10、循环 #24 跨行实参 P0-9）；
 - `MULTILINE_COMMENT`：真实语料里块注释续行内的宏名不得展开（P1-3）。
+跨行调用的其它判据（守卫/映射/区域）见 `test_macro_multiline_call.py`。
 """
 import re
 
@@ -31,7 +30,9 @@ _MARKS = re.compile(r"\s*//\s*<tpc:directive:\d+>\s*")
 
 def _strip(text: str) -> str:
     kept = [ln for ln in text.splitlines() if ln.strip() and not _MARKS.fullmatch(ln)]
-    return " | ".join(kept)
+    # 跨行展开会把尾随 token 留在下一行（换行 = 预处理空白）⇒ 按空白连接后
+    # 再走 token 归一，与 GCC 单行输出的 token 序列可比。
+    return " ".join(kept)
 
 
 def _norm(text: str) -> str:
@@ -92,13 +93,9 @@ P11: list[tuple[str, str, str, str]] = [
     ("P1-1d", "空变参",
      "#define V(...) #__VA_ARGS__\nconst char *p = V();\n",
      'const char *p = "";'),
-]
-
-#: **已声明边界**：断言当前输出（实参跨行未实现；落地时必须重新审视）
-BOUNDARY: list[tuple[str, str, str, str]] = [
-    ("P0-9", "边界②：实参跨行的调用不展开",
+    ("P0-9", "实参跨行的调用（循环 #24）",
      "#define F(a,b) a+b\nint r = F(1,\n            2);\n",
-     "int r = F(1, | 2);"),
+     "int r = 1+2;"),
 ]
 
 
@@ -116,22 +113,6 @@ def test_end_to_end_hash_varargs(cid: str, desc: str, src: str, expected: str) -
     del cid
     actual = _engine(src)
     assert _norm(actual) == _norm(expected), f"{desc}\n实际: {actual}"
-
-
-@pytest.mark.parametrize(
-    "cid,desc,src,expected", BOUNDARY, ids=[c[0] for c in BOUNDARY]
-)
-def test_declared_boundary_guard(cid: str, desc: str, src: str, expected: str) -> None:
-    """**已声明边界**：断言当前输出（守卫式，不用 xfail）。
-
-    边界落地（实参跨行）时**必须显式改这里**——不要让"当前输出"静默漂移。
-    边界说明见 `preprocessor/README.md`「已知边界」。
-    """
-    del cid
-    actual = _engine(src)
-    assert _norm(actual) == _norm(expected), (
-        f"{desc}\n实际: {actual}\n（若这是修复后的新行为，请同步更新本守卫断言）"
-    )
 
 
 def test_multiline_block_comment_inner_name_not_expanded() -> None:

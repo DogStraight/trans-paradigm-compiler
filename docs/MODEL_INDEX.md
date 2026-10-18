@@ -103,7 +103,7 @@
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
-| 宏展开（strip 指令 + `` `NAME `` 引用展开 + **接缝重扫**：替换文本 + 源码后续一起重扫） | `language_walkthrough.md`（预处理器） | `preprocessor/_expand.py`（`expand_tokens` / `_rescan_junction`） | `tests/engine/preprocessor/test_primitives.py` + `tests/engine/preprocessor/test_macro_rescan.py` + `tests/languages/verilog/test_macro*.py` |
+| 宏展开（strip 指令 + `` `NAME `` 引用展开 + **接缝重扫** + **跨行调用**：实参/名字-括号跨物理行，行数不变） | `language_walkthrough.md`（预处理器） | `preprocessor/_expand.py`（`expand_tokens` / `_rescan_junction` / `_collect_call_args` / `_apply_cross_line`） | `tests/engine/preprocessor/test_primitives.py` + `tests/engine/preprocessor/test_macro_rescan.py` + `tests/engine/preprocessor/test_macro_multiline_call.py` + `tests/languages/verilog/test_macro*.py` |
 | 宏形态声明（`shape` 生产式 + 名字位候选列表；带参实参形态 `call_args` / `arg_separator`；后随字面量后缀 `suffix_after_call`） | `preprocessor/README.md`（形态清单） | `preprocessor/macro_shape.py`（声明解析 + 配平/切分 + 后缀编译）<br>`lexer/main_lexer.py::_match_macro_at`（词法落地） | `tests/engine/preprocessor/test_macro_shape.py`<br>`tests/engine/preprocessor/test_macro_call_args.py`<br>`tests/engine/preprocessor/test_macro_suffix.py` |
 | 宏反向（统一位置桥：锚 + 原文回插） | `references.md`（语料前沿 M1：宏 inline+body 锚还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
 | 宏处置策略（引擎定义 mode 枚举；语言包以 `[capabilities] macro_policy` 声明策略） | `preprocessor/README.md`（策略契约节 + "为什么策略是语言知识"内联） | `preprocessor/macro_policy.py`（取入口/校验）<br>`grammar/verilog/plugins/macro_policy/`（判定表） | `tests/engine/preprocessor/test_macro_policy.py` |

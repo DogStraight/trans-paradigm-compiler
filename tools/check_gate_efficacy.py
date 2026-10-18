@@ -930,6 +930,28 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        hideset = cand.hide  # 变异：接缝 hideset 不取交集\n",
         "test": "tests/engine/preprocessor/test_macro_rescan.py",
     },
+    {
+        "why": "跨行实参收集若失效（单行未闭合就放弃）⇒ `F(1,` + 下一行 `2)` 保持原样、"
+               "名字-括号跨行不展开（C 预处理 token 不区分换行；GCC 会展开）",
+        "file": "preprocessor/_expand.py",
+        "old": "    joined = suffix\n    segs = [suffix]\n",
+        "new": "    return None  # 变异：不支持跨行实参收集\n    joined = suffix\n"
+               "    segs = [suffix]\n",
+        "test": "tests/engine/preprocessor/test_macro_multiline_call.py",
+    },
+    {
+        "why": "混合行（同行普通宏 + 跨行调用）的区域条目若少一项（6 元组 vs 7 元组）⇒ "
+               "`_apply_cross_line` 解包 ValueError：管线崩、`tpc check` 整文件回退原文"
+               "（用户看到 `#define` 被当 token 的假语法错误）",
+        "file": "preprocessor/_expand.py",
+        "old": "            line_regions.append(\n"
+               "                (col, end, name, is_func, spliced, None, None, line_no)\n"
+               "            )\n",
+        "new": "            line_regions.append(\n"
+               "                (col, end, name, is_func, spliced, None, None)\n"
+               "            )  # 变异：混合行区域元组缺一项\n",
+        "test": "tests/engine/preprocessor/test_macro_multiline_call.py",
+    },
 ]
 
 

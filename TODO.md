@@ -8,11 +8,9 @@
 
 ## 一、在途批次：阶段 4 A2（当前主线唯一在做的块）
 
-- [ ] **A2 预处理器收尾（剩余两片）**：
-      **① 实参跨行的调用不展开**（A1 边界②：替换区间跨行 ⇒ 输出行数/`out_to_src` 行映射冻结面；连带
-      名字-括号跨行 `g\n(2)`；判据 = GCC 16.1 对拍 + 行映射/渲染保真用例）。
-      **② include 顺序偏差**：include 内容行排在 marker **前**（修正 ⇒ 内容行号 ±1 ⇒ verilog A/B 0→2/144）。
-      链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔；`preprocessor/README.md`「已知边界」
+- [ ] **A2 预处理器收尾（剩余一片）**：**include 顺序偏差**：include 内容行排在 marker **前**
+      （修正 ⇒ 内容行号 ±1 ⇒ verilog A/B 0→2/144）。
+      链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑰⑱⑲⑳㉑㉒㉓㉔㉕；`preprocessor/README.md`「已知边界」
 
 ## 二、C 包缺陷（A2 之外，能做的）
 

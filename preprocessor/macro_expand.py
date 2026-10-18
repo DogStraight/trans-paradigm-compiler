@@ -884,3 +884,26 @@ def collect_args_at(
     if args is None:
         return None
     return args, after
+
+
+def first_significant_token(
+    text: str, operators: MacroOperators | None = None, syntax: Any = None
+) -> str | None:
+    """文本里**第一个非空白、非注释** token 的文本；全空白/注释 → None。
+
+    给跨行调用收集做**提前止损**：名字后第一个显著 token 不是实参开括号 ⇒
+    再往后拼行也永远不可能是调用（中间 token 不会消失），不必继续前瞻。
+    """
+    masks = mask_spans(
+        text,
+        operators.string_delimiters if operators else (),
+        operators.escape if operators else None,
+        syntax,
+    )
+    for tok in tokenize(text, operators, masks):
+        if not tok.text.strip():
+            continue
+        if tok.masked and _is_comment_text(tok.text, syntax):
+            continue
+        return tok.text
+    return None
