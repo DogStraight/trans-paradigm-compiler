@@ -963,6 +963,17 @@ _MUTATIONS: list[dict[str, str]] = [
                "        _inject_directive_marker(ctx, stack, jno, line, syntax)\n",
         "test": "tests/engine/preprocessor/test_include_order.py",
     },
+    {
+        "why": "跨盘路径显示若直接 `os.path.relpath`（不捕获 ValueError）⇒ Windows "
+               "`C:`↔`E:` 输入时 `tpc check` 文本/HTML 报告崩溃（已实测 traceback）",
+        "file": "core/utils.py",
+        "old": "    try:\n"
+               "        return os.path.relpath(path)\n"
+               "    except ValueError:\n"
+               "        return path\n",
+        "new": "    return os.path.relpath(path)  # 变异：跨盘 ValueError 直接冒泡\n",
+        "test": "tests/engine/core/test_safe_relpath.py",
+    },
 ]
 
 

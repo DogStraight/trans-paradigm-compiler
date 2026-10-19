@@ -18,6 +18,7 @@ import os
 import argparse
 
 from core import __version__
+from core.utils import safe_relpath
 
 _project_root = os.path.dirname(os.path.abspath(__file__))
 if _project_root not in sys.path:
@@ -398,7 +399,7 @@ def _print_file_diags(f: dict) -> int:
     semantic = f["semantic"]
     if not syntax and not semantic:
         return 0
-    rel = os.path.relpath(f["path"])
+    rel = safe_relpath(f["path"])
     if syntax:
         _print_syntax_diags(rel, syntax)
     if semantic:

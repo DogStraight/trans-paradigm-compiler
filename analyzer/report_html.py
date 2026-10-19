@@ -15,6 +15,8 @@ import html
 import os
 from dataclasses import dataclass
 
+from core.utils import safe_relpath
+
 # severity → 徽标文案/CSS 类（与 LSP DiagnosticSeverity 对齐）
 _SEVERITY_META: dict[int, tuple[str, str]] = {
     1: ("error", "sev-error"),
@@ -117,7 +119,7 @@ def _parse_status_html(f: dict) -> str:
 
 def _card_html(f: dict, rows: list[str]) -> str:
     """文件卡片：标题（相对路径 + 解析状态）+ 解析错误元信息 + 诊断表。"""
-    rel = os.path.relpath(f["path"])
+    rel = safe_relpath(f["path"])
     parse_err = f.get("parse_error")
     meta = (
         f'<div class="meta">{html.escape(str(parse_err))}</div>' if parse_err else ""

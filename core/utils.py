@@ -21,6 +21,18 @@ def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
+def safe_relpath(path: str) -> str:
+    """相对路径显示；跨盘（Windows `C:` ↔ `E:`）无法相对化时回退原路径。
+
+    `os.path.relpath` 在 Windows 跨盘抛 `ValueError`——CLI/HTML 报告只是**显示**
+    文件位置，不应让路径解析把诊断报告变成崩溃；回退绝对路径保持可读且受控。
+    """
+    try:
+        return os.path.relpath(path)
+    except ValueError:
+        return path
+
+
 def save_json(
     data: Any, path: str, label: str = "", log_fn: Callable | None = None
 ) -> None:

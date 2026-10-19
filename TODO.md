@@ -47,8 +47,6 @@
 - [ ] **Verilog 头部参数列表"续项不带关键字"**：`#(parameter W = 8, D = 4)` / `#(W = 8, D = 4)` 被 linter
       阻断（现只接受每项重复 `parameter`）。判据：先扫 `tests/e2e/samples/real/` 统计出现次数——有量则补
       语法，无则记既定取舍。链：`grammar/verilog/01_module/`
-- [ ] **`tpc check` 跨盘输入崩栈**：`main.py:361 os.path.relpath` 对 C:↔E: 跨盘路径抛 `ValueError`（同盘
-      正常）⇒ 报错非受控。判据：跨盘文件给受控诊断或正常处理。来源：A1 审计返工实测（既有缺陷）
 - [ ] **跨语言同进程后 C 包 postpass 静默丢失**：C→verilog→C（同进程两个 `ProjectChecker`）时
       `setup_grammar` 清空 `_loaded_components`、`SharedComponents` 缓存命中不重装 ⇒ 第二次 C 的
       CSC/LAB/MAC 诊断全丢（循环 #21 审计实测；单语言 CLI 不复现，库入口受影响）。判据：C→V→C

@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **跨盘路径显示回退**（2026-10-19，循环 #26）：Windows 跨盘输入（`C:` ↔ `E:`）时，
+  `tpc check` 文本报告 `_print_file_diags` 与 HTML 报告 `_card_html` 直接调 `os.path.relpath`
+  抛 `ValueError` ⇒ CLI traceback / HTML 报告崩溃。修法：`core.utils.safe_relpath` 捕获
+  `ValueError` 回退原路径（显示用途，不改变诊断/退出码）；两处消费共用。验证：
+  `test_safe_relpath.py` 2 条（改前红：函数缺失 / `_print_file_diags` 抛错）+ report_html
+  1 条；门禁变异 **93→94**；core+analyzer 549；全量/静态/A-B 见收口记录。
+
 - **A2 末片：include 顺序**（2026-10-19，循环 #25）：include 内容行此前写在指令行 marker **之前**
   （`handle_include` 先 `_inject_lines.extend`，`_handle_directive` 后注入 marker）⇒ clean 行序/行映射/
   渲染回插顺序错位；条件分支内的 include 内容还落到分支外。修法：`_emit_output_line` 统一输出归属，

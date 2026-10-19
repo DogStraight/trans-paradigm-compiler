@@ -94,6 +94,25 @@ def test_message_escaped():
     assert "&lt;script&gt;" in out
 
 
+def test_cross_drive_path_falls_back(monkeypatch):
+    """Windows 跨盘 `relpath` ValueError ⇒ 回退原路径，不冒泡。"""
+    import analyzer.report_html as rh
+
+    def _raise(*_args, **_kwargs):
+        raise ValueError("path is on mount 'C:', start on mount 'E:'")
+
+    monkeypatch.setattr(rh.os.path, "relpath", _raise)
+    report = _report(
+        semantic=[
+            {"stage": "semantic", "file": "C:\\project\\top.v", "severity": 1,
+             "code": "X", "message": "m", "level": "error", "range": None},
+        ],
+        path="C:\\project\\top.v",
+    )
+    out = render_html_report(report)
+    assert "C:\\project\\top.v" in out
+
+
 def test_parse_error_file_included():
     # 解析失败文件：即使无诊断也出卡片 + parse error 徽标 + parse_error 信息
     report = {
