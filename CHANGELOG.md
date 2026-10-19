@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`check_doc_refs` D3 支持 blockquote 续行**（2026-10-19，循环 #27）：docs 里
+  `> Impl: a.py` / `> Test: ...` 后的 `>` 续行此前不在 D3 视野（已删档 ADR-0017 引
+  `test_macro_call_node.py` 而 D3 = 0）⇒ 续行里的悬空文件引用漏报。修法：
+  `_rule_d3_impl_test_files` 按字段聚合 blockquote 续行（遇到新的 `Impl:`/`Test:` 字段或
+  空 `>` 行终止），候选按**所在续行行号**报；裸文件名目录继承用整字段候选。验证：
+  `test_check_doc_refs.py` 22→25（续行缺文件改前红；续行存在 / 新字段终止守卫）；policy
+  全绿；门禁变异 **94→95**；全量/静态见收口记录（D3 为 docs 门禁，不触管线）。
+
 - **跨盘路径显示回退**（2026-10-19，循环 #26）：Windows 跨盘输入（`C:` ↔ `E:`）时，
   `tpc check` 文本报告 `_print_file_diags` 与 HTML 报告 `_card_html` 直接调 `os.path.relpath`
   抛 `ValueError` ⇒ CLI traceback / HTML 报告崩溃。修法：`core.utils.safe_relpath` 捕获

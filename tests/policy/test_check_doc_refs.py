@@ -206,6 +206,41 @@ def test_d3_glob_form_nonempty_ok(tmp_path: Path) -> None:
     assert _results(root)["D3"].violations == []
 
 
+def test_d3_blockquote_continuation_flags_missing_file(tmp_path: Path) -> None:
+    """`> Impl:` 的后续 `>` 行属于同一字段——续行里的悬空引用必须被抓到。"""
+    root = _make_tree(
+        tmp_path,
+        docs={"docs/arch.md": "> Impl: core/a.py\n> core/ghost.py\n"},
+        code={"core/a.py": "x = 1\n"},
+    )
+    viol = _results(root)["D3"].violations
+    assert len(viol) == 1
+    assert "core/ghost.py" in viol[0].message
+    assert viol[0].line == 2
+
+
+def test_d3_blockquote_continuation_existing_ok(tmp_path: Path) -> None:
+    root = _make_tree(
+        tmp_path,
+        docs={"docs/arch.md": "> Impl: core/a.py\n> core/b.py\n"},
+        code={"core/a.py": "x = 1\n", "core/b.py": "y = 2\n"},
+    )
+    assert _results(root)["D3"].violations == []
+
+
+def test_d3_blockquote_new_field_stops_continuation(tmp_path: Path) -> None:
+    """续行遇到新的 `> Test:` 字段即停；Test 行独立检查（不被 Impl 吞掉）。"""
+    root = _make_tree(
+        tmp_path,
+        docs={"docs/arch.md": "> Impl: core/a.py\n> Test: tests/ghost.py\n"},
+        code={"core/a.py": "x = 1\n"},
+    )
+    viol = _results(root)["D3"].violations
+    assert len(viol) == 1
+    assert "tests/ghost.py" in viol[0].message
+    assert viol[0].line == 2
+
+
 # ── D4：孤儿文档（info）────────────────────────────────────────────────────
 
 def test_d4_flags_orphan_doc(tmp_path: Path) -> None:

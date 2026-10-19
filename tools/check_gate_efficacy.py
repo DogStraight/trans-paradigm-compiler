@@ -974,6 +974,16 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "    return os.path.relpath(path)  # 变异：跨盘 ValueError 直接冒泡\n",
         "test": "tests/engine/core/test_safe_relpath.py",
     },
+    {
+        "why": "D3 若不把 blockquote 续行并入 `Impl:`/`Test:` 字段 ⇒ 续行里的悬空"
+               "文件引用漏报（已删档 ADR-0017 引 `test_macro_call_node.py` 而 D3=0）",
+        "file": "policy/check_doc_refs.py",
+        "old": "            j = i + 1\n"
+               "            while j < len(lines):\n",
+        "new": "            j = i + 1\n"
+               "            while False and j < len(lines):  # 变异：不扫续行\n",
+        "test": "tests/policy/test_check_doc_refs.py",
+    },
 ]
 
 

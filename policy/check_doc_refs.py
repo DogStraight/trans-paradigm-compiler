@@ -8,7 +8,8 @@
                 （补 check_hardcode R3 的缺口：R3 只查 Doc: 头格式存在，
                 不查目标文件存在——删文档门禁照样绿，本次精简实证）
   规则 D2 [gate]  导航索引（README / docs-README / MODEL_INDEX）→ 条目存在
-  规则 D3 [info]  docs 内 Impl:/Test: 引用 → 文件级存在（::符号 部分不查）
+  规则 D3 [info]  docs 内 Impl:/Test: 引用 → 文件级存在（::符号 部分不查；
+                支持 Markdown blockquote 续行：`> Impl:` 后续 `>` 行并入本字段）
   规则 D4 [info]  docs 文件未被代码 Doc: 或导航索引引用（孤儿提醒）
 
 引用形态（实测盘点）：
@@ -257,7 +258,12 @@ def _d3_finding(doc_rel, line_no: int, message: str) -> Finding:
 
 
 def _check_d3_candidate(
-    root: Path, doc_rel, line_no: int, kind: str, cand: str, dir_candidates: list[str]
+    root: Path,
+    doc_rel,
+    line_no: int,
+    kind: str,
+    cand: str,
+    dir_candidates: list[str],
 ) -> Finding | None:
     """单个候选 → 缺失则出诊断（返回 None = 通过/不归 D3 管）。
 
@@ -283,36 +289,66 @@ def _check_d3_candidate(
     return _d3_finding(doc_rel, line_no, f"{kind}: 引用的文件不存在 '{cand}'")
 
 
-def _check_d3_line(
-    root: Path, doc_rel, line_no: int, line: str, findings: list[Finding]
+def _check_d3_field(
+    root: Path,
+    doc_rel,
+    kind: str,
+    body_parts: list[tuple[int, str]],
+    findings: list[Finding],
 ) -> None:
-    """一行 `Impl:` / `Test:` 逐候选检查。"""
-    m = _IMPL_TEST_RE.match(line.strip())
-    if not m:
-        return
-    kind = "Impl" if "Impl" in m.group(0) else "Test"
-    body = m.group(1)
-    # 本行已解析出的候选（带目录的），供裸文件名继承目录
-    dir_candidates = [c for c in _PATH_CANDIDATE_RE.findall(body) if "/" in c]
-    for cand in _PATH_CANDIDATE_RE.findall(body):
-        finding = _check_d3_candidate(
-            root, doc_rel, line_no, kind, cand, dir_candidates
-        )
-        if finding is not None:
-            findings.append(finding)
+    """一个 `Impl:` / `Test:` 字段（可含 blockquote 续行）逐候选检查。
+
+    `body_parts` = [(行号, 去掉 `>` 前缀的正文)]；目录继承用**整个字段**的
+    带目录候选（续行里的裸文件名继承首行/前文目录）。
+    """
+    all_body = " ".join(body for _line_no, body in body_parts)
+    dir_candidates = [c for c in _PATH_CANDIDATE_RE.findall(all_body) if "/" in c]
+    for line_no, body in body_parts:
+        for cand in _PATH_CANDIDATE_RE.findall(body):
+            finding = _check_d3_candidate(
+                root, doc_rel, line_no, kind, cand, dir_candidates
+            )
+            if finding is not None:
+                findings.append(finding)
 
 
 def _rule_d3_impl_test_files(root: Path) -> list[Finding]:
     """规则 D3（info）：docs 内 Impl:/Test: 引用的文件级存在（glob 非空即过）。
 
-    支持同一行 `/` 分隔的多候选；裸文件名（无目录前缀）继承本行前一个有
-    目录候选的目录（`a/b.py / c.py` → c.py 解析为 a/c.py）。
+    支持同一行 `/` 分隔的多候选；裸文件名（无目录前缀）继承本字段前一个有
+    目录候选的目录。**blockquote 续行**（`> Impl: a.py` 后的 `> b.py`）并入
+    同一字段——续行不是新的 Impl/Test 行，不能漏扫。
     """
     findings: list[Finding] = []
     for doc_rel in _iter_doc_files(root):
         text = (root / doc_rel).read_text(encoding="utf-8", errors="replace")
-        for line_no, line in _iter_md_lines(text):
-            _check_d3_line(root, doc_rel, line_no, line, findings)
+        lines = list(_iter_md_lines(text))
+        i = 0
+        while i < len(lines):
+            line_no, line = lines[i]
+            m = _IMPL_TEST_RE.match(line.strip())
+            if not m:
+                i += 1
+                continue
+            kind = "Impl" if "Impl" in m.group(0) else "Test"
+            body_parts = [(line_no, m.group(1))]
+            j = i + 1
+            while j < len(lines):
+                cont_no, cont = lines[j]
+                stripped = cont.strip()
+                if not stripped.startswith(">"):
+                    break
+                # 新 Impl/Test 字段属于下一条，不并入本字段
+                if _IMPL_TEST_RE.match(stripped):
+                    break
+                cont_body = stripped[1:].strip()
+                if not cont_body:
+                    # 空引用行 = 段落分隔；结束本字段（下一轮仍会跳过它）
+                    break
+                body_parts.append((cont_no, cont_body))
+                j += 1
+            _check_d3_field(root, doc_rel, kind, body_parts, findings)
+            i = j
     return findings
 
 

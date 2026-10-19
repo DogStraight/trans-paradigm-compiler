@@ -33,9 +33,6 @@
       + `tools/README.md` 同步一行；零可见变化收口证据改用该档。
       **另（2026-10-17 实测）**：`--mode inproc` 在 verilog 上不可用——`--plugins` 默认 `grammar/c/plugins`
       ⇒ `GrammarError`（C 插件注入 verilog 规则）；改指后 JSON 采样报 `JSONDecodeError`。修好才能当证据。
-- [ ] **`check_doc_refs` D3 不查 blockquote 续行**：`Impl:`/`Test:` 多行续行在 D3 视野外 ⇒ 引用**不存在的
-      测试文件也不会红**（已删档 ADR-0017 引 `test_macro_call_node.py` 而 D3 = 0）。判据：D3 支持续行（或
-      明确写 D3 边界）+ 该悬空引用能被抓到。链：`policy/check_doc_refs.py`、`policy/doc-alignment.md`
 - [ ] **yaml 渲染对真实 workflow 不幂等（无门禁覆盖）**：仓库自己的 `.github/workflows/*.yml` 两遍渲染，
       第二遍把 `shell: pwsh` 后的注释**上提一行**（offset≈2349）⇒ `format(format(x)) != format(x)`；与渲染器
       接线无关。判据：该文件两遍逐字相同 + `tests/languages/yaml` 全绿。

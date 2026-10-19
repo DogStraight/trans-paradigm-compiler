@@ -54,7 +54,7 @@ Doc: linter/linter_architecture.md   # 文件级引用（稳定，不随章节�
 ## 门禁与同步
 
 - `check_doc_refs.py`：D1（Doc: 目标存在）/D2（导航索引条目存在）gate +
-  D3（Impl:/Test:）/D4（孤儿）info。
+  D3（Impl:/Test: 文件级，含 blockquote 续行）/D4（孤儿）info。
 - `doc_sync.py`：rename/delete 时批量清理机械可清引用（Doc: 行 / 索引表格行），
   正文叙述引用（`references.md「章节」`）列人工清单。
 
