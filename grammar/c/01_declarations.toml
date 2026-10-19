@@ -194,6 +194,12 @@ items = [
     "$2.sub_node[0].sub_node[0]",
     "$2.sub_node[0].sub_node[1].items[*].sub_node[1]",
 ]
+# ⚠ `$3`（`}` 前的尾随逗号，独立可选元素）**不进 `items`**、必须单独绑定：`items`
+#   走 join 分隔符渲染，把标点混进列表会与分隔符 ", " 叠加（多印一个逗号）；而独立
+#   可选元素不绑定就被渲染器**静默丢弃**（写包者须知第 8 条）——实测
+#   `int a[] = {1, 2,};` 曾渲成 `{1, 2};`（丢一个非 trivia token，判据 7 红）。
+#   `EnumBody` 的 `trailing_comma` 是同一修法（2026-10-19 循环 #31）。
+trailing_comma = "$3"
 
 
 # InitElement — 初始化列表的一项：普通初始化器或**指示符初始化器**
@@ -444,6 +450,8 @@ ref = "value"
 line = [
     "{",
     { intent = "compact", items = "items", first_soft = false, nest = 0 },
+    # 尾随逗号紧贴末项之后（不进 join 列表——见上方 node 绑定注）
+    { opt = { ref = "trailing_comma" } },
     "}",
 ]
 

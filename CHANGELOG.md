@@ -105,6 +105,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **初始化列表尾随逗号静默丢弃**（2026-10-19，循环 #31）：`InitList` 产生式的 `symbol.base.comma?`
+  （`$3`，`}` 前的尾随逗号）是**独立可选元素**、此前未绑进 node ⇒ 渲染器对未绑定可选元素静默丢弃
+  （实测 `int a[] = {1, 2,};` → `int a[] = {1, 2};`，丢一个非 trivia token、判据 7 红；产物仍合法）。
+  修法同 `EnumBody` / c23 属性表：绑 `trailing_comma = "$3"` + 布局在 `}` 前
+  `{ opt = { ref = "trailing_comma" } }`（**不得塞进 `items`**：join 的 `sep` 会叠加成 `, ,`）。
+  **行为变化**：初始化列表尾随逗号原样保留（单元素 / 显式长度 / 嵌套 / 指示符 / 多行形态），无尾逗号
+  形态不多印；verilog/yaml 无涉。验证：`test_c_render_fidelity.py` 新增 `TestInitListTrailingComma`
+  （6 带尾逗号 + 5 无尾逗号形态 ×3 判据 = 27 条；改前 **6 红**——6 个带尾逗号形态的 token 序列，幂等与
+  "不多印逗号"反向门改前绿 = 回归守卫）；全量 **4082 passed / 7 skipped**；`render_coverage.py grammar/c`
+  仍 **112/112**；`config_sites.py check` PASS；pyright strict 0；门禁变异 **96→97**（去掉
+  `trailing_comma` 绑定）。
+  **顺带登记**：初始化列表**内注释**三症状（丢 / 双份 / 前移，`inline` / `inline_after` 槽面）属独立
+  缺陷 ⇒ gap 新增 **#11** + TODO（未修，循环 #32 候选）；`grammar/c/README.md` 写包者须知第 8 条
+  补"标点类尾段走单独绑定"的修法。
+
 - **行终止注释不得就地落地：`Union` 回退分支（引擎面；C 包注释吞 `;` 四形态）**（2026-10-19，循环 #30）：
   `_resolve_suffix_union` 在两支挂起后缀（pending）不同时"各自就地落地"（`_append_suffix` 把 `//`
   注释写成 branch 末尾的 Text），父级同行后续 token（`;`/`,`/声明符）印在注释之后 ⇒ 二遍渲染时被并进

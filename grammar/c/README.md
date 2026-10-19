@@ -502,7 +502,9 @@ C23 项（`#warning`/`#elifdef`/`#embed`/`__VA_OPT__`/`__has_include`）。
 8. **解析进 AST ≠ 保真**：尾段写成**独立可选元素**（紧跟重复组之后）时，`items` 绑定
    拿不到它 ⇒ 渲染把 `...` 静默丢掉（实测输出 `int printf(const char *fmt);`）。
    落重复组迭代项的写法（`(comma,(@ParamDecl|symbol.extend.ellipsis))*`）才会进
-   `items`、按源序渲染。改参数表/列表类规则后**都要跑一次渲染对拍**。
+   `items`、按源序渲染。若尾段是**标点**（尾逗号），则改走**单独绑定** + 布局显式渲染
+   （先例：`EnumBody` / `InitList` 的 `trailing_comma`、c23 属性表尾逗号）——标点塞进
+   `items` 会与 join 分隔符叠加成 `, ,`。改参数表/列表类规则后**都要跑一次渲染对拍**。
 9. **块语句"建成块规则"还是"建成普通语句"，先看包有没有自己的语句序**：c4 的
    `BlockStmt` 是块规则（`is_block = true`，body 由 `parse_block_body` 循环产出，
    renderer 用 `role = "flatten"`），linter 因而拿到块体（`_discover_block` /

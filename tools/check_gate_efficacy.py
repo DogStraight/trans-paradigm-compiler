@@ -1001,6 +1001,15 @@ _MUTATIONS: list[dict[str, str]] = [
                "    )\n",
         "test": "tests/engine/renderer/test_doc_line_suffix.py",
     },
+    {
+        "why": "InitList 产生式的尾随逗号是**独立可选元素**，若不单独绑定（只绑 items）"
+               "⇒ 渲染器静默丢一个非 trivia token：`int a[] = {1, 2,};` 渲成 `{1, 2};`"
+               "（判据 7 红；2026-10-19 修复，EnumBody 同形）",
+        "file": "grammar/c/01_declarations.toml",
+        "old": 'trailing_comma = "$3"',
+        "new": '# 变异：去掉 InitList 尾随逗号绑定',
+        "test": "tests/languages/c/test_c_render_fidelity.py",
+    },
 ]
 
 
