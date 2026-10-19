@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A/B 对拍工具产物摘要档（`--products`）**（2026-10-19，循环 #29）：CLI 档此前只对拍
+  `tpc lint --json` 的 rc/stdout，声明"零可见变化"时仍要另写脚本比渲染产物。修法：
+  `_cli_snapshot` 在 `--products` 下对每个输入再跑 `tpc format`，把 `{rc, stdout, stderr}`
+  纳入 PRE/POST 快照；`tools/README.md` 同步一行。验证：`--mode cli --products
+  --expect-changed 0` 实跑 **0/144**，JSON 中每文件含 `format` 键（错误样本 rc=1 也被记录）。
+
 - **`check_doc_refs` D3 支持 blockquote 续行**（2026-10-19，循环 #27）：docs 里
   `> Impl: a.py` / `> Test: ...` 后的 `>` 续行此前不在 D3 视野（已删档 ADR-0017 引
   `test_macro_call_node.py` 而 D3 = 0）⇒ 续行里的悬空文件引用漏报。修法：

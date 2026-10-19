@@ -12,6 +12,8 @@
 用法：
     # CLI 档（verilog 用户可见面：`tpc lint --json`；默认跑仓内样本语料）
     python tools/ab_pipeline_compare.py --mode cli
+    # CLI 档 + 产物摘要（lint JSON + `tpc format` 渲染文本；零可见变化证据用）
+    python tools/ab_pipeline_compare.py --mode cli --products
     python tools/ab_pipeline_compare.py --mode cli --files tests/e2e/samples/errors/e01.v
 
     # 进程内档（任意语言包；对拍 lint 诊断 + 管线结果）
@@ -69,8 +71,12 @@ def _python() -> str:
     return sys.executable
 
 
-def _cli_snapshot(cwd: Path, files: list[str]) -> dict:
-    """在 `cwd` 状态里逐文件跑 `main.py lint <f> --json --pretty`。"""
+def _cli_snapshot(cwd: Path, files: list[str], *, products: bool = False) -> dict:
+    """在 `cwd` 状态里逐文件跑 `main.py lint <f> --json --pretty`。
+
+    `products=True` 时再跑 `main.py format <f>`，把渲染文本（stdout+stderr/rc）
+    一并纳入快照——"零可见变化"不再只看诊断，还能看到格式/内容产物。
+    """
     out: dict[str, dict] = {}
     for rel in files:
         proc = subprocess.run(
@@ -81,7 +87,22 @@ def _cli_snapshot(cwd: Path, files: list[str]) -> dict:
             encoding="utf-8",
             errors="replace",
         )
-        out[rel] = {"rc": proc.returncode, "stdout": proc.stdout}
+        item: dict = {"rc": proc.returncode, "stdout": proc.stdout}
+        if products:
+            fmt = subprocess.run(
+                [_python(), "main.py", "format", rel],
+                cwd=str(cwd),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            item["format"] = {
+                "rc": fmt.returncode,
+                "stdout": fmt.stdout,
+                "stderr": fmt.stderr,
+            }
+        out[rel] = item
     return out
 
 
@@ -141,6 +162,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sources-file", default=None, help="inproc 档：每行一个输入文件")
     ap.add_argument("--expect-changed", type=int, default=None, help="期望变化的输入条数")
     ap.add_argument("--json", default=None, help="把结果写到该路径")
+    ap.add_argument(
+        "--products",
+        action="store_true",
+        help="CLI 档同时对比 `tpc format` 渲染产物（stdout/rc/stderr）",
+    )
     args = ap.parse_args(argv)
 
     tmp = Path(tempfile.mkdtemp(prefix="tpc_ab_pre_"))
@@ -161,8 +187,8 @@ def main(argv: list[str] | None = None) -> int:
             seeded = _seed_untracked_inputs(tmp, files)
             if seeded:
                 print(f"[pre] 补入 HEAD 副本缺失的输入 {seeded} 个（未跟踪/生成语料）")
-            pre = _cli_snapshot(tmp, files)
-            post = _cli_snapshot(ROOT, files)
+            pre = _cli_snapshot(tmp, files, products=args.products)
+            post = _cli_snapshot(ROOT, files, products=args.products)
         else:
             if not args.sources_file:
                 raise SystemExit("inproc 档需要 --sources-file")
