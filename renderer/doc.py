@@ -333,7 +333,8 @@ def _resolve_line_suffix(doc: Doc) -> Doc:
         换行点（原子节点），若在内层就地落地，父级同行后续内容（语句的 `;`
         、`join` 的 `,`）会被印在该注释之后 → 落进注释里被吃掉；
       - 序列结束/整棵 doc 结束仍有挂起 → 追加到末尾（末尾即行尾）；
-      - Union 两支后缀文本相同才上提（不同则各自就地落地）；
+      - Union 两支后缀文本相同才上提；不同则强制 broken 支并继续上提（行终止
+        注释不得就地落地，见 `_resolve_suffix_union`）；
         Fill 内不跨项推迟（分隔符即换行点，内容项内就地文本化）。
     """
     resolved, pending = _resolve_suffix(doc)
@@ -388,18 +389,31 @@ def _suffix_entry(suffix: LineSuffix) -> tuple[Doc, list[str]]:
 
 
 def _resolve_suffix_union(flat: Doc, broken: Doc) -> tuple[Doc, list[str]]:
-    """Union 两支的行尾锚定：后缀文本相同才上提（不同则各自就地落地）。"""
+    """Union 两支的行尾锚定：后缀文本相同才上提；不同则**强制 broken 支**。
+
+    ⚠ 行终止注释不得就地落地（2026-10-19 修）：两支 pending 不同时，旧实现"各自
+    就地落地"会把注释写成 branch 末尾的 Text，而父级同行后续 token（`;`/`,`
+    声明符）印在注释之后 ⇒ 二遍渲染时被并进注释（C 包 `enum` 尾逗号 / `struct` /
+    初始化 / 带声明符四形态实测丢 token、产物非法）。改为选 broken 支渲染、其
+    pending 继续上提，由父层在下一个换行点前落地——行终止注释必须终结所在行。
+
+    前提（生产形态）：Union 由 `group()` 生成，flat 是 broken 的 `flatten` 副本，
+    同一条 suffix 在两支都有 ⇒ 两支 pending 只可能差**落地位置**（一支被内部换行
+    点冲刷、另一支仍挂在末尾），不存在"只在 flat 支的注释文本"，故选 broken 支
+    不丢注释。**手工**构造"两支各带不同 line-ending 后缀文本"的 Union 不是生产
+    形态，此实现取 broken 侧文本（`test_both_branches_pending_keeps_broken_texts`
+    锁该语义）。
+
+    残洞（2026-10-19 审计登记）：pending 相等（通常都为空）时仍保留 Union；flat
+    选择把 `Line` 渲染成空格、`Fill` 逐项就地冲刷 ⇒ 行终止注释仍可能落行中。
+    现有 C/verilog/yaml 布局未触发（未用 `fill`/`line_suffix` 原语）；彻底修法与
+    触发条件见 `renderer/renderer_architecture.md`「行尾锚定」残洞注。
+    """
     flat_doc, flat_pending = _resolve_suffix(flat)
     broken_doc, broken_pending = _resolve_suffix(broken)
     if flat_pending == broken_pending:
         return Union(flat_doc, broken_doc), flat_pending
-    return (
-        Union(
-            _append_suffix(flat_doc, "".join(flat_pending)),
-            _append_suffix(broken_doc, "".join(broken_pending)),
-        ),
-        [],
-    )
+    return broken_doc, broken_pending
 
 
 def _resolve_suffix_concat(docs: Sequence[Doc]) -> tuple[Concat, list[str]]:

@@ -17,9 +17,10 @@
       链：`docs/gaps/gap-parser-linter-approximation.md`
 
 ### 1.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
-- [ ] **#8 枚举体尾逗号后的行注释吞掉收尾 `};`**：`enum e { A, B, // note` + 换行 + `};` → 首遍
-      `enum e {A, B,} // note;`，**丢 token、产物非法 C**。与 #6 同族（容器 `trailing` 槽）但 #6 只位置
-      漂移，**丢 token 不能默认按 #6「归 raw 路径」结案**。判据：两遍渲染后 `};` 仍在、产物合法。
+- [ ] **初始化列表尾随逗号静默丢弃**：`int a[] = {1, 2,};` → `int a[] = {1, 2};`，**丢一个显著 token**
+      （产物仍合法）。成因 = `InitList` 产生式 `symbol.base.comma?`（`$3`）未绑进 node、渲染器静默丢弃
+      未绑定可选元素（写包者须知第 8 条；`EnumBody` 已按同法修）。判据：尾逗号形态两遍幂等 + 显著
+      token 序列相同。链：`gap-language-pack-scope.md` 已知偏差 #9
 - [ ] **#3 注释归属的 token 跨度判据**：注释落在**括号内首元素前**时被上提到括号外（`int f(\n// c\nint a)`
       → 注释落在 `f` 与 `(int a)` 之间）。成因 = `_lift_gap_comments` 项间窗口上界用"迭代**末行**"，
       跨度**内部**的注释被当"该元素之前"；**收紧窗口已验证不可行**（上界改迭代首行 → 6 处门禁红：

@@ -370,7 +370,8 @@ class TestHeadCommentOrder:
 # 裸接线（缺省空词表 ⇒ 引擎不认识任何注释标点，`renderer/renderer.py::comment_ends_line`）
 # 不补硬换行 ⇒ `}` 被并入注释文本：实测输出 `enum e {A, B // note};`（不幂等、显著 token
 # 序列不同、产物已非法 C）；生产接线（词表含 `//`）⇒ `enum e {A,\nB // note\n};`（token 同、幂等）。
-# ⚠ **不要**拿"尾逗号 + 行注释"形态当本判据：那在两种接线下都红（既有缺陷，缺口档 #8）。
+# ⚠ 本判据只用"无尾逗号"形态；"尾逗号 + 行注释"形态曾两种接线都红（引擎 union 回退面，
+#   2026-10-19 修复），由下方 `TestLineCommentBeforeTerminator` 成组守。
 _WIRING_SRC = "enum e { A, B // note\n};\n"
 
 
@@ -394,3 +395,36 @@ class TestHarnessWiring:
         first = c_env["render"](_WIRING_SRC)
         second = c_env["render"](first)
         assert first == second, f"渲染不幂等（接线丢失？）:\n{first!r}\n---\n{second!r}"
+
+
+# 行终止注释后同行还有终结符（`;`/`,`/声明符）：注释必须终结所在行，否则这些
+# token 在二遍渲染时被并进注释。引擎 union 回退面（2026-10-19 修）——旧缺口档把
+# 根因记成"EnumBody 无 tail 段"，实测 struct/初始化/带声明符形态同样红，与语言包
+# 布局无关。
+_TERMINATOR_AFTER_COMMENT_SRCS = [
+    "enum e { A, B, // note\n};\n",
+    "struct s { int a; } // note\n;\n",
+    "int a[] = {1, 2} // note\n;\n",
+    "enum e { A, B, // note\n} v;\n",
+]
+
+
+class TestLineCommentBeforeTerminator:
+    """判据 7/4 定点：注释后的 `;`/`,`/`v` 存活 + 二遍幂等（行终止注释终结行）。
+
+    此前 `_resolve_suffix_union` 把行终止注释就地落地到分句末尾，父级 `;` 印在注释
+    之后 ⇒ 首遍 `enum e {A, B,} // note;`（`;` 被并进注释），二遍 parse truncated
+    （`c_render` 的 `ast is not None` 断言即红）。四形态共同成因，故成组守。
+    """
+
+    @pytest.mark.parametrize("src", _TERMINATOR_AFTER_COMMENT_SRCS)
+    def test_token_sequence_preserved(self, c_env, src):
+        out = c_env["render"](src)
+        want = _significant(c_env["tokenize"](src))
+        got = _significant(c_env["tokenize"](out))
+        assert got == want, _token_diff(src.strip(), want, got)
+
+    @pytest.mark.parametrize("src", _TERMINATOR_AFTER_COMMENT_SRCS)
+    def test_round_trip(self, c_env, src):
+        first = c_env["render"](src)
+        assert c_env["render"](first) == first, f"渲染不幂等:\n{first!r}"

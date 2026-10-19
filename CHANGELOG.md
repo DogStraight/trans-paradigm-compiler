@@ -105,6 +105,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **行终止注释不得就地落地：`Union` 回退分支（引擎面；C 包注释吞 `;` 四形态）**（2026-10-19，循环 #30）：
+  `_resolve_suffix_union` 在两支挂起后缀（pending）不同时"各自就地落地"（`_append_suffix` 把 `//`
+  注释写成 branch 末尾的 Text），父级同行后续 token（`;`/`,`/声明符）印在注释之后 ⇒ 二遍渲染时被并进
+  注释、**产物非法**。四形态实测：`enum e {A, B, // note` + `};`、`struct s {…} // note` + `;`、
+  `int a[] = {1, 2} // note` + `;`、`enum e {…} // note` + `} v;` → 首遍 `…} // note;`（终结符消失），
+  二遍 `parse truncated`。**根因纠正**：旧缺口档记成"`EnumBody` 无 tail 段"，实测 struct / 初始化 /
+  带声明符形态同样红 ⇒ 与语言包布局无关，是 2026-09-20「行尾注释跨层上提」修法留下的 `Union` 回退
+  缺口。修法：两支 pending 不同时不再就地落地，**强制 broken 支并把其 pending 继续上提**（父层在下一个
+  换行点前落地）；生产形态里 flat 是 broken 的 `flatten` 副本、同一 suffix 两支都有 ⇒ 选 broken 不丢
+  注释。**行为变化**：四形态注释移到语句行尾（`enum e {A, B,}; // note`），二遍幂等、显著 token 序列
+  不变；verilog/yaml/C 现有语料无可见变化（A/B `--products` verilog **0/144**；全套 **4048 passed /
+  7 skipped**）。验证：`test_doc_line_suffix.py` 新增 `TestLineSuffixUnion` 3 条（纯 Doc 级；改前红：
+  `a // note;` → POST `a // note\n;` / `a; // note`）、`test_c_render_fidelity.py` 新增
+  `TestLineCommentBeforeTerminator` 4 形态 ×2（改前 8 红：PRE 四形态 token 不等且二遍解析截断）；
+  门禁变异 **95→96**（回退就地落地）；pyright strict 0。**登记**：缺口档删 #8、新增 **#9**（`InitList`
+  尾随逗号静默丢弃——同轮探针顺带发现、独立缺陷未修）与 **#10**（引擎潜伏残洞：flat / Fill 下注释仍
+  可落行中，现有布局未用 `fill`/`line_suffix` ⇒ 未触发）；`renderer/renderer_architecture.md` 同步
+  Union 规则与残洞注。
+
 - **A2 ②：`tpc check` 语法阶段接 linter 语法诊断（原始源宏定义形式语法面）**（2026-10-18，循环 #22）：此前
   `tpc lint` 对畸形 `#define`（宏名缺失 / 形参表空项·未闭合 / 宏体 `#`·`##` 误用）报 blocking 诊断 rc=1，
   `tpc check` 却「No issues found」rc=0——check 的语法阶段 lint 的是**展开后**文本，而 `#define` 定义行在扫

@@ -102,7 +102,7 @@ render → 与源比对，七条：
 
 ### 已知偏差
 
-（逐条；除 #8 外均**不丢 token**）
+（逐条；#9 丢 token；#10 为引擎潜伏残洞、现有布局未触发；#8 已于循环 #30 修复删除，历史见 CHANGELOG）
 
 | # | 现象 | 原因 / 现状 |
 |---|---|---|
@@ -113,7 +113,16 @@ render → 与源比对，七条：
 | 5 | `#include` **未真实包含**（`expand_macros` 默认 false 时管线报 `parse truncated`；默认口径由 A2 ① 统一后指令被消费但**内容未进流**） | A1 已把 `#`/`##` 声明为符号/算子 ⇒ **不再有** `Unexpected token: #`；真实实现（`path_forms` 接线 + 内容进流 + 缺文件/循环给诊断）归 **A2 ②**，两路径口径统一归 **A2 ③**。复现：`run_pipeline_on_source("#include <stdio.h>\n", rules_dir="grammar/c")`；口径注见 `gap-c-preprocessor-scope.md` ⑭ |
 | 6 | 分隔符后**行尾**注释跨折行落位漂移（首遍 `first, /* c */` + 换行 + `second;`，次遍 `first,` + 换行 + `second /* c */;`，第三遍起收敛 ⇒ **判据 4 不幂等**） | `_attach_line_end` 把行尾注释挂 `context.current_node`，分隔符后被吞时挂的是**列表容器**、容器 `trailing` 槽渲染在容器末尾。**2026-09-28 定案：不修渲染**（否决"锚点感知 LineSuffix"与"挂刚结束的项节点"），**归入原始路径（raw）还原**（先例 = 宏 `MacroCall._macro_source_text`）。注释从不丢失，症状只是"位置漂移 + 一遍不幂等"；最小复现见 `tests/fuzz/README.md` |
 | 7 | 类型名里的指针星号与类型词之间不留空格（`sizeof(char *)` → `sizeof(char*)`、`(char *)q` → `(char*)q`） | 纯排版差异（token 序列不变、语义不变，判据 7 照过）；要改成 `char *` 需同时动两处布局并**重录**三份样本比值，故记为已知偏差 |
-| 8 | 枚举体**尾随逗号之后的行注释**吞掉收尾 `};`：`enum e { A, B, // note` + 换行 + `};` → 首遍 `enum e {A, B,} // note;`（`;` 被并入注释），第二遍渲染为空 ⇒ 判据 4/7 均红、**产物非法 C** | 实测 `_comment_slots = {'trailing': ['// note']}` 挂在 **`EnumBody` 容器**上：`_attach_line_end` 把行尾注释挂 `context.current_node`，此处即容器；`EnumBody` 布局只有单行 `line`（无 tail 段）⇒ 容器 `trailing` 槽渲染在整个容器（含 `}`）之后。与 #6 同族，但这条**丢 token**（fuzz oracle 把 token 丢失列硬违规），**待作者单独判**。⚠ **与接线无关——接线前后都坏**：生产路径只有尾逗号形态坏；裸 `Renderer(rules_dir)`（缺省空词表）连无逗号形态也会把 `}` 一起吃掉。复现：把该输入喂 `format` 两遍（首遍即已丢 `;`） |
+| 9 | 初始化列表**尾随逗号**静默丢弃：`int a[] = {1, 2,};` → `int a[] = {1, 2};`（丢一个显著 token，判据 7 红；产物仍合法） | `InitList` 产生式的 `symbol.base.comma?`（`$3`）未绑进 node ⇒ 渲染器对**未绑定可选元素静默丢弃**（写包者须知第 8 条；`EnumBody` 已按"绑 `trailing_comma` + 布局在 `}` 前 `{ opt = { ref = … } }`"修过同形）。循环 #30 修 #8 时探针顺带发现，**本轮只登记未动**；修法同形。复现：`tpc format` 一遍即丢，无需注释 |
+| 10 | **引擎潜伏残洞**：行终止注释在 flat / Fill 路径仍可落行中（`group(Concat([Text("a"), LineSuffix(" // n"), Line()]))` → `a // n b`，`b` 会被并进注释；`Fill` 逐项就地冲刷同理） | 与 #9 无关。`_resolve_suffix_union` 只堵"两支 pending 不同"路径（2026-10-19），pending 相等（通常都为空）时仍保留 Union，而 flatten 把 `Line` 渲染成空格。**现有 C/verilog/yaml 布局未用 `fill`/`line_suffix` 原语 ⇒ 未触发**；彻底修法 = `flatten` 不把 `line_ending=True` 的 LineSuffix 文本化（代价：改 flat 刻意行为 + `test_suffix_in_flat_group` 期望）。触发条件：某语言包开始用 `fill`，或在可 flat 的 `line` 里带行尾注释 |
+
+**#8 修复的独立审计**（循环 #30，反例可复跑）：Doc 级构造 **12** 例，**2 例成立**（手工 `Union`
+两支各带独有行终止后缀文本 ⇒ flat 独有文本丢失；生产 `group`/`flatten` 把同一 suffix 复制进
+两支，22 份真实文档 `both_nonempty = 0` ⇒ 该形态不可达，语义由
+`tests/engine/renderer/test_doc_line_suffix.py::TestLineSuffixUnion` 锁 broken 侧）、**10 例不
+成立**（flat group / Fill / nested union 与 HEAD 同输出 ⇒ 属既有残洞 #10，非本轮引入）。真实语料
+触发面：C 样本 3 / verilog `tests/e2e/samples/real` 18 / yaml 测试字面量 96·101 的 union mismatch
+均为 0，仅 C 四构造形态各 1 次。
 
 ## 运行时档位：`enabled` 的语义边界
 

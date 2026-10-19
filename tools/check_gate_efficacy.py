@@ -984,6 +984,23 @@ _MUTATIONS: list[dict[str, str]] = [
                "            while False and j < len(lines):  # 变异：不扫续行\n",
         "test": "tests/policy/test_check_doc_refs.py",
     },
+    {
+        "why": "行终止注释在 Union 回退处就地落地（写成 branch 末尾 Text）⇒ 父级同行 "
+               "`;`/`,`/声明符落进注释：C 包 enum 尾逗号 / struct / 初始化 / 带声明符"
+               "形态丢 token、二遍 parse truncated（2026-10-19 修复）",
+        "file": "renderer/doc.py",
+        "old": "        return Union(flat_doc, broken_doc), flat_pending\n"
+               "    return broken_doc, broken_pending\n",
+        "new": "        return Union(flat_doc, broken_doc), flat_pending\n"
+               "    return (\n"
+               "        Union(\n"
+               "            _append_suffix(flat_doc, \"\".join(flat_pending)),\n"
+               "            _append_suffix(broken_doc, \"\".join(broken_pending)),\n"
+               "        ),\n"
+               "        [],\n"
+               "    )\n",
+        "test": "tests/engine/renderer/test_doc_line_suffix.py",
+    },
 ]
 
 

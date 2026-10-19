@@ -66,6 +66,17 @@ Nest/Align/Prefix 上提**（Prettier lineSuffix 是全局缓冲，不是按层�
 判类由语言包声明 `Renderer.comment_ends_line` 写入 `LineSuffix.line_ending`：
 行终止型（`//`）参与上提；块注释（`/* */`）就地落地（`a /* c */ + b` 不被搬到
 行尾）。上提后无换行点可落时（doc/序列结束）追加在末尾（末尾即行尾）。
+`Union` 两支**后缀相同才共同上提**；不同时强制 broken 支并继续上提（2026-10-19
+修）——旧实现"各自就地落地"会把行终止注释写成 branch 末尾文本，父级同行后续
+token 落进注释（C 包 `enum` 尾逗号 / `struct` / 初始化 / 带声明符形态实测丢
+token）；行终止注释必须终结所在行。
+
+**残洞（2026-10-19 审计登记，未修）**：pending 相等（通常都为空）时仍保留 Union；
+flat 选择把 `Line` 渲染成空格、`Fill` 逐项就地冲刷 ⇒ 行终止注释仍可能落行中
+（`group(Concat([Text("a"), LineSuffix(" // n"), Line()]))` → `a // n b`，既有
+`test_suffix_in_flat_group` 期望即此形态）。现有 C/verilog/yaml 布局未用
+`fill`/`line_suffix` 原语 ⇒ 未触发；彻底修法 = `flatten` 不把 `line_ending=True`
+的 LineSuffix 文本化（审计原型已验证，代价：改 flat 刻意行为 + 1 条既有期望）。
 
 **换行三态与强制传播**（2026-09-17）：配置侧三态 = `{ soft }`→`Line` /
 `{ break }`→`LineBreak`（组断开时在此断）/ `{ hard_break }`→`HardBreak`
