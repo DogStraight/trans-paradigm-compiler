@@ -77,5 +77,6 @@ def test_include_spliced_lines_unmappable(tmp_path) -> None:
         src, source_path=str(tmp_path / "main.v"), search_dirs=[str(tmp_path)]
     )
     assert "wire inc_a;" in clean and "wire tail;" in clean
-    # 拼接行（含被包含文件尾空行）不属于本源文件 → None；宿主行照常记账
-    assert line_map == [1, None, None, None, 2, 3, 4]
+    # include 指令 marker 在前（宿主行照常记账），拼接行随后（含被包含文件尾
+    # 空行）不属于本源文件 → None；宿主 `wire tail;` / 尾空行继续记账。
+    assert line_map == [1, 2, None, None, None, 3, 4]

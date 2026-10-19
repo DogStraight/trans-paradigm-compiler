@@ -202,7 +202,13 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         ctx.setdefault("_cond_blocks", []).extend(inc_blocks)
         ctx.setdefault("_cond_placeholders", {}).update(inc_placeholders)
         ctx["directive_lines"].extend(inc_dirs_raw)
-        # 拼接行不属于宿主文件：行号账本记 None（映射时保守回退原行号）
-        ctx["_inject_lines"].extend((None, s) for s in inc_clean.split("\n"))
+        # 拼接行不属于宿主文件：行号账本记 None（映射时保守回退原行号）。
+        # 归属与顺序必须和本指令的 marker 一致（条件分支内归分支；且排在
+        # marker 之后——marker 由 `_handle_directive` 在调本 handler 前写入）。
+        from .._expand import _emit_output_line
+
+        stack = ctx.get("_ifdef_stack", [])
+        for s in inc_clean.split("\n"):
+            _emit_output_line(ctx, stack, None, s)
     finally:
         ctx["_include_stack"].discard(norm)

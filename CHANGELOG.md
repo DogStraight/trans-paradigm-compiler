@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A2 末片：include 顺序**（2026-10-19，循环 #25）：include 内容行此前写在指令行 marker **之前**
+  （`handle_include` 先 `_inject_lines.extend`，`_handle_directive` 后注入 marker）⇒ clean 行序/行映射/
+  渲染回插顺序错位；条件分支内的 include 内容还落到分支外。修法：`_emit_output_line` 统一输出归属，
+  `_handle_directive` **先写 marker 再执行副作用 handler**（define/undef 无内容行，顺序无害），
+  include handler 按当前条件栈把内容行写到 marker 之后（分支内同归属）。**行为**：`#include` 行在前、
+  被包含内容随后；`clean_to_raw` 中 marker 映射宿主 include 行、内容行仍 None。验证：
+  `test_include_order.py` 2 条（改前红：顶层 + 条件分支）；`test_scan_line_map.py` 期望同步更新；
+  preprocessor 367、全量 4026/7、`c_acceptance` 42/0、lint 33/33·fp0、check 58/0/0/0、verilog A/B
+  **0/144**（语料无 include，非预测的 2/144；以构造用例锁）、pyright 0；门禁变异 **92→93**
+  （handler/marker 顺序回退）。**边界**：行数不变（1:1 marker + 内容拼接行），内容行仍不可映射。
+
 - **A2 ① 续：跨行宏调用（实参跨行 / 名字-括号跨行）**（2026-10-18，循环 #24）：预处理 token 不区分
   换行（换行只是预处理空白）⇒ 函数宏的实参列表、名字与开括号都可跨物理行。此前逐行展开 ⇒
   `#define F(a,b) a+b` + `int r = F(1,` + 下一行 `2);` 原样保留（GCC `1 +2`）、`F` + 换行 + `(2)`

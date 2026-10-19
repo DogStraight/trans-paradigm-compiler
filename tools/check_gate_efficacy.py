@@ -952,6 +952,17 @@ _MUTATIONS: list[dict[str, str]] = [
                "            )  # 变异：混合行区域元组缺一项\n",
         "test": "tests/engine/preprocessor/test_macro_multiline_call.py",
     },
+    {
+        "why": "include 内容行若先于指令行 marker 写入（handler 先于 marker 执行）⇒ "
+               "内容行排在 `#include` 前、clean 行序/行映射/渲染回插顺序错位"
+               "（A2 末片 include 顺序偏差）",
+        "file": "preprocessor/_expand.py",
+        "old": "        _inject_directive_marker(ctx, stack, jno, line, syntax)\n"
+               "        _invoke_directive(op, stripped, prefix, directive_name, ctx)\n",
+        "new": "        _invoke_directive(op, stripped, prefix, directive_name, ctx)\n"
+               "        _inject_directive_marker(ctx, stack, jno, line, syntax)\n",
+        "test": "tests/engine/preprocessor/test_include_order.py",
+    },
 ]
 
 

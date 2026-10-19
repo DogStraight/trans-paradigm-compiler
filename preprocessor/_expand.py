@@ -318,6 +318,24 @@ def _is_ident_char(ch: str) -> bool:
 # ── 纯文本展开（新方案）──
 
 
+def _emit_output_line(
+    ctx: dict, stack: list, jno: int | None, text: str
+) -> None:
+    """把一行写进当前输出位置：条件栈内归栈顶分支，栈外归顶层 clean 行。
+
+    include 内容必须与**本指令的 marker 行**同一归属，且排在 marker 之后
+    （C 语义：`#include` 行在前、被包含内容随后；渲染按 clean 行序恢复
+    `#include` 原文）。无当前分支（块边界）时丢弃——与 `_append_to_branch`
+    既有语义一致。
+    """
+    if stack:
+        branch = stack[-1].get("cur_branch")
+        if branch is not None:
+            branch["lines"].append((jno, text))
+        return
+    ctx["_inject_lines"].append((jno, text))
+
+
 def _inject_directive_marker(
     ctx: dict, stack: list, jno: int, line: str, syntax: CommentSyntax
 ) -> None:
@@ -337,12 +355,7 @@ def _inject_directive_marker(
     marker = f"tpc:directive:{seq}"
     placeholder = line_marker(syntax, marker)
     ctx.setdefault("_directive_placeholders", {})[marker] = line
-    if stack:
-        branch = stack[-1].get("cur_branch")
-        if branch is not None:
-            branch["lines"].append((jno, placeholder))
-    else:
-        ctx["_inject_lines"].append((jno, placeholder))
+    _emit_output_line(ctx, stack, jno, placeholder)
 
 
 def scan_directives(
@@ -562,9 +575,9 @@ def _route_line(ctx: dict, stack: list, jno: int, line: str) -> None:
     直接进管线（`_inject_lines`）。
     """
     if stack:
-        _append_to_branch(stack, jno, line)
+        _emit_output_line(ctx, stack, jno, line)
     elif _is_ifdef_active(ctx):
-        ctx["_inject_lines"].append((jno, line))
+        _emit_output_line(ctx, stack, jno, line)
 
 
 def _append_to_branch(stack: list, jno: int, line: str) -> None:
@@ -615,9 +628,12 @@ def _handle_directive(
 
     # 副作用指令行（define/undef/include）
     if _is_ifdef_active(ctx):
-        # 活跃分支内：执行 handler，原文原位占位（渲染后回插到原位置）
-        _invoke_directive(op, stripped, prefix, directive_name, ctx)
+        # 活跃分支内：**先写本行 marker，再执行 handler**——include handler 把
+        # 被包含内容追加在同一归属位，顺序 = 指令行 → 内容（C 语义；此前先执行
+        # handler 会让内容行排在 marker 前，渲染/行映射错位）。define/undef
+        # 不产内容行，顺序无影响。
         _inject_directive_marker(ctx, stack, jno, line, syntax)
+        _invoke_directive(op, stripped, prefix, directive_name, ctx)
     elif stack:
         # inactive 分支内：不执行、不进 directive_lines，原文归入分支（占位保留）
         _append_to_branch(stack, jno, line)

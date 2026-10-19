@@ -6,15 +6,9 @@
 > 不占本档；同一问题只记一处（多处出现即合并）；完整论证在 `ROADMAP.md` / `docs/gaps/gap-*.md`。
 > 容量上限由 `tests/policy/test_planning_doc_budget.py` 守（超限先删旧再进新）。
 
-## 一、在途批次：阶段 4 A2（当前主线唯一在做的块）
+## 一、C 包缺陷（能做的）
 
-- [ ] **A2 预处理器收尾（剩余一片）**：**include 顺序偏差**：include 内容行排在 marker **前**
-      （修正 ⇒ 内容行号 ±1 ⇒ verilog A/B 0→2/144）。
-      链：`docs/gaps/gap-c-preprocessor-scope.md` ⑨⑪⑬⑭⑰⑱⑲⑳㉑㉒㉓㉔㉕；`preprocessor/README.md`「已知边界」
-
-## 二、C 包缺陷（A2 之外，能做的）
-
-### 2.1 检查与诊断面（"该报的没报 / 报得粗"）
+### 1.1 检查与诊断面（"该报的没报 / 报得粗"）
 - [ ] **块内诊断粒度粗（每块只报一条，且报文指错位置）**：`void f(void) { a + ; b + ; }` → 1 条指向
       `b` 的 `expected '}'`，**真错在 `a + ;`**（c4 同形样本 → 2 条精确）。成因 = `CompoundStmt` 块体无
       独立语句节点 + `matcher._match_repeat` 遇错即 `break`；两条候选修法**各有实测代价**（(A) 包侧改块
@@ -22,7 +16,7 @@
       的坏输入诊断面）。判据：块内每条坏语句各报一条**位置正确**的诊断。
       链：`docs/gaps/gap-parser-linter-approximation.md`
 
-### 2.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
+### 1.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
 - [ ] **#8 枚举体尾逗号后的行注释吞掉收尾 `};`**：`enum e { A, B, // note` + 换行 + `};` → 首遍
       `enum e {A, B,} // note;`，**丢 token、产物非法 C**。与 #6 同族（容器 `trailing` 槽）但 #6 只位置
       漂移，**丢 token 不能默认按 #6「归 raw 路径」结案**。判据：两遍渲染后 `};` 仍在、产物合法。
@@ -32,7 +26,7 @@
       端口表/具名端口/声明符表/case 项/真实语料无丢注释）。判据：判据改为**迭代 token 跨度**（跨度内 →
       归跨度内部消费方）后该形态归位，且上述 6 处门禁全绿。
 
-## 三、工具与门禁基础设施（非主线，收口时按影响做）
+## 二、工具与门禁基础设施（非主线，收口时按影响做）
 
 - [ ] **A/B 对拍工具缺"产物摘要"档**：现只对拍 `rc`/`stdout` ⇒ 声明"零可见变化"时仍要手写脚本（M1
       那次由审计方另做逐文件 SHA256）。判据：工具增产物摘要档（逐文件 `lint --json` / 渲染文本 PRE↔POST）
@@ -64,7 +58,7 @@
       接入时 semantic 事实型码仍被收集（或显式登记"benchmark 只对语法完整文件"口径）。
       链：`tests/e2e/eval_benchmark.py`、`docs/gaps/gap-c-preprocessor-scope.md` ㉒
 
-## 四、预算与登记（代码结构债 / 功能散点）
+## 三、预算与登记（代码结构债 / 功能散点）
 
 - [ ] **结构欠账 S 有 71 项新增未下结论**：`python tools/structural_score.py --compare` 实测 **基线 0 →
       当前 1341（Δ +1341，新增 71 项，exit 1）**——新代码（`linter/lookahead.py` 类体、`preprocessor/macro_expand.py`、
@@ -76,7 +70,7 @@
       `python tools/feature_sites.py compare` 实测 **`check` 8→13**（其中 `check:MAC001` 为循环 #21 新增实例）、
       **`config` 29→30**、**`config:lexer.pre_scan` 2→3** ⇒ 合并登记点或写保持理由。
 
-## 五、策略层（不进本档）
+## 四、策略层（不进本档）
 
 > 触发式 / 长期规划项**不占待办队列**：结论（不做/暂缓/另立）、为什么现在不做、触发条件统一在
 > `docs/decisions/` 的**策略型 ADR**（2026-10-17 定：长期项不列待办）。触发出现时按体量取回本档或
