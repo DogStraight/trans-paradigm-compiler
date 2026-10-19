@@ -156,6 +156,10 @@ class Node:
     # 挂载（_production.py），供增量重解析（P3.2）结构对齐定位；下划线前缀
     # = 引擎元数据，不进 dump/序列化（同 _pos_line）。
     _tok_span: tuple[int, int] | None = None
+    # 建这个节点的规则名（try_plain_rule / try_block_rule 挂载）：行中注释通道
+    # 判定按"节点自己的规则"而不是可能残留的 context.current_rule（_production.
+    # _attach_midline_inline）；引擎元数据，不进 dump。
+    _rule_name: str | None = None
     # MacroCall 节点的宏调用原文（parser 从 `macro.call` token 内容挂载）：
     # 渲染按它直出原文，输出面走 raw 源区间（ADR-0016）。
     _macro_source_text: str | None = None

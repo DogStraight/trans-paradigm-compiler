@@ -78,6 +78,12 @@ flat 选择把 `Line` 渲染成空格、`Fill` 逐项就地冲刷 ⇒ 行终止�
 `fill`/`line_suffix` 原语 ⇒ 未触发；彻底修法 = `flatten` 不把 `line_ending=True`
 的 LineSuffix 文本化（审计原型已验证，代价：改 flat 刻意行为 + 1 条既有期望）。
 
+**行中锚兜底**（2026-10-19）：`inline_after` 由 line / join 的锚 token 定位消费；
+**原子节点**（无子节点，如 `Number` 的 `ref = "value"` 布局）定位不到时渲染为节点尾
+行尾注释（LineSuffix 同一通道，不静默丢）；**容器节点不兜底**——容器上的同类残留
+常是回溯在失败迭代里给内层节点的归属（端口表 `input clk, /* c */` 曾渲两份），
+容器侧由 join 的锚槽消费负责。
+
 **换行三态与强制传播**（2026-09-17）：配置侧三态 = `{ soft }`→`Line` /
 `{ break }`→`LineBreak`（组断开时在此断）/ `{ hard_break }`→`HardBreak`
 （恒断且强制所在组断开）。两条配套规则：

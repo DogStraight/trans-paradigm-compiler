@@ -1010,6 +1010,39 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": '# 变异：去掉 InitList 尾随逗号绑定',
         "test": "tests/languages/c/test_c_render_fidelity.py",
     },
+    {
+        "why": "行中注释的 inline 通道若按残留 current_rule 判（而非节点自己的规则）"
+               "⇒ 失败尝试留下的内层 inline 规则把容器内注释挂成'节点前置'：C 初始化"
+               "列表 `{1, /* c */ 2}` 渲到 `{` 前、`{1, 2, /* c */ }` 双份（2026-10-19 修）",
+        "file": "parser/_production.py",
+        "old": "    owns_node = getattr(node, \"_rule_name\", None) == getattr(rule, \"name\", None)\n"
+               "    if owns_node and getattr(rule, \"inline\", False):\n",
+        "new": "    if getattr(rule, \"inline\", False):  # 变异：按残留 current_rule 判通道\n",
+        "test": "tests/languages/c/test_c_initializers.py",
+    },
+    {
+        "why": "行中注释回溯双收集若不去重（同节点同位置）⇒ 同一注释归两次："
+               "C 初始化列表 `{1, 2, /* c */ }` 渲成两份（2026-10-19 修）",
+        "file": "parser/_production.py",
+        "old": "    seen = seen_map.setdefault(node, set())\n"
+               "    if key in seen:\n"
+               "        return True\n",
+        "new": "    seen = seen_map.setdefault(node, set())\n"
+               "    if False and key in seen:  # 变异：关掉同节点同位置去重\n"
+               "        return True\n",
+        "test": "tests/languages/c/test_c_initializers.py",
+    },
+    {
+        "why": "闭括号前的行中注释若走行内锚通道 ⇒ 锚到括号前最后 token（原子节点是 "
+               "`ref` 布局，定位不到）⇒ 注释静默丢：C 初始化列表 `{1, 2 /* c */ }` 整条"
+               "丢失（2026-10-19 修）",
+        "file": "parser/_production.py",
+        "old": "        elif after is None or after.type.startswith(\"symbol\") or (\n"
+               "            after.type.startswith(BRACKET_R_PREFIX)\n"
+               "        ):\n",
+        "new": "        elif after is None or after.type.startswith(\"symbol\"):\n",
+        "test": "tests/languages/c/test_c_initializers.py",
+    },
 ]
 
 

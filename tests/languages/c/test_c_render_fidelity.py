@@ -483,3 +483,37 @@ class TestLineCommentBeforeTerminator:
     def test_round_trip(self, c_env, src):
         first = c_env["render"](src)
         assert c_env["render"](first) == first, f"渲染不幂等:\n{first!r}"
+
+
+# 初始化列表**内注释**三症状（丢 / 双份 / 前移；2026-10-19 修）。位置口径：元素间
+# 注释留在原分隔符后；闭括号前注释落到节点尾（块注释不前移）。"尾逗号后注释在 `}`
+# 之后"是已登记的残留漂移（gap 已知偏差 #11）。
+_INIT_INNER_COMMENT_CASES = [
+    ("int a[] = {1, /* c */ 2};\n", "int a[] = {1, /* c */ 2};"),
+    ("int a[] = {1, 2 /* c */ };\n", "int a[] = {1, 2 /* c */};"),
+    ("int a[] = {1, 2, /* c */ };\n", "int a[] = {1, 2,} /* c */;"),
+]
+
+
+class TestInitListInnerComment:
+    """初始化列表内注释：单份、位置固定、二遍幂等、token 序列不变。
+
+    此前三症状（实测）：`{1, 2 /* c */ }` **整条丢失**（锚挂原子节点、`ref` 布局
+    定位不到）；`{1, 2, /* c */ }` **双份 + 提到 `{` 前**（`inline` 槽按节点前置
+    输出 + 回溯双收集）；`{1, /* c */ 2}` 二遍丢。修法（引擎侧）：通道按节点自己
+    的规则判（`Node._rule_name`）、闭括号前注释走 trailing、同节点同位置去重、
+    原子节点未消费锚槽兜底为节点尾行尾注释。
+    """
+
+    @pytest.mark.parametrize("src,expected", _INIT_INNER_COMMENT_CASES)
+    def test_render_exact(self, c_env, src, expected):
+        assert c_env["render"](src) == expected
+
+    @pytest.mark.parametrize("src,_expected", _INIT_INNER_COMMENT_CASES)
+    def test_single_occurrence_and_round_trip(self, c_env, src, _expected):
+        out = c_env["render"](src)
+        assert out.count("/* c */") == 1, f"注释应恰好一份：{out!r}"
+        assert c_env["render"](out) == out, f"渲染不幂等：{out!r}"
+        want = _significant(c_env["tokenize"](src))
+        got = _significant(c_env["tokenize"](out))
+        assert got == want, _token_diff(src.strip(), want, got)

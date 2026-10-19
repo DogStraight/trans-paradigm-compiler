@@ -320,11 +320,31 @@ def render_node(
     _append_head(parts, head_expr, node, layout, renderer, head_trail_docs)
     _append_body(parts, node, body_cfg, layout, renderer)
     _append_tail(parts, layout, tail_cfg, node, renderer, trail_docs)
+    # 行中锚（`inline_after`）没被布局消费（**原子节点**是 `ref` 布局，line/join
+    # 的锚定位到不了）⇒ **不得静默丢**：退化为节点尾行尾锚定（同 LineSuffix 通道：
+    # 行终止型参与跨层上提，块注释就地）。C 初始化列表 `{1, 2 /* c */ }` 曾整条
+    # 注释丢失。消费即删，防二次渲染双份。
+    # ⚠ 只对**无子节点**的原子节点兜底：容器节点上残留的同类槽常是回溯在失败迭代
+    # 里给内层节点的归属（端口表 `input clk, /* c */` 的逗号同时在 `DeclaratorList`
+    # 与 `PortList` 上各归一次），容器再兜底会渲成两份——容器侧由 join 的锚槽消费
+    # 负责，故不在此补。
+    if next(node.iter_children(), None) is None:
+        parts.extend(_leftover_inline_after_docs(slots, renderer))
     parts = _leading_slot_docs(slots, renderer) + parts
 
     if parts:
         return Concat(parts)
     return Empty()
+
+
+def _leftover_inline_after_docs(slots: dict, renderer: Any) -> list[Doc]:
+    """未消费的 `inline_after` 锚槽 → 节点尾行尾注释 Doc（并清空该槽）。"""
+    leftover = slots.get("inline_after")
+    if not leftover:
+        return []
+    texts = [text for entries in leftover.values() for text, _ in entries]
+    slots.pop("inline_after", None)
+    return _trailing_slot_docs(texts, renderer)
 
 def render_inline(
     node: Node,

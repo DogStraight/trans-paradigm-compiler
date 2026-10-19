@@ -105,6 +105,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **初始化列表内注释：丢 / 双份 / 前移三症状**（2026-10-19，循环 #32，引擎注释归属面）：
+  行中注释归属有三个引擎缺陷：① `inline` 通道按 `context.current_rule` 判——内层 inline
+  规则（`Initializer`）返回或失败探索后 `current_rule` 残留，容器（`InitList`）内注释被挂成
+  "节点前置"、并因回溯双收集渲两份（`{1, 2, /* c */ }` → `/* c */ /* c */ {1, 2,}`）；② 闭
+  括号前的注释走行内锚，锚到原子节点（`Number` 是 `ref` 布局）定位不到 ⇒ **整条注释丢失**
+  （`{1, 2 /* c */ }`）；③ 同一注释在失败迭代与成功上下文各归一次（端口表
+  `input clk, /* c */` 曾渲两份）。修法：`Node._rule_name` 内部元数据（建节点的规则名，
+  `Node.dump` 过滤下划线）→ 通道按**节点自己的规则**判 inline；闭括号前（引擎
+  `BRACKET_R_PREFIX` 判定，非语言知识）走 `trailing`；同节点同位置按 (文本, 行, 列) 去重
+  （不跨节点——跨节点残留由 join 消费）；**原子节点**（无子节点）未消费的 `inline_after`
+  兜底为节点尾行尾注释（容器不兜底，防跨节点重复）。**行为变化**：`{1, /* c */ 2}`、
+  `{1, 2 /* c */}` 注释留在原位；`{1, 2, /* c */}` 的注释移到 `}` 后（gap 登记 #11，单份 /
+  幂等优先）；端口表内注释恢复单份。验证：`TestInitListInnerComment` 3 形态 ×2、
+  `TestInitListInnerComments` 槽位契约 3、`TestLeftoverInlineAfter` 3；PRE（HEAD 引擎）
+  **11 红** → POST **142 passed**；`test_comment_restore.py` / pratt 注释组全绿；引擎
+  parser+renderer+languages **1852**；全量 **4103 passed / 7 skipped**；pyright strict 0；
+  `eval_lint_accuracy` hit_code 33/33 / fp 0；A/B `--products` verilog **0/144**；门禁变异
+  **97→100**。
+
 - **初始化列表尾随逗号静默丢弃**（2026-10-19，循环 #31）：`InitList` 产生式的 `symbol.base.comma?`
   （`$3`，`}` 前的尾随逗号）是**独立可选元素**、此前未绑进 node ⇒ 渲染器对未绑定可选元素静默丢弃
   （实测 `int a[] = {1, 2,};` → `int a[] = {1, 2};`，丢一个非 trivia token、判据 7 红；产物仍合法）。

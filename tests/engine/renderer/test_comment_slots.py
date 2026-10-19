@@ -145,3 +145,34 @@ class TestSlotInBody:
         assert "    // a 的注释" in lines
         assert "    a" in lines
         assert "    b" in lines
+
+
+class TestLeftoverInlineAfter:
+    """行中锚在布局里定位不到：原子节点兜底为节点尾注释（不得静默丢）。
+
+    原子节点常是 `ref` 布局（如 `Number` → `ref = "value"`），`inline_after` 只会
+    被 line/join 的锚定位消费 ⇒ 未消费槽此前被静默丢弃（C 初始化列表
+    `{1, 2 /* c */ }` 整条注释丢失）。容器节点的同类残留**不兜底**：那是回溯在
+    失败迭代里给内层节点的归属（端口表 `input clk, /* c */` 曾渲成两份），容器侧
+    由 join 的锚槽消费负责。
+    """
+
+    def test_atomic_node_leftover_renders_at_tail(self):
+        node = _stmt("2")
+        node.add_attr("_comment_slots", {"inline_after": {"2": [("/* c */", 1)]}})
+        out = _render(node, {"layout": {"ref": "value"}})
+        assert out == "2 /* c */"
+
+    def test_atomic_node_leftover_line_comment_anchors_tail(self):
+        node = _stmt("2")
+        node.add_attr("_comment_slots", {"inline_after": {"2": [("// c", 1)]}})
+        out = _render(node, {"layout": {"ref": "value"}})
+        assert out == "2 // c"
+
+    def test_container_leftover_not_rendered(self):
+        """容器（有子节点）残留锚槽不兜底——防跨节点归属的重复输出。"""
+        node = _stmt("x")
+        node.add_sub_node(Node("Child", value="y"))
+        node.add_attr("_comment_slots", {"inline_after": {",": [("/* c */", 1)]}})
+        out = _render(node, {"layout": {"ref": "value"}})
+        assert out == "x"

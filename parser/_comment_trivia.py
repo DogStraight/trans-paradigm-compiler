@@ -18,7 +18,7 @@
 
 | 位置形态 | 判据 | 消费方（通道） |
 |----------|------|----------------|
-| 行中（同行前后均有代码） | `is_midline` | `collect_following_comments` → 节点槽 `inline_after` / `inline`（行内原位） |
+| 行中（同行前后均有代码） | `is_midline` | `collect_following_comments` → 节点槽 `inline_after` / `inline`（行内原位；**后跟闭括号**→ `trailing`）；同节点同位置去重（回溯重复收集） |
 | 规则内部（非行中；本产生式已匹配元素且锚属本规则） | `comment_leave_to_expression` | 让位闸门 → 表达式入口三分类 → `leading_own_line`（独占行）/ `leading`（行尾） |
 | 列表项间（项首元素前） | `production_pointer == 0` | `_repeat_loop` 行号窗口 → 容器上浮为 Comment 迭代项 |
 | 容器首元素前/开括号同行 | `_starts_line` + 行号窗口 | `try_plain_rule` → `_claim_head_comments` 领为 Comment 子节点 |

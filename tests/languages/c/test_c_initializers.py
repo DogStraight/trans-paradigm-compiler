@@ -182,3 +182,31 @@ class TestDesignatedInitializers:
         ast = _parse(src, c)
         names = [n.node_name for n in (getattr(ast, "sub_node", []) or [])]
         assert names == [], f"应解析失败但产出了顶层节点 {names}"
+
+
+class TestInitListInnerComments:
+    """初始化列表内注释归属（2026-10-19 修：丢 / 双份 / 前移三症状的槽位契约）。
+
+    渲染侧判据在 `test_c_render_fidelity.py::TestInitListInnerComment`；这里守
+    归属形状（引擎 `collect_following_comments`）：
+      - 元素间注释 → 容器 `inline_after[","]`（join 分隔符通道，`{1, /* c */ 2}`）；
+      - 闭括号前注释 → 当前节点 `trailing`（`{1, 2 /* c */ }` 挂末项、
+        `{1, 2, /* c */ }` 挂容器），且**只归一次**（回溯重复收集去重）。
+    """
+
+    def test_between_elements_anchors_separator(self, c):
+        """`{1, /* c */ 2}`：锚到 `,`，不挂 `inline` 节点前置槽（前移症状根因）。"""
+        init = _init("int a[] = {1, /* c */ 2};\n", c)
+        assert init._comment_slots == {"inline_after": {",": [("/* c */", 1)]}}
+
+    def test_after_last_element_before_close_is_trailing(self, c):
+        """`{1, 2 /* c */ }`：注释后即闭括号 ⇒ 挂末项 trailing（曾整条丢失）。"""
+        init = _init("int a[] = {1, 2 /* c */ };\n", c)
+        second = init.items[1]
+        assert second._comment_slots == {"trailing": ["/* c */"]}
+        assert not getattr(init, "_comment_slots", None)
+
+    def test_after_trailing_comma_is_trailing_once(self, c):
+        """`{1, 2, /* c */ }`：尾逗号后、闭括号前的注释挂容器 trailing 且只一条。"""
+        init = _init("int a[] = {1, 2, /* c */ };\n", c)
+        assert init._comment_slots == {"trailing": ["/* c */"]}

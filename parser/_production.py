@@ -11,6 +11,7 @@ Doc: docs/language_walkthrough.md（production 求值引擎）
 from typing import Any
 
 from core.define import Node, Token, GrammarRule, CHILDREN_FIELD, block_end_of
+from core.token_protocol import BRACKET_R_PREFIX
 from .parser_core import ParseContext
 from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
@@ -283,6 +284,12 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
 
     # 2) 匹配块头内容 production（block_prods，不含 block_start/block_end）
     rule_node = Node(rule.name)
+    # 引擎内部元数据（Node.dump 过滤下划线前缀）：记录"建这个节点的规则"。
+    # 注释通道判定要按**节点自己的规则**，不能按 context.current_rule——内层
+    # 规则返回后 current_rule 仍停在它上面（仅在规则入口 update），失败尝试更
+    # 会留下内层 inline 规则；按残留规则判会把外层容器内的注释挂成"节点前置
+    # 行内注释"（`_attach_midline_inline`）。
+    rule_node._rule_name = rule.name
     # 源位置元数据（语义诊断定位用）：块规则锚定起始符
     rule_node._pos_line = tok.line
     rule_node._pos_col = tok.column
@@ -503,6 +510,8 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     context.update_current_rule(rule)
 
     rule_node = Node(rule.name)
+    # 引擎内部元数据：记录建节点的规则名（注释通道判定用，见 try_block_rule 注）
+    rule_node._rule_name = rule.name
     _start_tok = context.peek_token()
     _start_idx = context.token_pointer
     if _start_tok is not None:
@@ -862,18 +871,28 @@ def _attach_midline_inline(
     """行中归属（token 标注定位）：`= /* c */ rst_n` 的注释在 `=` 与 `rst_n` 之间。
 
     挂槽分两种：
-      - 当前规则**非** inline：挂 `inline_after`（{锚 token: [(注释, 源行)]}），
+      - 当前节点**自己的规则非** inline：挂 `inline_after`（{锚 token: [(注释, 源行)]}），
         渲染端在布局 line 元素序列里按锚 token 文本定位插入（`=` 后）——本规则
         节点留在 AST。
-      - 当前规则 `inline = true`：规则节点会被内联展开**丢弃**（见
+      - 当前节点**自己的规则** `inline = true`：规则节点会被内联展开**丢弃**（见
         attribute_binder.try_inline_rule），而替身节点布局里没有锚 token
         （`=` 属父规则字面量）→ 挂 `inline`（节点文本前同行前置），槽位随展开
         迁到替身节点后即可渲染为 `= /* c */ b`。
+
+    ⚠ 通道按**节点自己的规则**判（`Node._rule_name`），不按 `context.current_rule`：
+    内层规则返回后 current_rule 不恢复，失败尝试更会留下内层 inline 规则（如
+    `Initializer`）而 current_node 仍是外层容器（如 `InitList`）——按残留规则判
+    会把容器内的注释挂成"节点前置行内注释"，渲染到 `{` 之前（2026-10-19 实测
+    C 初始化列表三症状之一）。节点无 `_rule_name`（token 叶子/匿名节点）时按
+    inline_after 处理（锚定位比"前置"更保守）。
     """
-    slots = _slots_of(getattr(context, "current_node", None))
+    node = getattr(context, "current_node", None)
+    slots = _slots_of(node)
     if slots is None:
         return
-    if getattr(getattr(context, "current_rule", None), "inline", False):
+    rule = getattr(context, "current_rule", None)
+    owns_node = getattr(node, "_rule_name", None) == getattr(rule, "name", None)
+    if owns_node and getattr(rule, "inline", False):
         slots.setdefault("inline", []).append(nxt.content)
         return
     ia = slots.setdefault("inline_after", {})
@@ -923,18 +942,43 @@ def _attach_line_end(parser, context: ParseContext, nxt: Token,
         slots.setdefault("trailing", []).append(nxt.content)
 
 
+def _midline_seen_before(parser, context: ParseContext, nxt: Token) -> bool:
+    """同一注释 token 是否已归给**当前节点**（回溯重进同一收注释点 → 双份）。
+
+    seen 按节点对象分桶、键含注释的 (文本, 行, 列)：同一位置重新进入一定是回溯
+    重复；不同位置的同文本注释不会被误去重。**不跨节点去重**——同一行中注释在
+    失败迭代与成功上下文里会分别归到不同节点（如端口表的逗号先在 `DeclaratorList`
+    的失败迭代里被收、随后 `PortList` 再收）：此时保守保留两处，容器尾槽的渲染
+    由渲染器的"未消费锚"兜底规则收口（原子节点才落地，容器 leftover 不重复输出）。
+    """
+    seen_map = getattr(parser, "_midline_seen", None)
+    if seen_map is None:
+        seen_map = {}
+        parser._midline_seen = seen_map
+    node = getattr(context, "current_node", None)
+    key = (nxt.content, nxt.line, nxt.column)
+    seen = seen_map.setdefault(node, set())
+    if key in seen:
+        return True
+    seen.add(key)
+    return False
+
+
 def collect_following_comments(
     self, context: ParseContext, current_token: Token, token_type: str
 ) -> None:
     """收集紧随 token 的行内注释（注释节点模型 2b-2，C5 重构 2026-08-28）。
 
-    三通道归属（与 renderer 注释模型对应）：
-      - 行中注释（注释后同行有非注释 token）：后跟终结符（`;`/`)`/`,`）→
-        挂当前节点 trailing 槽位（见 `_attach_midline_trailing`）；后跟代码 →
-        挂 inline_after / inline 槽位（见 `_attach_midline_inline`）
+    通道归属（与 renderer 注释模型对应）：
+      - 行中注释（注释后同行有非注释 token）：后跟终结符（`;`/`)`/`,`）或
+        **闭括号**（没有后续元素可挂行内锚）→ 挂当前节点 trailing 槽位（见
+        `_attach_midline_trailing`）；后跟代码 → 挂 inline_after / inline 槽位
+        （见 `_attach_midline_inline`）
       - 行尾注释（注释后 newline）→ 挂当前节点 trailing 槽 + 锚点
         （见 `_attach_line_end`）
     不挂子规则节点：子规则匹配可能回溯重建，注释会随丢弃节点丢失。
+    回溯会重进同一收注释点 → `_midline_seen_before` 同节点去重（不跨节点：见
+    该函数说明）。
     """
     while True:
         nxt = context.peek_token(offset=0)
@@ -943,7 +987,16 @@ def collect_following_comments(
         is_midline, after = _peek_after_comment(context, nxt)
         if not is_midline:
             _attach_line_end(self, context, nxt, current_token, token_type)
-        elif after is not None and after.type.startswith("symbol"):
+        elif _midline_seen_before(self, context, nxt):
+            context.advance_token()
+            continue
+        elif after is None or after.type.startswith("symbol") or (
+            after.type.startswith(BRACKET_R_PREFIX)
+        ):
+            # 后跟终结符，或后跟闭括号（没有"后续元素"可挂行内锚）→ trailing。
+            # 闭括号形态若走行内锚会锚到括号前的最后 token（`2`/`,`），而原子
+            # 节点可能是 `ref` 布局、容器分隔符也可能不经过它 ⇒ 锚定位不到、
+            # 注释静默丢（C 初始化列表 `{1, 2 /* c */ }` 实测）。
             _attach_midline_trailing(context, nxt)
         else:
             _attach_midline_inline(context, nxt, current_token)
