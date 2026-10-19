@@ -22,6 +22,10 @@
    覆盖可综合子集；仿真/库语法在 `plugins/syntax/`（gates 26/UDP/specify（含
    defparam）/configs/nettypes/attributes + sim（initial/fork/过程 assign 等））。
    剩余余量（darkriscv 嵌套条件编译位置精度等）与 `docs/references.md` 跟踪。
+   **头部参数列表续项不带关键字**（`#(W = 8, D = 4)`）未支持（现只接受每项重复
+   `parameter`）：2026-10-19 扫 `tests/e2e/samples/real` 18 个 `.v/.sv` 及全 samples
+   的 58 个 module `#(...)` 头 = **0 例** ⇒ 按"无需求不补语法"记**既定取舍**
+   （触发：真实项目出现；届时补规则 + 用例）。
 6. **yaml 缩进推断锁**（接受 + 摩擦）：`[indent] level="auto"` 首结构行锁定单位；
    混单位文件锁定后错解析；渲染器经 AST-root `_indent_unit` 戳重缩进到锁定单位
    ——块标量逐字内容仅在源单单位时保持对齐。
