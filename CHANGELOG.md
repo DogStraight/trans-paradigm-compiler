@@ -172,6 +172,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **档位门控决策材料落档（#39 调查轮，待作者拍板）**（2026-10-21，仅文档、无生产代码）：
+  C 标准等效缺口最后 2 条（`_Static_assert(1)` / `enum e : int`）同因受阻于 `[plugins] enabled`
+  只门控声明面（ADR 0021 现记"暂缓"）；#38 已证两条都**不能**收敛到声明层。本轮把候选材料
+  写进 ADR 0021「候选材料」节：**A（推荐）**= 可选件（名字在包内 `enabled` 清单里）的
+  `[grammar] files` 随档位加载（引擎 ≈50 行、语言包 0 行、Python 组件不动；并把 C 的
+  keyword-free `[[属性]]` 一并纳入档位）；**B**= 维持现状、两条缺口继续 `xfail` 挂账。
+  关键约束：**不能**按"名字 ∈ enabled"门控整棵组件树（C 的 `semantics`/`checks` 是常驻件、
+  无 grammar）；两包现状与该判据吻合（verilog 9 个 grammar 组件全部在 enabled 清单里）。
+  `PROGRESS.md`「下一轮入口」改为"#40 待拍板后做门控"。判据草案（若取 A）：
+  `test_c_standard_tiers.py` 矩阵 2 行改档位 + `TestKeywordFreeIncrementsAreNotTierGated`
+  改写为"基线档不认属性"（该测试头注已预告）+ 门控判据 3–4 例 + verilog/yaml/c4 全量零回归。
+
 - **任务循环：调查/实现分轮 + 因果句对照纪律 + 分层验证 + 状态入口**（2026-10-21，循环 #34，
   协作制度）：作者确认的四项调整落进 `policy/collaboration.md`「任务循环」与执行细则：
   ① **轮型分耦**——调查轮交付"位置/方案/反例/判据草案"（落档到实现轮能检索即可，**不要求修好、

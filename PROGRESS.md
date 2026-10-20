@@ -44,9 +44,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：调查轮 #39 = 两条剩余标准缺口的**共同前置**（规则文件按 `enabled` 门控）：产出供作者拍板的决策材料（ADR 0021 现记"暂缓"），不落生产代码。
-- **待验证假设**：门控改动面 = `plugin_loader` 发现期传入档位 → `setup_grammar` 只加载已启用插件的规则/Python 组件；C 四档矩阵与 `tests/engine` 需回归，verilog/yaml/c4 的 `[plugins] enabled` 清单已含全部插件故行为不变。
-- **台账**：`gaps/gap-engine-abstraction-audit.md` 矩阵 #1 行补了反向证据（数字分隔符能收敛到声明层 ⇒ 绕不开发生在词法面之外）；审查轮（刻度 7→9 后）一次性出结论。
+- **意图**：实现轮 #40（**待作者拍板**）= 档位门控：可选组件（名字在包内 `[plugins] enabled`）的 `[grammar] files` 随档位加载；拒则两条标准缺口挂账转其它 TODO。
+- **待验证假设**：只滤 grammar、不动 Python 组件；C 的 keyword-free `[[属性]]` 随档而降（tier 矩阵 2 行 + 该测试改写）；verilog/yaml/c4 零回归（用全量 + A/B 守）。
+- **台账**：`gaps/gap-engine-abstraction-audit.md` 矩阵 #1 行即本决策的条目；决策材料在 ADR 0021「候选材料」节（A 推荐 / B 维持），拍板后删「未采纳」抬头。
 
 ## 估算依据（对照锚，可复核）
 

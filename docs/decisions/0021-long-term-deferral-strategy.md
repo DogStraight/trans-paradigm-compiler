@@ -37,6 +37,50 @@
 | 10 | Verilog 宏**定义侧**形式语法声明（补 `[macro_syntax]` 段启用 linter 检查） | 暂缓 | C 侧检查已改为声明驱动（未声明 ⇒ 不跑）；verilog 的宏定义语法不同——形参项可带默认值（`a=1`）、无 `...`/`#`/`##` ⇒ 启用前引擎需先支持形参默认值形态（`param_default_operator`），否则把合法定义误报为非法 | Verilog 包需要宏定义形式语法检查（或真实语料出现畸形 `` `define ``） | `linter/macro_syntax.py`、`preprocessor/macro_shape.py`、`grammar/verilog/base/_macro.toml` |
 | 11 | 展开核心的变参占位常量统一到声明面（`macro_expand` / `_expand` 仍以字面量 `"..."` 识别变参标记） | 暂缓 | `[macro_syntax].variadic_marker` 已是 linter 侧单一来源；但展开核心仍写字面量。今日只有 C 用变参，且"改后占位仍是 `...`"**无法用行为判据区分**（要第二门用**不同占位写法**的语言包才能证）⇒ 按"先证后开"记债，不造无判据机制 | 第二门带变参（且占位写法不同）的语言包接入，或动展开核心源码 | `preprocessor/macro_expand.py`、`preprocessor/_expand.py` |
 
+## 候选材料：#1 档位语义（#39 调查轮，2026-10-21；**待作者拍板，未采纳**）
+
+**为什么重新摆上桌**：C 标准等效缺口最后 2 条（`_Static_assert(1)` / `enum e : int`）**同因受阻**；
+#38 调查已证两条都**无法**收敛到声明层（对照实例写进 `gap-language-pack-scope.md`「运行时档位」）。
+即"暂缓"的成本从"暂不动"变成"合法标准代码持续被拒"。
+
+**实测约束（决定方案形状的 4 条）**
+
+1. 现状：`enabled` 只合并**声明面**；`load_all_components` 无条件扫描 `<pack>/plugins` 全树
+   （`core/plugin_loader.py::discover_components`），组件 `[grammar] files` 由此加载、注入随之上膛。
+2. **不能按"名字 ∈ enabled"门控整棵树**：C 的 `plugins/semantics` 与 `plugins/checks/*` 是常驻
+   组件（不在 enabled 清单里、无 grammar 文件）；按名字门控会误伤常驻件。⇒ 判据应是
+   「**可选件**（名字在包内 `[plugins] enabled` 清单里）的 grammar 才受档位门控；未列出的 = 常驻」。
+3. 两包现状与该判据吻合：C 可选件 c11/c17/c23（c11/c23 有 grammar；c17 无）；
+   verilog 的 **9 个** grammar 组件全部在 enabled 清单里；yaml 无组件；c4 的 `asm_gen` 只有 transform。
+4. 档位数据现成：`ConfigRegistry` 已缓存包内清单与当前档位（`_declared_enabled` / `_active_enabled`），
+   门控不需要新状态，也不需要新配置键。
+
+**候选 A（推荐）：可选组件的 `[grammar] files` 按档位加载**
+
+- 改动点（估算，非实测）：`plugin_loader.load_all_components(..., tier)` 记录可选件清单 + 当前档位
+  → `get_component_grammar_files` 过滤（≈30 行）；`setup_grammar` 取档位（显式参数优先，缺省读
+  `ConfigRegistry` 登记；≈15 行）；`ConfigRegistry` 一个只读取值（≈5 行）。**Python 组件
+  （semantics / checks / postpass）不受影响**；语言包 0 行（无需新键）。
+- 测试面：`test_c_standard_tiers.py` 2 行矩阵改档位 + `TestKeywordFreeIncrementsAreNotTierGated`
+  改写为"基线档不认 `[[属性]]`"（**该测试头注已预告这一天**）+ 门控判据 3–4 例（规则表有/无、
+  同进程切档、verilog 零回归）。
+- 行为变化：C 基线/c11/c17 档不再加载 c23 规则（关键词 free 的属性也随档消失），c23 档不变
+  ⇒ **档位 = 接受域**，与作者 2026-10-21 的架构判断同向。
+- 反向风险：verilog / yaml / c4 必须零回归（依据 = 上面第 3 条；由全量 + A/B `--products` 守）；
+  规则表按 setup_grammar 每次重建、切档缓存键已含档位（#37 前修复）⇒ 同进程切档无残留。
+- 解锁量：两条标准缺口各约 1 轮（`_Static_assert(1)` 单参规则；`enum e : int` = core 空槽位 +
+  c23 条款规则 + 渲染），完成后**缺口清零**，阶段 5 判据 4 的缺口部分收口。
+
+**候选 B（维持现状）**
+
+- 成本 0；两条缺口继续 `xfail` 钉住，keyword-free 泄漏保持为"已声明边界"。
+- 代价：合法标准代码被拒与"阶段 5 标准等效断言面"的目标直接冲突；C 包作为抽象压力测试主角，
+  长期留着"档位 ≠ 接受域"的例外。
+
+**建议**：取 A。理由 = 成本小（≈1 轮引擎 + 2 轮缺口）、判据清晰（门控本身就是档位语义）、
+把"可选件 vs 常驻件"这条**已有区分**显式化（今后新增档位/可选语法增量按同一判据）。
+**若否 A**：row #1 触发条件收紧为"第二门带版本档的语言包出现"，两条缺口保留 `xfail`。
+
 ## 权衡
 
 - **代价**：触发条件靠人记，本档不是待办队列、不会自动提醒；靠"触发式项取回"纪律 + 定期盘点核对。
