@@ -94,6 +94,14 @@ CASES: list[tuple[str, str, str]] = [
      "enum e10 {\n    A10 [[deprecated]] = 1,\n    B10 [[deprecated]]\n};\n"),
     ("增量", "c23 十进制浮点字面量后缀（1.5df / 1.5dd / 1.5dl）",
      "_Decimal32 d4 = 1.5df;\n_Decimal64 d5 = 1.5dd;\n_Decimal128 d6 = 1.5dl;\n"),
+    # ⚠ 下面三条是**循环 #37/#38 转正后补进清单的漏项**（原清单当时没加，与缺口档
+    #   "清单必须逐行对照"的纪律不符）：字面量前缀族 / 二进制常量 / 数字分隔符。
+    ("增量", "字面量前缀族（L / u / U / u8，按档位声明）",
+     'char *s11 = L"x";\nchar c11 = u8\'x\';\nchar *s12 = u8"x";\n'),
+    ("增量", "c23 二进制常量（0b1010 / 0B1010ULL）",
+     "int b11 = 0b1010;\nunsigned b12 = 0B1010ULL;\n"),
+    ("增量", "c23 数字分隔符（1'000'000 / 0x1'F / 0b1'0）",
+     "int n11 = 1'000'000;\nint n12 = 0x1'F;\nint n13 = 0b1'0;\n"),
 ]
 
 

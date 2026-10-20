@@ -5,7 +5,7 @@
   **接缝重扫**（㉔）、**跨行调用**（㉕）、**include 顺序**（并入 ⑱）；A2 交付完成。范围基线 = 作者 2026-10-17 裁定（只做 **C 标准宏**、文本级；卫生宏=语法结构、
   过程宏=能力位，均不在此范围）。
 - 关联：`ROADMAP.md`「C 语言包」阶段 4；`preprocessor/README.md`（跨语言文本能力原型）
-- 接受面证据：`tools/c_acceptance.py`（当前 **42 条 / 接受 42 / 空洞 0**）——**口径注**：两条预处理
+- 接受面证据：`tools/c_acceptance.py`（当前 **45 条 / 接受 45 / 空洞 0**）——**口径注**：两条预处理
   用例按"**被消费且无异常**"接受（指令行被替换为整行 marker 注释），**不代表 `#include` / `#define`
   已真实实现**；拆步信号以本节 ⑭ 为准
 
@@ -145,7 +145,7 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 **边界②（P0-9）实参跨行的调用不展开**：A1 时因行映射冻结未动；2026-10-18 循环 #24 已以"首行展开 + 中间行置空 + 尾行留原文"落成（见 ㉕），行数不变、`out_to_src` 仍按 clean 行对齐。
 **证据**：边界守卫 = `test_c_macro_end_to_end.py` 18 条（守卫式、不用 xfail）；门禁变异 **65→69**；审计 3 偏差；`preprocessor` 186；A/B **0/144**；pyright **0**。**教训**：双路径只能靠**同一算法**收敛；边界用**守卫断言**锁住（不用 xfail）。
 
-⑱ **A2 ②③ 落档（循环 #17）**：`#include` 机制真实（内容本就在流里）——① 诊断策略声明面（`on_missing`/`max_depth`；C=error/32、verilog 默认 warn ⇒ A/B 0/144）② 渲染前剪枝（分析面见内容 / 渲染面只出原行；无法整节点覆盖 ⇒ 整文件原文退化）③ CLI 两路径（`scan_diagnostics` + `_preprocessor_gate` ⇒ 同类诊断/同 rc=1）。**include 顺序（循环 #25）**：内容行现排在指令 marker 后、条件分支内与 marker 同归属（修 clean 行序/行映射）；verilog A/B 实测 **0/144**（语料无 include，非预测的 2/144；以构造用例锁）。lint 吃未展开源为既定边界；check 语法阶段已接（㉓）。证据：`test_c_include_e2e.py` 10 条 + `test_include_order.py` 2 条、`c_acceptance` 42/0。
+⑱ **A2 ②③ 落档（循环 #17）**：`#include` 机制真实（内容本就在流里）——① 诊断策略声明面（`on_missing`/`max_depth`；C=error/32、verilog 默认 warn ⇒ A/B 0/144）② 渲染前剪枝（分析面见内容 / 渲染面只出原行；无法整节点覆盖 ⇒ 整文件原文退化）③ CLI 两路径（`scan_diagnostics` + `_preprocessor_gate` ⇒ 同类诊断/同 rc=1）。**include 顺序（循环 #25）**：内容行现排在指令 marker 后、条件分支内与 marker 同归属（修 clean 行序/行映射）；verilog A/B 实测 **0/144**（语料无 include，非预测的 2/144；以构造用例锁）。lint 吃未展开源为既定边界；check 语法阶段已接（㉓）。证据：`test_c_include_e2e.py` 10 条 + `test_include_order.py` 2 条、`c_acceptance` 45/0。
 
 ⑳ **A2 ④ 形式化宏语法检查落地 linter（2026-10-17；作者对齐：形式化语法走 linter、语义级走 check 插件族）**：新增
 `linter/macro_syntax.py` —— 对**原始源码**检 `#define` 形式约束（宏名/形参表/宏体 `#`·`##`），每类带位置 blocking 诊断；
@@ -192,6 +192,6 @@ hideset 按 **Prosser 交集**口径（名字 token ∩ 实参/闭括号；替�
 
 - 路线：`ROADMAP.md`「C 语言包」阶段 4（预处理器；能力面缺口仍在，工具计数口径见 ⑭）
 - 机制：`preprocessor/README.md`（宏形态声明 / 三机制 / 位置桥）、`grammar/verilog/base/_macro.toml`（声明面先例）
-- 接受面：`tools/c_acceptance.py`（**42 条 / 接受 42 / 空洞 0**；两条预处理用例按"被消费且无异常"接受，**不代表已真实实现**——口径见 ⑭）
+- 接受面：`tools/c_acceptance.py`（**45 条 / 接受 45 / 空洞 0**；两条预处理用例按"被消费且无异常"接受，**不代表已真实实现**——口径见 ⑭）
 - 门禁：`tests/engine/preprocessor/`（预处理器面）、`tests/languages/c/`（C 包）
 - 相邻档：`docs/gaps/gap-c-semantic-base.md`（C 语义基座）、`docs/gaps/gap-language-pack-scope.md`（C 包接受域/档位）

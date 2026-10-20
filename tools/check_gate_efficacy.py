@@ -1076,6 +1076,26 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": 'base_prefix = "0x"  # 变异：丢二进制分支\n',
         "test": "tests/languages/c/test_c_lexer.py",
     },
+    {
+        "why": "C23 数字分隔符靠引擎把声明编译成分隔态子图；关掉展开 ⇒ `1'000'000` 又切成 "
+               "`1` + 字符常量 + `000`（2026-10-21 补）",
+        "file": "lexer/number_gen.py",
+        "old": "        if not self.digit_separator:\n            return\n",
+        "new": "        if True:  # 变异：关掉分隔符展开\n            return\n",
+        "test": "tests/engine/lexer/test_number_digit_separator.py",
+    },
+    {
+        # ⚠ 反向教训：本条原写成"丢掉 `c_octal` 的分隔符声明"⇒ **测试仍绿**——因为 `0'7`
+        #   的 digit 序列同时落在 `c_dec`（`digits = "any"`）里、扫描取最长 token，`c_octal`
+        #   那条声明本就是重复知识（已删；见 `_number_c23.toml` 末段注）。变异改为对
+        #   真正承担该职责的 `c_dec` 条目下手。
+        "why": "数字分隔符的档位判别靠 c23 插件给核心 `c_dec` 按名合并 `digit_separator`；"
+               "去掉该字段 ⇒ c23 档的 `1'000'000` 又切成 `1` + 字符常量 + `000`（2026-10-21 补）",
+        "file": "grammar/c/plugins/c23/_number_c23.toml",
+        "old": 'name = "c_dec"\nsuffix = { chars = "uUlLfFd", max = 3 }\ndigit_separator = "\'"\n',
+        "new": 'name = "c_dec"\nsuffix = { chars = "uUlLfFd", max = 3 }\n# 变异：丢十进制分隔符声明\n',
+        "test": "tests/languages/c/test_c_lexer.py",
+    },
 ]
 
 

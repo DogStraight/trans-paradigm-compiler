@@ -206,6 +206,90 @@ class TestLiteralPrefixes:
         assert _types("L 'x'", c_lexer) == ["id", "literal.string"]
 
 
+class TestDigitSeparator:
+    """C23 **数字分隔符**（`1'000'000`；引擎声明面 `[[number.based]] digit_separator`）。
+
+    修法 = 引擎声明单字符分隔符，c23 插件按名合并给核心数字形态补键（`c_dec` 覆盖含八进制
+    在内的全部十进制式序列、`c_prefix` 覆盖 0x/0b；基线/c11
+    不声明 ⇒ 仍是 `1` + 字符常量两个 token）。oracle = gcc 16.1.0
+    `-std=c23 -pedantic-errors` 逐样本 OK；逐档切分判据见 `TestDigitSeparatorTiers`。
+    """
+
+    @pytest.mark.parametrize(
+        "src",
+        [
+            "1'000'000",   # 十进制
+            "0'7",         # 八进制
+            "0x1'F",       # 十六进制
+            "0b1'0",       # 二进制（C23）
+            "1.5'0",       # 小数位
+            "1.0e1'0",     # 指数位
+            "1'000u",      # 带后缀
+        ],
+    )
+    def test_separated_digits_single_token(self, c_lexer, src):
+        assert _types(src, c_lexer) == ["literal.number"], f"{src!r} 被切碎"
+
+    def test_separator_kept_in_token_content(self, c_lexer):
+        toks = [
+            t for t in c_lexer.tokenize("1'000'000\n") if t.type == "literal.number"
+        ]
+        assert [t.content for t in toks] == ["1'000'000"]
+
+    def test_trailing_separator_is_not_number(self, c_lexer):
+        """尾随分隔符不并入 token：`1'` 是"数字 + 引号"，不是数字。"""
+        assert _types("1'", c_lexer) == ["literal.number", "literal.string"]
+
+    def test_double_separator_splits(self, c_lexer):
+        """连续分隔符不是数字 token 的一部分（`1''0` 在第二个引号处断开）。"""
+        assert _types("1''0", c_lexer) == [
+            "literal.number", "literal.string", "literal.number",
+        ]
+
+
+class TestDigitSeparatorTiers:
+    """数字分隔符的**档位面**：c23 声明单 token，基线/c11 未声明 ⇒ 切成三 token。
+
+    判据 = 接受域由**声明面组合**决定（同一引擎、同一 pack，只切 `enabled`）。
+    """
+
+    _CASES = [
+        ("baseline", "1'000'000", ["literal.number", "literal.string", "literal.number"]),
+        ("c11", "1'000'000", ["literal.number", "literal.string", "literal.number"]),
+        ("c23", "1'000'000", ["literal.number"]),
+        ("c11", "0x1'F", ["literal.number", "literal.string"]),
+        ("c23", "0x1'F", ["literal.number"]),
+        ("c23", "0'7", ["literal.number"]),
+    ]
+    _TIERS = {
+        "baseline": [],
+        "c11": ["c11"],
+        "c23": ["c11", "c17", "c23"],
+    }
+
+    @pytest.mark.parametrize(
+        "tier,src,expected", _CASES, ids=[f"{c[0]}-{c[1]}" for c in _CASES]
+    )
+    def test_token_split_follows_tier(self, tier, src, expected):
+        ConfigRegistry.load_language(
+            _RULES, plugins_dir=os.path.join(_RULES, "plugins"), enabled=self._TIERS[tier]
+        )
+        lexer = Lexer(rules_dir=_RULES)
+        got = [
+            t.type
+            for t in lexer.tokenize(src + "\n")
+            if t.type not in ("newline", "comment")
+        ]
+        assert got == expected, f"{tier} 档下 {src!r} 切分不符：{got}"
+
+    @pytest.fixture(autouse=True)
+    def _restore(self):
+        yield
+        ConfigRegistry.load_language(
+            _RULES, plugins_dir=os.path.join(_RULES, "plugins")
+        )
+
+
 class TestLiteralPrefixTiers:
     """前缀的**档位面**：L（C99 基线）→ u/U/u8 字符串（C11）→ u8 字符（C23）。
 

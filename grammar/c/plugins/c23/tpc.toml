@@ -7,7 +7,8 @@
 #   （表达式原子）+ `bool` / `typeof` / `typeof_unqual`（类型说明符，注入核心 `SimpleType`
 #   交替）+ `constexpr`（存储类，注入 `StorageClass`）+ `alignas` / `alignof` /
 #   `thread_local`（c11 三个关键字的 C23 拼写）+ `[[属性]]` + `_BitInt` /
-#   `_Decimal32/64/128`。
+#   `_Decimal32/64/128` + 字面量面（`u8` 字符前缀、二进制常量 `0b…`、**数字分隔符**
+#   `1'000`）——后三者走**声明面**（`_token_ext.toml` / `_number_c23.toml` 按名合并）。
 #
 # ⚠ **同构造异拼写的包内约定（2026-09-26 定；TODO 里"需先定约定"的那条答复）**：
 #   **c23 侧各写一条同形规则**，不做跨插件 token 引用、也不用 `inject_replace_rule` 去改
@@ -22,10 +23,11 @@
 #   production 的交替，`parser/grammar_inject.py`），fail-fast；缺的只是插件没写那几行
 #   声明。上面各项即按此落地（各文件头注写明注入点与"为什么选那个最窄的注入点"）。
 #
-# ⚠ **仍未落地的标准项**（真实缺口，清单与判据见 `docs/gaps/gap-language-pack-scope.md`
-#   「C 标准等效缺口」）：字面量形态（二进制常量、数字分隔符、`u8` 字符/字符串字面量）、
-#   `enum` 固定底层类型；以及 `_Static_assert(constant-expression)`（单参、下划线拼写）——
-#   后者受"规则文件不按档位门控"限制（见 `22_static_assert_single.toml` 头注）。
+# ⚠ **仍未落地的标准项 2 条**（真实缺口，清单与判据见
+#   `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」）：`_Static_assert(constant-expression)`
+#   （单参、下划线拼写）与 `enum` 固定底层类型 `enum e : int`——两者**同因**受阻：
+#   `enabled` 只门控**声明面**，插件规则文件无条件加载 ⇒ c23 规则会漏进 c11/c17 档
+#   （ADR 0021 记"暂缓、慢慢补充"，作者 2026-09-28 定调）。
 #
 # 词法面：C23 新增关键字**全部声明**（词法完整）；没有规则的用起来就是语法错误
 #   （响亮失败，不会静默当标识符）——与 c11 插件同一策略。

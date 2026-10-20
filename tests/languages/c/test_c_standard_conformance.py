@@ -79,13 +79,12 @@ _BELOW_TIER_STATE = [
 
 # 标准等效**缺口清单**（oracle 实测 + tpc 对照；`xfail(strict=True)`：修好即变红提醒转正）。
 # 每条 = (标签, 源码, 档位, 标准依据 + gcc 结论)
-# ⚠ 成员表位（#35）与字面量前缀族 / 二进制常量（#37）已转正，移出本清单；余 3 条：
-#   `_Static_assert(1)`（下划线拼写、单参；档位门控限制）、数字分隔符、enum 固定底层类型。
+# ⚠ 成员表位（#35）、字面量前缀族 / 二进制常量（#37）、数字分隔符（#38）已转正，移出本清单；
+#   余 2 条：`_Static_assert(1)`（下划线拼写、单参；受"规则文件不按档位门控"限制）、
+#   `enum e : int` 固定底层类型（同一限制：core 的冒号位若由 c23 规则注入，会漏进下档）。
 _GAPS = [
     ("C23 单参 _Static_assert（下划线拼写）", "_Static_assert(1);\n", "c23",
      "C23 §6.7.10 消息可省，两种拼写同语法；gcc -std=c23 OK"),
-    ("C23 数字分隔符", "int n = 1'000'000;\n", "c23",
-     "C23 §6.4.4.1 digit separator；gcc -std=c23 OK"),
     ("C23 enum 固定底层类型", "enum e : int { A };\n", "c23",
      "C23 §6.7.2.2 enum-type-specifier；gcc -std=c23 OK"),
 ]
@@ -197,6 +196,14 @@ class TestLiteralForms:
         ("C23 UTF-8 字符 u8", "char c = u8'x';\n", "c23"),
         ("C23 二进制常量", "int n = 0b1010;\n", "c23"),
         ("C23 二进制常量 + 后缀", "unsigned n = 0B1010ULL;\n", "c23"),
+        # ── C23 数字分隔符（§6.4.4.1；引擎 `[[number.based]] digit_separator`）──
+        ("C23 十进制数字分隔符", "int n = 1'000'000;\n", "c23"),
+        ("C23 十六进制数字分隔符", "int n = 0x1'F;\n", "c23"),
+        ("C23 八进制数字分隔符", "int n = 0'7;\n", "c23"),
+        ("C23 二进制数字分隔符", "int n = 0b1'0;\n", "c23"),
+        ("C23 浮点数字分隔符", "double n = 1.5'0;\n", "c23"),
+        ("C23 指数位分隔符", "double n = 1.0e1'0;\n", "c23"),
+        ("C23 分隔符 + 后缀", "unsigned n = 1'000u;\n", "c23"),
         ("C11 前缀字符串作静态断言消息", 'static_assert(1, u8"msg");\n', "c11"),
     ]
 
@@ -217,6 +224,8 @@ class TestLiteralForms:
         ("基线档不认 u 字符串（C11 才有）", 'char *s = u"x";\n', "baseline"),
         ("基线档不认 u8 字符串（C11 才有）", 'char *s = u8"x";\n', "baseline"),
         ("C11 档不认二进制常量（C23 才有）", "int n = 0b1010;\n", "c11"),
+        ("C11 档不认数字分隔符（C23 才有）", "int n = 1'000'000;\n", "c11"),
+        ("基线档不认数字分隔符", "int n = 1'000'000;\n", "baseline"),
     ]
 
     @pytest.mark.parametrize(

@@ -46,8 +46,8 @@
 
 - **判据（每族都要有）**：正样本解析通过（进 AST）+ 负样本被拒（linter/parser 报错），
   两向都要断言——只有正样本会漏掉"语法过宽"。
-- **盘点工具**：`python tools/c_acceptance.py`（42 条构造逐条试解析，报"进 AST / 空 AST /
-  词法抛错"）——当前 **42 条 / 接受 42 / 空洞 0**（**口径注**：两条预处理用例按"**被消费且无异常**"
+- **盘点工具**：`python tools/c_acceptance.py`（45 条构造逐条试解析，报"进 AST / 空 AST /
+  词法抛错"）——当前 **45 条 / 接受 45 / 空洞 0**（**口径注**：两条预处理用例按"**被消费且无异常**"
   接受——指令行被替换为整行 marker 注释，**不代表 `#include` / `#define` 已真实实现**，见
   `docs/gaps/gap-c-preprocessor-scope.md` ⑭）。空洞是无声的：不属任何语句入口 FIRST 集的
   构造会被整体跳过而不报错，只跑测试套件看不出还差哪一族。
@@ -67,7 +67,7 @@
 
 > 阶段 5 缺的是**按标准分档的断言面**（ROADMAP「C 语言包」）。第一批先把**静态断言族**
 > 做成接受/拒绝双向断言，并用 oracle 把「合法但被拒」的标准项逐条照出来——本节是
-> 缺口全表（当前余 **3 条样本**，成员位与字面量族已转正）；判据在
+> 缺口全表（当前余 **2 条样本**，成员位 / 字面量族 / 数字分隔符已转正）；判据在
 > `tests/languages/c/test_c_standard_conformance.py`（`xfail(strict=True)`：**修好一条就红一条**，
 > 提醒移出清单并转正）。
 
@@ -77,9 +77,8 @@
 
 | # | 构造（合法标准代码） | 标准归属 | gcc | tpc 现状 | 成因 / 修法 |
 |---|---|---|---|---|---|
-| 1 | `_Static_assert(1);`（下划线拼写、单参） | C23 §6.7.10（消息可省，与 `static_assert` 同语法） | c23 OK | 拒绝 | c23 插件不能为它写规则：`enabled` 只门控**声明面**，插件规则文件无条件加载 ⇒ c23 里引用 `keyword._Static_assert` 的规则会在 c11/c17 档生效，把 C11 该拒的形态放进来。修法 = 规则按档位门控（`enabled` 语义扩展） |
-| 2 | `int n = 1'000'000;` | C23 §6.4.4.1（digit separator） | c23 OK | 拒绝 | 数字扫描器的 DFA 不支持分隔符（引擎 `lexer/number_gen.py`；c23 侧需声明式开关） |
-| 3 | `enum e : int { A };` | C23 §6.7.2.2（enum-type-specifier） | c23 OK | 拒绝 | `EnumSpecifier` 缺"标签后 `: 类型说明符`"位；core 生产式要加可选组，属包内语法改动 |
+| 1 | `_Static_assert(1);`（下划线拼写、单参） | C23 §6.7.10（消息可省，与 `static_assert` 同语法） | c23 OK | 拒绝 | c23 插件不能为它写规则：`enabled` 只门控**声明面**，插件规则文件无条件加载 ⇒ c23 里引用 `keyword._Static_assert` 的规则会在 c11/c17 档生效，把 C11 该拒的形态放进来。修法 = 规则按档位门控（`enabled` 语义扩展；ADR 0021 记"暂缓"，作者 2026-09-28 定调慢慢补充） |
+| 2 | `enum e : int { A };` | C23 §6.7.2.2（enum-type-specifier） | c23 OK | 拒绝 | `EnumSpecifier` 缺"标签后 `: 类型说明符`"位；**不能**按 `@StructMemberExtra` 先例做成"core 空槽位 + c23 注入"——该槽的形态只有 `:` + 核心类型词（无新关键字），注入会漏进基线/c11 档（同 #1 的档位门控限制；依据 = `test_c_standard_tiers.py::TestKeywordFreeIncrementsAreNotTierGated` 实测插件规则在**基线档**仍生效）。修法 = 同一个 `enabled` 语义扩展 |
 
 **已收口**：① C23 单参 `static_assert(1)`（循环 #33）；② **字面量前缀族 + 二进制常量**
 （循环 #37，原表 u8 字符串 / u8 字符 / 二进制三行）——修法 = 引擎 `[string] prefixes`
@@ -95,6 +94,13 @@ Verilog `FuncDecl` 同款的 **inline 分派器 + 两分支**（两参/单参各
 接受面继承档位矩阵（构造数按 `pytest --collect-only -q` 实测），拒绝面与下档三态
 （generic / rejected）在 `test_c_standard_conformance.py::TestRejectSide /
 TestBelowTierState / TestStaticAssertMemberPosition`；`gcc` 对照样本见 `_GAPS` 每条注释。
+④ **C23 数字分隔符**（循环 #38，原表 #2）——修法 = 引擎 `[[number.based]] digit_separator`
+声明面（数字自环态旁挂分隔态，两侧必须有数字），c23 插件按名合并给 `c_dec` / `c_prefix`
+补键（八进制序列由 `c_dec` 的 `digits = "any"` 覆盖，不另声明），基线/c11 不声明 ⇒
+仍切两 token（档位 = 声明面组合）。判据 = `test_c_lexer.py::TestDigitSeparator{,Tiers}`
+（逐档切分）+ 本文 `TestLiteralForms`（端到端接受 + 下档拒绝）；oracle = gcc 16.1.0
+`-std=c23 -pedantic-errors` 逐样本 OK，`0x'1` / `1.'5` 按宽进口径
+不断言拒绝（同 `1ff`，见 `test_number_digit_separator.py::test_wide_in_positions_not_validated`）。
 
 **下档三态是"接受域"口径的一部分**（"未声明关键字 ≠ 拒绝"）：同一形态在未达档位时要么
 被当普通构造照常解析（`bool f;` / `_Static_assert(1, "x");` 在基线档当 typedef 名/函数调用），
@@ -177,6 +183,13 @@ render → 与源比对，七条：
   `[lexer] token_ext`）；插件的**规则文件与 Python 组件**由 `setup_grammar` →
   `load_all_components(<pack>/plugins)` 加载，**不看** `enabled`。⇒ **不依赖新关键字的
   增量在基线档也解析**（"档位 = 接受域"对它不成立）；补齐前不新增依赖该语义的声明。
+- **本边界的两个实例（判断"能不能绕"的判据）**：
+  · **绕得开** = 差异能收敛到**声明层**：数字分隔符（循环 #38）把 `'` 做成
+    `[[number.based]] digit_separator`，c23 插件按名合并补键 ⇒ 引擎零语言判断、
+    四档接受域各不相同（反例见下条）。
+  · **绕不开** = 形态只由**核心 token** 组成：`_Static_assert(1)`（引用 c11 档已存在的
+    `keyword._Static_assert`）与 `enum e : int`（`:` + 核心类型词）——c23 规则文件注入
+    即漏进下档。这两条在「C 标准等效缺口」表内，**前置 = ADR 0021 的档位门控决策**。
 
 ## 关联条目
 

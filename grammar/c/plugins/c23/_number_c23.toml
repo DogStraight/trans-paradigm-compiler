@@ -1,16 +1,18 @@
 # ============================================================================
-# c23 插件 — 十进制浮点**字面量后缀** `df` / `dd` / `dl`（C23 §6.4.4.2）
+# c23 插件 — 数字形态增量：十进制浮点后缀 `df`/`dd`/`dl`、二进制常量、数字分隔符
 # ============================================================================
-# C23 的 decimal-floating-constant 在常规浮点后缀之外还允许 `df` / `dd` / `dl`
-# （分别对应 `_Decimal32` / `_Decimal64` / `_Decimal128`）。它们作用在**词法的数字形态**
-# 上，而数字形态由核心基线的 `base/_number.toml` 声明（`[[number.based]] name = "c_dec"`
-# 的 `suffix = { chars = "uUlLfF", max = 3 }`）。
+# C23 在核心基线（`base/_number.toml`）的数字形态上新增三件事：
+#   ① 十进制浮点**字面量后缀** `df` / `dd` / `dl`（C23 §6.4.4.2，对应
+#      `_Decimal32` / `_Decimal64` / `_Decimal128`）；
+#   ② **二进制常量** `0b…`（C23 §6.4.4.1）；
+#   ③ **数字分隔符** `'`（C23 §6.4.4.1，如 `1'000'000`）。
 #
-# ⚠ **插件不能改核心文件，也不能整条重抄**：把 `d` 写进核心会让**基线档**也接受 `1.5dd`
-#   （档位语义被污染）；整条重抄 `c_dec` 则是知识重复、必然漂移。故本轮给引擎补了
-#   **声明级合并语义** `merge = "by-name"`（`core/config_registry.py::merge_by_name`）：
-#   同名声明之间按 `name` 合并 `[[number.based]]` 条目 —— 本文件只写**要改的字段**，
-#   其余（size / base_prefix / value_digits / lead_dot …）由核心形态供给。
+# ⚠ 这些形态都由核心基线声明（`c_dec` / `c_prefix`），插件**不能改核心文件，
+#   也不能整条重抄**：把新字段写进核心会让**基线档**也接受（档位语义被污染）；整条重抄
+#   则是知识重复、必然漂移。故复用**声明级合并语义** `merge = "by-name"`
+#   （`core/config_registry.py::merge_by_name`）：同名声明之间按 `name` 合并
+#   `[[number.based]]` 条目 —— 本文件只写**要改的字段**，其余（size / base_prefix /
+#   value_digits / lead_dot / suffix …）由核心形态供给。
 #
 # ⚠ `chars` 是**字符集 + 长度上限**（不是"合法后缀表"）：加了 `d` 之后 `1.5d` / `1.5dd`
 #   / `1.5dl` / `1.5ddf` 都会被吃成一个数字 token —— 与核心基线既有的宽进口径一致
@@ -20,11 +22,19 @@
 [[number.based]]
 name = "c_dec"
 suffix = { chars = "uUlLfFd", max = 3 }
+digit_separator = "'"
 
 # C23 §6.4.4.1：二进制常量 `0b…`。走**按名合并**给核心 `c_prefix` 形态加一个前缀
 # 分支（同名条目深合并：base_prefix 覆盖为两分支，value_digits 只补 b→bin，x→hex
 # 由核心形态保留）；c23 档合成一个 token，基线/c11 档仍是 `0` + `b…` 两个 token。
+# `digit_separator` 同条补上（`0x1'F` / `0b1'0`）。
 [[number.based]]
 name = "c_prefix"
 base_prefix = "0x|0b"
 value_digits = { b = "bin" }
+digit_separator = "'"
+
+# ⚠ **不**给 `c_octal` 补 `digit_separator`：它的每一种 digit 序列（`0'7` / `07'7`）
+#   也都落在 `c_dec` 的 `size = { digits = "any" }` 形态里，而数字扫描取**最长 token**，
+#   故由 `c_dec` 的声明覆盖即可——再声明一条是**重复知识**（实测：只留 `c_dec` 的声明，
+#   `0'7` 仍是单 token；把 `c_octal` 声明删掉后判据不变，见门禁变异 106 的反向教训）。

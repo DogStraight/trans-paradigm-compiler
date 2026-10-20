@@ -22,7 +22,9 @@
   **前导点** `.5`）、字符与字符串字面量（**段内转义** `"say \"hi\""`、
   **前缀** `L"…"` / `L'…'`；C11 增 `u`/`U`/`u8` 字符串与 `u`/`U` 字符，
   C23 增 `u8` 字符与**二进制常量** `0b…`——前缀是 token 一部分，
-  `[string] prefixes` 引擎声明面，见 `lexer/README.md`）。
+  `[string] prefixes` 引擎声明面，见 `lexer/README.md`；C23 另增**数字分隔符**
+  `1'000'000` / `0x1'F` / `0'7` / `1.5'0`——`[[number.based]] digit_separator`
+  声明面，只在 c23 档声明，见下「合并既有配置」与 `lexer/README.md`）。
 - **声明与类型**：翻译单元；说明符序列（存储类 / 类型限定符 / 函数说明符
   `inline`）；声明符递归（多级指针 / 数组 / 函数后缀 / 括号声明符 / 参数表）；
   `struct`/`union`（带标签与匿名）/`enum`；typedef 名作类型；
@@ -45,7 +47,9 @@
     C23 §6.7.10 起 **消息可省** ⇒ 按标准两条产生式落成 Verilog `FuncDecl` 同款的
     **inline 分派器 + 两分支**：两参 `StaticAssertC23MsgDecl` / 单参
     `StaticAssertC23NoMsgDecl`）、`u8` 字符常量前缀、**二进制常量** `0b…`
-    （`[[number.based]]` 按名合并给 `c_prefix` 加分支）、`nullptr`、
+    （`[[number.based]]` 按名合并给 `c_prefix` 加分支）、**数字分隔符** `1'000`
+    （`digit_separator` 按名合并给 `c_dec`/`c_prefix` 两形态；八进制 digit 序列由
+    `c_dec` 的 `digits = "any"` 覆盖，不另声明——避免重复知识）、`nullptr`、
     `true`/`false`、`bool`、`typeof`/`typeof_unqual`、`constexpr`，**c11 三个关键字的
     C23 拼写** `alignas` / `alignof` / `thread_local`（同构造异拼写，见下条约定），
     以及**类型词** `_BitInt(N)`（宽度收 `@Expression`，"是不是整型常量表达式/宽度范围"
@@ -66,7 +70,10 @@
   也接受 `1.5dd`（污染档位语义）；插件整条重抄 `c_dec` 则知识重复、必然漂移。故给声明加了
   **合并语义** `merge = "by-name"`（同名声明之间按 `name` 合并命名条目列表——
   `core/config_registry.py::merge_by_name`）：`plugins/c23/_number_c23.toml` 只写
-  `name = "c_dec"` + `suffix`，其余字段由核心供给。**缺省仍是"后者覆盖"**（对既有配置
+  `name = "c_dec"` + `suffix`，其余字段由核心供给。同一入口后来还承载了 **C23 二进制常量**
+  （覆盖 `c_prefix` 的 `base_prefix`/`value_digits`）与 **数字分隔符**
+  （给 `c_dec`/`c_prefix` 补 `digit_separator`）——三者都是"引擎加声明面、语言包按档位组合"。
+  **缺省仍是"后者覆盖"**（对既有配置
   零影响）；明细见 `core/config_lifecycle.md` §4b。判据：基线档 `1.5dd` 仍切两个 token、
   c23 档合成一个且核心其余后缀形态不受影响
   （`test_c23_increment_plugin.py::TestC23InjectionPoints::test_decimal_literal_suffix_*`）。
@@ -107,7 +114,7 @@
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
 | `[[属性]]`（c23）的**实参形态** | **已收口两条（2026-09-28）**：✅ **多实参** `[[gnu::nonnull(1, 2)]]`（实参由 `@Expression` 改收 `@ArgumentList`——`Expression` 是 assignment-expression 层级、不含逗号）+ ✅ **属性表尾随逗号** `[[nodiscard,]]`（`AttributeList` 加独立可选元素 `(comma)?` + **单独绑定**，**不得塞进 `items`**：join 分隔符会叠加成 `, ,`）。**仍未覆盖 ①②④⑤**，"现状 / 为什么不做 / 触发条件"逐条登记在 `plugins/c23/21_attributes.toml` 头注与 `TODO.md`：① 空实参 `[[deprecated()]]`（**低优先**：实测可配置面实现，代价 +1 规则 +1 AST 节点层；触发 = 真实语料）；② 相邻字面量拼接 `[[deprecated("a" "b")]]`（**不做**：硬拼只能覆盖 `literal.string+` 一种形态、+2 规则；旧记的"备选写全序列会被 `parser/follow.py` 的 choice 盲区卡掉"已随该盲区修复作废）；④ 空属性表 `[[]]`（**不做**：`@Attribute?` 一行即可，但**与③合体后 `[[,]]` 会被接受**）；⑤ 配平 token 序列 `[[f(int)]]` / `[[f(1 2)]]`（**暂不做**：现役 production 微语法是闭集，需新增元素类型，改动面横跨 parser/linter/preprocessor 10+ 处分派表；触发 = 真实语料出现非表达式 token 序列）。**位点已全部落地**（2026-09-28：说明符位 / 属性声明 / 声明符内 / 枚举项——后两处走**共用空槽位** `@AttributeSlot`）；另有**一处过接受**（`(f) [[deprecated]]` 也认，标准只允许紧跟 identifier 之后）如实登记在 `plugins/c23/21_attributes.toml` 头注。判据 `test_c23_increment_plugin.py`：`test_attribute_known_boundaries`（①②④⑤ 仍须被拒）+ `test_attribute_over_acceptance_boundaries`（③ 的 `[[nodiscard,,]]` / `[[,]]` 仍须被拒）+ `test_attribute_list_binds_trailing_comma_separately` / `test_attribute_args_bind_through_argument_list` |
 | 十进制浮点**字面量后缀**（`1.5df`/`1.5dd`/`1.5dl`） | ✅ **已落地**（2026-09-26）：走声明级合并 `merge = "by-name"`（`plugins/c23/_number_c23.toml` 只补 `c_dec` 的 `suffix`），**不是**改核心 `base/_number.toml`（那会让基线档也接受 `1.5dd`） |
-| **C11/C23 语法面缺口 3 条样本**（`_Static_assert(` 单参 / 数字分隔符 / `enum` 固定底层类型） | 阶段 5「标准等效断言面」实测（oracle = gcc 16.1.0 `-std=… -pedantic-errors`）：**合法标准代码当前被拒**。逐条判据、标准归属、成因与修法在 `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」；用 `tests/languages/c/test_c_standard_conformance.py` 的 `xfail(strict=True)` 钉住（修好一条就红一条，提醒转正）。成员表位已在循环 #35 转正（容器级空槽位）；剩 `_Static_assert(` 单参前置 = 规则文件不按 `enabled` 门控（规则会漏进 c11/c17 档） |
+| **C11/C23 语法面缺口 2 条样本**（`_Static_assert(` 单参 / `enum` 固定底层类型） | 阶段 5「标准等效断言面」实测（oracle = gcc 16.1.0 `-std=… -pedantic-errors`）：**合法标准代码当前被拒**。逐条判据、标准归属、成因与修法在 `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」；用 `tests/languages/c/test_c_standard_conformance.py` 的 `xfail(strict=True)` 钉住（修好一条就红一条，提醒转正）。成员表位在循环 #35、字面量族 #37、数字分隔符 #38 已转正；**余两条前置同一个引擎决策**：规则文件不按 `enabled` 门控 ⇒ c23 规则会漏进下档（ADR 0021 记"暂缓"） |
 | VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
 | 完整类型系统 / 求值 / 实现定义行为 / K&R 老式定义 | **明确不做**（超出一致性检查工具链的定位） |
 
@@ -131,7 +138,7 @@ grammar/c/
 ├── base/
 │   ├── _token.toml          # 标点、多字符运算符、bracket 配对、字面量形态、[string] escape
 │   ├── _lexer.toml          # token 类别 + 注释语法（/* */ 与 //）
-│   ├── _number.toml         # 数字形态（进制 / suffix 尾段 / lead_dot 前导点）
+│   ├── _number.toml         # 数字形态（进制 / suffix 尾段 / lead_dot 前导点 / digit_separator 分隔符）
 │   ├── _operator.toml       # 运算符优先级 / 结合性 / 一元位置（C99 §6.5；刻意不含逗号）
 │   └── _style.toml          # 渲染风格：缩进 4、页宽 80（C 惯例）
 ├── 00_expressions.toml      # 原子 / 表达式入口 / 运算符分层 / 后缀链 / 转换 / 复合字面量 / sizeof / 逗号
@@ -356,7 +363,8 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
 位置 + 三次定义去重 + 两档语料零误报 + 默认开关按档位）；缺陷态变红（去"双方带体" / 去作用域判定
 各一次；对应变异见 `tools/check_gate_efficacy.py`）。**边界**：成员重名（C99 原文无约束句）、不完整类型使用、位域宽度、
 枚举值 representable-as-int、跨 TU；C23 固定底层类型枚举（`enum E : int;`）本包语法面**尚未支持**
-（lint 拒）⇒ ENUM003 的"固定底层类型恒完整"豁免暂不适用，将来支持时需同步。
+（lint 拒）——**前置是档位门控**（`EnumSpecifier` 的 `:` 位由 c23 注入会漏进下档，同
+`_Static_assert(1)`，见缺口档）⇒ ENUM003 的"固定底层类型恒完整"豁免暂不适用，将来支持时需同步。
 
 ## 标签与 goto 语义（LAB · 本包第三个 check 组件，走 **postpass**）
 

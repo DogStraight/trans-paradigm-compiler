@@ -27,6 +27,12 @@
     base_prefix = "none"
     lead_sign = true              # 前导符号：符号后至少一位数字（裸 `-` 不成字面量）
 
+    [[number.based]]
+    name = "c_dec"
+    size = { digits = "any" }
+    base_prefix = "none"
+    digit_separator = "'"         # 数字序列内的分隔符（C23 的 `1'000`）
+
     [[number.real]]
     name = "float"
     # 浮点/科学计数：dec [. dec] [e[+-] dec]（C 风格）
@@ -158,6 +164,7 @@ class _PatternBuilder:
     suffix_max: int = 0
     lead_dot: bool = False
     lead_sign: bool = False
+    digit_separator: str = ""
 
     def new_state(self) -> int:
         """取新状态号（单调递增，pattern 内独立编号）。"""
@@ -175,12 +182,57 @@ class _PatternBuilder:
             self.add(src, f"digit{i}", dst)
 
     def to_pattern(self, name: str, start: int, allow_space: bool) -> NumberPattern:
-        """装配结果 → NumberPattern。"""
+        """装配结果 → NumberPattern（分隔符子图在此一次展开，三个返回点共用）。"""
+        self._expand_digit_separator()
         return NumberPattern(
             name, self.transitions, self.accepting, start, self.base_states,
             allow_space, self.suffix_chars, self.suffix_max, self.lead_dot,
             self.lead_sign,
         )
+
+    def _digit_loop_states(self) -> list[int]:
+        """有"数字自环"的态（= 一个数字序列已吃到至少一位数字的位置）。"""
+        return sorted(
+            {
+                src
+                for (src, cat), dst in self.transitions.items()
+                if src == dst and cat != "underscore"
+            }
+        )
+
+    def _expand_digit_separator(self) -> None:
+        """按 `digit_separator` 声明展开分隔符子图（C23 `1'000`）。
+
+        形状：`S --sep--> S'`（S' **不是**接受态）、`S' --digit--> S`。故分隔符必须
+        夹在数字之间：`1'` 的分隔符不并入 token、`1''0` 在第二个分隔符处断开，
+        而 `1'000` 每吃一位数字就回到自环态继续。
+        只对**数字自环态**展开（十进制位 / 小数位 / 指数位 / 各进制值态）——下划线
+        不参与（`1_'000` 属宽进口径：位置合法性归约束层，同 `1ff`）。
+        撞键（该态已有同类别出边）/ 字符无类别 → ConfigError（不静默丢掉声明）。
+        """
+        if not self.digit_separator:
+            return
+        cat = _CHAR_CATEGORY.get(self.digit_separator)
+        if cat is None:
+            raise ConfigError(
+                f"数字形态 {self.digit_separator!r} 作 digit_separator 时没有字符类别"
+                "（分隔符须为已声明的单字符，如 C23 的 \"'\"）"
+            )
+        for state in self._digit_loop_states():
+            if (state, cat) in self.transitions:
+                raise ConfigError(
+                    f"digit_separator {self.digit_separator!r} 与状态 {state} 的已有"
+                    f"转移撞键（类别 {cat!r}）——该形态的同字符已有用途，不能兼作分隔符"
+                )
+            loops = [
+                c
+                for (src, c), dst in self.transitions.items()
+                if src == state and dst == state and c != "underscore"
+            ]
+            sep_state = self.new_state()
+            self.add(state, cat, sep_state)
+            for c in loops:
+                self.add(sep_state, c, state)
 
     def build_size(
         self,
@@ -424,6 +476,17 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     trivia，`key: -5` 与 `key:` 换行后的 `- 8080` 会化简成同一 token 对，语法层拿不到
     "符号与数字是否相邻"这一事实——实测语法侧方案会把 `seq:\n- 8080` 渲染成
     `seq: -8080`（序列指示符被吞成负数值）。邻接是词法事实，故归本层。
+
+    **digit_separator 键**（可选单字符，`digit_separator = "'"`）：数字序列内允许的
+    分隔符（C23 §6.4.4.1 的 `1'000`）。编译时在每个"数字自环态"旁挂一个**分隔态**：
+    `S --sep--> S'`（S' **不是**接受态）、`S' --digit--> S` —— 故分隔符两侧都必须
+    有数字，尾随分隔符（`1'`）不被并入 token（留给下一个 token），连续分隔符
+    （`1''0`）在第二个分隔符处断开。分隔符按**字符类别**接入（与其余转移同一张表），
+    故该字符必须已有类别、且不得与目标态已有出边撞键（撞键 / 未知字符 = fail-fast；
+    例：把 `'` 声明给引号前缀形态 `'h…` 的形态会撞键）。
+    ⚠ 位置合法性不在词法层判定（`0x'1` / `1.'5` 也会拼成一个数字 token）：与
+    `suffix` 的宽进口径一致（"这是不是一个数字 token"归词法，"拼写是否合法"归
+    约束层，C 的 pp-number 本就宽进）。
     """
     name = cfg.get("name", "based")
     allow_space = cfg.get("value_allow_space", False)
@@ -433,6 +496,12 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     value_digits = cfg.get("value_digits", {})
     value_allow = cfg.get("value_allow", [])
     suffix_chars, suffix_max = _parse_suffix(cfg)
+    digit_separator = cfg.get("digit_separator", "")
+    if not isinstance(digit_separator, str) or len(digit_separator) > 1:
+        raise ConfigError(
+            f"[[number.based]] {name!r} 的 digit_separator 须为**单字符**字符串"
+            f"（数字序列内的分隔符，如 C23 的 \"'\"），实得 {digit_separator!r}"
+        )
     lead_dot = cfg.get("lead_dot", False)
     if not isinstance(lead_dot, bool):
         raise ConfigError(
@@ -467,6 +536,7 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     b.suffix_chars, b.suffix_max = suffix_chars, suffix_max
     b.lead_dot = lead_dot
     b.lead_sign = lead_sign
+    b.digit_separator = digit_separator
     start = b.new_state()
     # 前导子图（点/符号）：都只对无前缀形态合法，且"前导字符后必须有数字"
     # ——由各自的 build_* 建成"前导态不接受"的形状。

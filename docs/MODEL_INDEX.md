@@ -44,7 +44,7 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | token 定义驱动扫描（主扫描器） | `language_walkthrough.md`（词法层：token 定义驱动） | `lexer/main_lexer.py::Lexer.tokenize` | `tests/engine/lexer/test_lexer.py` |
-| 数字字面量 DFA（`[[number.based]]` 配置驱动） | `language_walkthrough.md`（数字字面量 DFA） | `lexer/number_gen.py`<br>`lexer/number_runner.py` | `tests/engine/lexer/test_number_gen.py`<br>`tests/engine/lexer/test_number_baseline.py` |
+| 数字字面量 DFA（`[[number.based]]` 配置驱动；`suffix` / `lead_dot` / `digit_separator` 声明键） | `language_walkthrough.md`（数字字面量 DFA） | `lexer/number_gen.py`<br>`lexer/number_runner.py` | `tests/engine/lexer/test_number_gen.py`<br>`tests/engine/lexer/test_number_baseline.py`<br>`tests/engine/lexer/test_number_digit_separator.py` |
 | 原始文本捕获（注释/字符串/块标量） | `language_walkthrough.md`（注释/字符串 token 扫描） | `lexer/capture_runner.py` | `tests/engine/lexer/test_capture_runner.py` |
 | 注释形态读取（行注释起始 + 成对定界符，声明驱动） | `preprocessor/README.md`（marker 书写形态） | `lexer/comment_syntax.py::load_comment_syntax` | `tests/engine/lexer/test_comment_syntax.py` |
 | 顶层声明预扫描 | `language_walkthrough.md`（预扫描：顶层声明收集） | `lexer/pre_scan.py` | `tests/engine/lexer/test_lexer.py` |

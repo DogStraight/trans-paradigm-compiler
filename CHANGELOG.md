@@ -7,6 +7,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C23 数字分隔符：引擎 `[[number.based]] digit_separator` 声明面**（2026-10-21，循环 #38，
+  引擎词法面 + C 标准面）：`1'000'000` 此前被切成 `1` + 字符常量 ⇒ 合法 C23 代码整条解析失败
+  （oracle：gcc 16.1.0 `-std=c23 -pedantic-errors` 接受）。修法：
+  · **引擎**（`lexer/number_gen.py`）：`[[number.based]]` 可选单字符键 `digit_separator`——
+    编译期在每个"数字自环态"旁挂分隔态（`S --sep--> S'` **非接受**、`S' --digit--> S`），
+    故分隔符必须夹在数字之间：尾随 `1'` 的分隔符留给下一个 token、连续 `1''0` 在第二个处断开；
+    分隔符按**字符类别**接入转移表，未知字符 / 与目标态已有出边撞键 → `ConfigError`
+    （fail-fast，不静默丢声明）；未声明该键的形态逐字零变化（verilog / yaml / c4 不受影响）。
+  · **C 包**（档位 = 声明面组合）：c23 插件**按名合并**给 `c_dec` / `c_prefix` 两形态补
+    `digit_separator = "'"`（八进制 digit 序列也落在 `c_dec` 的 `digits = "any"` 里、扫描取
+    最长 token，故 `c_octal` **不另声明**——原稿多写一条，实测是重复知识后删掉，见门禁变异
+    106 的反向教训）；基线/c11 档不声明 ⇒ 仍切两个 token，引擎零语言判断。
+  **行为变化**：c23 档 `1'000'000` / `0x1'F` / `0'7` / `0b1'0` / `1.5'0` / `1.0e1'0` /
+  `1'000u` 各成单 token 并进 AST；位置非法形态（`0x'1` / `1.'5`）按**宽进口径**也不拒绝
+  （同 `1ff`：词法只判"是不是一个数字 token"，拼写合法性归约束层）——干净对照 = 同引擎
+  去掉声明后在第一处 `'` 断开（`test_wide_in_positions_not_validated`）。
+  **同轮否掉的结论（落档）**：原计划同轮做的 **`enum e : int` 固定底层类型未做**——其形态只由
+  核心 token（`:` + 类型词）组成，c23 规则文件注入会漏进基线/c11 档（`enabled` 只门控声明面），
+  与 `_Static_assert(1)` **同因**；"绕得开（数字分隔符，收敛到声明层）/绕不开（这两条）"两个实例
+  写进 gap「运行时档位」与审查台账 #1 行，本轮不动档位语义（ADR 0021 记"暂缓"）。
+  验证：`test_number_digit_separator.py` 新增 17 例（声明面 fail-fast 5 + 扫描面 12，含无声明对照）；
+  `test_c_lexer.py` 新增 `TestDigitSeparator`（7 形态单 token + 尾随/连续）与
+  `TestDigitSeparatorTiers`（6 条逐档切分）；`test_c_standard_conformance.py::TestLiteralForms`
+  增 7 条接受 + 2 条下档拒绝，缺口清单 **3 → 2 条**；`c_acceptance` **42 → 45 条 / 空洞 0**
+  （顺带补上 #37 漏登记的字面量前缀族 / 二进制常量两条，恢复"工具清单与缺口档逐行对照"）；
+  全量 **4249 passed / 7 skipped / 2 xfailed**；lint hit_code 33 / fp 0；A/B `--products`
+  verilog **0/144**；pyright strict 0；`check_doc_refs` PASS（D1–D4 = 0）；门禁变异
+  **104 → 106**（关掉分隔符展开 / 丢掉 `c_dec` 的分隔符声明，`--only 105/106` 实测变红）。
+  文档：`lexer/README.md`、`docs/language_walkthrough.md`、`MODEL_INDEX.md`、
+  `grammar/c/README.md`、`plugins/c23/{tpc,_number_c23}.toml`、gap 两档、TODO/ROADMAP/PROGRESS。
+
 - **字面量前缀族 + C23 二进制常量：引擎 `[string] prefixes` 声明面**（2026-10-21，循环 #37，
   引擎词法面 + C 标准面）：C 的 `L"…"` / `L'…'`（C99）、`u`/`U`/`u8` 字符串与 `u`/`U` 字符
   （C11）、`u8` 字符与 `0b…`（C23）此前一律切成 `id` + `literal.string` 两个 token ⇒ 合法代码
