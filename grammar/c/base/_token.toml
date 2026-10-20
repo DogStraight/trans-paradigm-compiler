@@ -85,5 +85,12 @@ number = "\\d+"
 delimiters = ['"', "'"]
 escape = "\\"
 
+# 字面量**前缀**（C99 §6.4.4.4 宽字符/字符串的 `L`）：前缀是 token 的一部分
+# （`L"x"` / `L'x'` 各一个 token，内容含前缀，渲染原样输出）。引擎侧按声明
+# 用「前缀+定界符」捕获；不声明该表的语言包零影响。C11/C23 追加 u/U/u8
+# 见 `plugins/{c11,c23}/_token_ext.toml`（档位 = 声明面组合）。
+[string.prefixes]
+L = ['"', "'"]
+
 [id.id]
 id = "[a-z_A-Z][a-z_A-Z0-9]*"

@@ -104,6 +104,7 @@ while = "while"
 > 配置驱动执行器：`[comment] pairs` 是其 legacy 输入（归一化为 capture
 > mode，`token_type = "comment"`）；字符串定界符由 `[string] delimiters`
 > 声明（delim mode，`token_type = "literal.string"`，引擎不再硬编码引号），
+> 字面量**前缀**（C 的 `L"x"` / `u8"x"` / `L'x'`）由 `[string] prefixes` 声明（前缀进 token 正文），
 > 段内转义由同段的 `escape`（可选单字符）声明——声明后 `\X` 整体并入内容、
 > 不参与终止判定（C/Verilog 的 `"say \"hi\""`；`\<换行>` 按行拼接并入），
 > **不声明 = 无转义语义**；

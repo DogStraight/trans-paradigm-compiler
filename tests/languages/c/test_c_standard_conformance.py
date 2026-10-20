@@ -79,17 +79,11 @@ _BELOW_TIER_STATE = [
 
 # 标准等效**缺口清单**（oracle 实测 + tpc 对照；`xfail(strict=True)`：修好即变红提醒转正）。
 # 每条 = (标签, 源码, 档位, 标准依据 + gcc 结论)
-# ⚠ 成员表位（struct/union 内的 static_assert）已于循环 #35 转正，移出本清单；
-#   `_Static_assert(1)`（下划线拼写、单参）仍因"规则文件不按 enabled 门控"开着。
+# ⚠ 成员表位（#35）与字面量前缀族 / 二进制常量（#37）已转正，移出本清单；余 3 条：
+#   `_Static_assert(1)`（下划线拼写、单参；档位门控限制）、数字分隔符、enum 固定底层类型。
 _GAPS = [
     ("C23 单参 _Static_assert（下划线拼写）", "_Static_assert(1);\n", "c23",
      "C23 §6.7.10 消息可省，两种拼写同语法；gcc -std=c23 OK"),
-    ("C11 u8 字符串字面量", 'char *s = u8"x";\n', "c11",
-     "C11 §6.4.5 UTF-8 字符串字面量；gcc -std=c11 OK"),
-    ("C23 u8 字符字面量", "char c = u8'a';\n", "c23",
-     "C23 §6.4.4.4 u8 字符常量；gcc -std=c23 OK"),
-    ("C23 二进制常量", "int n = 0b1010;\n", "c23",
-     "C23 §6.4.4.1 binary-constant；gcc -std=c23 OK"),
     ("C23 数字分隔符", "int n = 1'000'000;\n", "c23",
      "C23 §6.4.4.1 digit separator；gcc -std=c23 OK"),
     ("C23 enum 固定底层类型", "enum e : int { A };\n", "c23",
@@ -183,6 +177,55 @@ class TestBelowTierState:
             assert top, f"{label}：应为 generic（照常解析）却得到空 AST"
         else:
             assert not top, f"{label}：应为 rejected（整体不进树）却解析出 {[n.node_name for n in top]}"
+
+
+class TestLiteralForms:
+    """字面量**前缀族**与二进制常量的端到端接受面（C99 `L` / C11 `u`·`U`·`u8` / C23 `u8` 字符·二进制）。
+
+    判据 = 档位 >= 所属标准时：进 AST + linter 零诊断 + 渲染 token 序列逐项相同 + 幂等；
+    档位不足时：**整体不进树**（词法切分会退化为 id + literal.string 两 token，语法自然不收）。
+    词法层的逐档切分判据在 `test_c_lexer.py::TestLiteralPrefixTiers`（不复制，只补端到端）。
+    """
+
+    _ACCEPT = [
+        ("C99 宽字符串（基线）", 'char *s = L"x";\n', "baseline"),
+        ("C99 宽字符（基线）", "char c = L'x';\n", "baseline"),
+        ("C11 Unicode 字符串 u", 'char *s = u"x";\n', "c11"),
+        ("C11 Unicode 字符串 U", 'char *s = U"x";\n', "c11"),
+        ("C11 UTF-8 字符串 u8", 'char *s = u8"x";\n', "c11"),
+        ("C11 Unicode 字符 u", "char c = u'x';\n", "c11"),
+        ("C23 UTF-8 字符 u8", "char c = u8'x';\n", "c23"),
+        ("C23 二进制常量", "int n = 0b1010;\n", "c23"),
+        ("C23 二进制常量 + 后缀", "unsigned n = 0B1010ULL;\n", "c23"),
+        ("C11 前缀字符串作静态断言消息", 'static_assert(1, u8"msg");\n', "c11"),
+    ]
+
+    @pytest.mark.parametrize(
+        "label,src,tier", _ACCEPT, ids=[c[0] for c in _ACCEPT]
+    )
+    def test_accepted_and_faithful(self, label, src, tier):
+        env = _env(tier)
+        ast = env["parse"](src)
+        assert ast is not None and getattr(ast, "sub_node", None), f"{label}: 空 AST"
+        assert env["lint"](src) == [], f"{label}: linter 有诊断"
+        out = env["render"](src)
+        assert env["tokens"](out) == env["tokens"](src), f"{label}: {src!r} → {out!r}"
+        assert env["render"](out) == out, f"{label}: 不幂等"
+
+    _REJECT = [
+        ("C11 档不认 u8 字符（C23 才有）", "char c = u8'x';\n", "c11"),
+        ("基线档不认 u 字符串（C11 才有）", 'char *s = u"x";\n', "baseline"),
+        ("基线档不认 u8 字符串（C11 才有）", 'char *s = u8"x";\n', "baseline"),
+        ("C11 档不认二进制常量（C23 才有）", "int n = 0b1010;\n", "c11"),
+    ]
+
+    @pytest.mark.parametrize(
+        "label,src,tier", _REJECT, ids=[c[0] for c in _REJECT]
+    )
+    def test_tier_mismatch_not_accepted(self, label, src, tier):
+        env = _env(tier)
+        ast = env["parse"](src)
+        assert not getattr(ast, "sub_node", None), f"{label}: 未达档位却解析出了 AST"
 
 
 class TestStaticAssertMemberPosition:

@@ -13,3 +13,10 @@ _Alignof = "_Alignof"
 _Noreturn = "_Noreturn"
 _Thread_local = "_Thread_local"
 _Atomic = "_Atomic"
+
+# C11 §6.4.5 / §6.4.4.4：Unicode 字符串前缀 u/U（两种字面量）与 UTF-8 字符串前缀 u8
+# （C11 只给字符串；u8 字符常量是 C23 的事，见 c23 插件的同名键覆盖）。
+[string.prefixes]
+u = ['"', "'"]
+U = ['"', "'"]
+u8 = ['"']

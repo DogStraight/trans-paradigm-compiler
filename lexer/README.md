@@ -14,6 +14,18 @@
 
 > 入口：`Lexer.tokenize`；缩进相关（YAML）看 `[indent]` 配置与 `_indent_unit`。
 
+## `[string]` 声明字段（`base/_token.toml`）
+
+| 键 | 语义 |
+|---|---|
+| `delimiters` | 定界符列表（C 的 `"` 与 `'`；verilog 只有 `"`）——每个定界符一条 delim 捕获规则，`token_type = "literal.string"` |
+| `escape` | 段内转义字符（单字符，可选）：`\X` 整体并入内容、不参与终止判定；不声明 = 无转义语义 |
+| `prefixes` | 字面量**前缀**表（`前缀 → 允许的定界符列表`，可选）：每组合一条 `start = 前缀+定界符` 的捕获规则 ⇒ 前缀是 token 的一部分（`u8"x"` / `L'x'` 单 token、内容含前缀、渲染原样输出）；前缀与定界符必须紧邻；**不声明 = 无前缀语义** |
+
+- 前缀**按档位声明**：C 包的 `L` 在核心基线（C99），`u`/`U`/`u8` 字符串在 c11 插件、
+  `u8` 字符在 c23 插件（插件 `token_ext` 的同名键深合并覆盖，见
+  `grammar/c/plugins/{c11,c23}/_token_ext.toml`）——引擎只读声明，不做语言判断。
+
 ## `[[number.based]]` 声明字段（`base/_number.toml`）
 
 | 键 | 语义 | 消费方 |

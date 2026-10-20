@@ -16,6 +16,11 @@
    escape = "\\"            # 可选：段内转义字符（见下）
    → 每个定界符展开为 kind "delim" 规则（end = 定界符自身），
      token_type 固定为 "literal.string"。
+   prefixes = { u8 = ['"'], L = ['"', "'"] }   # 可选：字面量**前缀**
+   → 每个「前缀 × 允许的定界符」展开为一条 start = 前缀+定界符、end = 定界符
+     的 "delim" 规则；前缀是 token 的一部分（`u8"…"` 一个 token、内容含前缀，
+     渲染原样输出），前缀与定界符之间不容空白。**不声明 = 无前缀语义**
+     （既有语言包零影响；按档位由插件 token_ext 增删，见 C 包 c11/c23）。
 3. [[capture]] 段（新，语言包按需声明）：
    [[capture]]
    start = "<<EOF"
@@ -288,24 +293,59 @@ def _legacy_comment_rules(token_define: dict) -> list[CaptureRule]:
 
 
 def _string_delim_rules(token_define: dict) -> list[CaptureRule]:
-    """`[string] delimiters` → kind "delim" / token_type "literal.string"。
+    """`[string] delimiters` / `prefixes` → kind "delim" / token_type "literal.string"。
 
     引擎不再硬编码引号定界符（verilog 只声明 "，yaml/c4 声明 " 与 '）。
     `escape`（可选，**段级**）声明段内转义字符：定界符内的 `\\X` 整体并入内容、
     不参与终止判定（`"say \\"hi\\""`）。不声明 = 无转义语义（现状不变）。
+
+    `prefixes`（可选，声明驱动）＝「前缀 → 允许的定界符列表」：
+      · 每个组合展开一条 start = `前缀+定界符`、end = 定界符的规则 ⇒ 前缀是 token
+        的一部分（`u8"…"` / `L'x'` 单 token，内容含前缀、渲染原样输出）；
+      · 前缀与定界符之间不匹配空白（start 是连续串）⇒ 标准要求的前后缀紧邻天然成立；
+      · **不声明 = 无前缀语义**（其余语言包零影响）。档位差异由插件 `token_ext`
+        增删该表实现（C 的 u/U/u8/L 见 `grammar/c/plugins/{c11,c23}/_token_ext.toml`）。
     """
     section = token_define.get("string", {}) or {}
     escape = _one_char("string", section.get("escape", ""))
-    rules: list[CaptureRule] = []
+    delims: list[str] = []
     for delim in section.get("delimiters", []) or []:
         if not isinstance(delim, str) or not delim:
             raise ValueError(
                 "[lexer] [string] delimiters 含非法条目: "
                 f"{delim!r}（须为非空字符串）"
             )
-        rules.append(
-            CaptureRule(delim, delim, "delim", "literal.string", escape=escape)
+        delims.append(delim)
+    rules: list[CaptureRule] = [
+        CaptureRule(d, d, "delim", "literal.string", escape=escape) for d in delims
+    ]
+    prefixes = section.get("prefixes", {}) or {}
+    if not isinstance(prefixes, dict):
+        raise ValueError(
+            "[lexer] [string] prefixes 须为「前缀 → 定界符列表」表，"
+            f"实得 {prefixes!r}"
         )
+    for prefix, allowed in prefixes.items():
+        if not isinstance(prefix, str) or not prefix:
+            raise ValueError(
+                f"[lexer] [string] prefixes 的前缀须为非空字符串，实得 {prefix!r}"
+            )
+        if not isinstance(allowed, list) or not allowed:
+            raise ValueError(
+                f"[lexer] [string] prefixes[{prefix!r}] 须为非空定界符列表，"
+                f"实得 {allowed!r}"
+            )
+        for delim in allowed:
+            if delim not in delims:
+                raise ValueError(
+                    f"[lexer] [string] prefixes[{prefix!r}] 引用了未声明的定界符 "
+                    f"{delim!r}（已声明 {delims!r}）"
+                )
+            rules.append(
+                CaptureRule(
+                    prefix + delim, delim, "delim", "literal.string", escape=escape
+                )
+            )
     return rules
 
 

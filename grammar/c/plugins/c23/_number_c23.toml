@@ -20,3 +20,11 @@
 [[number.based]]
 name = "c_dec"
 suffix = { chars = "uUlLfFd", max = 3 }
+
+# C23 §6.4.4.1：二进制常量 `0b…`。走**按名合并**给核心 `c_prefix` 形态加一个前缀
+# 分支（同名条目深合并：base_prefix 覆盖为两分支，value_digits 只补 b→bin，x→hex
+# 由核心形态保留）；c23 档合成一个 token，基线/c11 档仍是 `0` + `b…` 两个 token。
+[[number.based]]
+name = "c_prefix"
+base_prefix = "0x|0b"
+value_digits = { b = "bin" }

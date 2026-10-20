@@ -25,9 +25,9 @@
 
 ### 1.3 标准等效（阶段 5，循环 #33 第一批断言面已交付）
 
-- [ ] **C11/C23 语法面缺口 6 条样本**：`_Static_assert(1)` 单参（下划线拼写）、`u8` 字符串/
-      字符字面量、二进制常量、数字分隔符、`enum` 固定底层类型——**合法标准代码当前被拒**
-      （oracle = gcc 16.1.0 `-std=… -pedantic-errors`；成员位两条已于循环 #35 转正）。
+- [ ] **C11/C23 语法面缺口 3 条样本**：`_Static_assert(1)` 单参（下划线拼写）、数字分隔符、
+      `enum e : int` 固定底层类型——**合法标准代码当前被拒**（oracle = gcc 16.1.0
+      `-std=… -pedantic-errors`；成员位 #35、字面量族 #37 已转正）。
       判据：`tests/languages/c/test_c_standard_conformance.py` 的 `xfail(strict=True)` 逐条转正；
       `_Static_assert` 单参前置 = 规则文件按档位门控。链：gap「C 标准等效缺口」
 

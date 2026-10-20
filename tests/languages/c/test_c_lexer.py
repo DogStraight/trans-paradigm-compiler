@@ -64,6 +64,8 @@ class TestNumberForms:
             "0xFFu", "0X1fUL", "017UL",     # 十六进制/八进制 + 后缀
             "1.5f", "1.5F", "1.5L",   # floating-suffix
             "1e3L", "2.3e-4f",        # 指数 + 后缀
+            # ── C23 §6.4.4.1 二进制常量（0b/0B；c23 档声明，基线档仍切两个 token）──
+            "0b1010", "0B101", "0b1010u", "0b1010ULL",
         ],
     )
     def test_single_number_token(self, c_lexer, src):
@@ -167,3 +169,89 @@ class TestComments:
 
     def test_block_comment(self, c_lexer):
         assert _types("/* c */ x", c_lexer) == ["id"]
+
+
+class TestLiteralPrefixes:
+    """字面量**前缀**（引擎声明面 `[string] prefixes`；C 包按档位声明 L / u / U / u8）。
+
+    前缀是 token 的一部分（与定界符紧邻），内容含前缀、渲染原样输出——旧实现切
+    `id` + `literal.string` 两 token，导致 `u8"x"` / `L'x'` 这类合法 C 代码解析失败。
+    """
+
+    @pytest.mark.parametrize(
+        "src",
+        [
+            'L"wide"', "L'w'",     # C99 宽字符/宽字符串
+            'u"utf16"', "u'w'",    # C11 Unicode 字符串/字符
+            'U"utf32"', "U'w'",    # C11 Unicode 字符串/字符
+            'u8"utf8"',            # C11 UTF-8 字符串
+            "u8'w'",               # C23 UTF-8 字符常量（默认档 = c23 全档）
+        ],
+    )
+    def test_prefixed_literal_is_single_token(self, c_lexer, src):
+        assert _types(src, c_lexer) == ["literal.string"], f"{src!r} 不是一个 token"
+
+    @pytest.mark.parametrize(
+        "src",
+        ['L"x"', "L'x'", 'u8"x"', "u8'x'"],
+    )
+    def test_prefix_kept_in_token_content(self, c_lexer, src):
+        """前缀进 token **正文**（`u8"x"` 不再是 `u8` + `"x"`）。"""
+        toks = [t for t in c_lexer.tokenize(src + "\n") if t.type == "literal.string"]
+        assert [t.content for t in toks] == [src]
+
+    def test_prefix_must_be_adjacent(self, c_lexer):
+        """前缀与定界符之间**不是**空白（`u8 "x"` 是两个 token，不是字面量）。"""
+        assert _types('u8 "x"', c_lexer) == ["id", "literal.string"]
+        assert _types("L 'x'", c_lexer) == ["id", "literal.string"]
+
+
+class TestLiteralPrefixTiers:
+    """前缀的**档位面**：L（C99 基线）→ u/U/u8 字符串（C11）→ u8 字符（C23）。
+
+    判据 = "同一个字面量在未达档位时被切成两个 token"（接受域 = 声明面组合），
+    与 `tests/languages/c/test_c_standard_conformance.py` 的端到端判据互补。
+    """
+
+    _CASES = [
+        # (档位, 源码, 期望 token 类型序列)
+        ("baseline", 'L"x"', ["literal.string"]),
+        ("baseline", "L'x'", ["literal.string"]),
+        ("baseline", 'u"x"', ["id", "literal.string"]),
+        ("baseline", 'u8"x"', ["id", "literal.string"]),
+        ("baseline", "0b1010", ["literal.number", "id"]),
+        ("c11", 'u"x"', ["literal.string"]),
+        ("c11", "U'x'", ["literal.string"]),
+        ("c11", 'u8"x"', ["literal.string"]),
+        ("c11", "u8'x'", ["id", "literal.string"]),      # u8 字符是 C23
+        ("c11", "0b1010", ["literal.number", "id"]),      # 二进制是 C23
+        ("c23", "u8'x'", ["literal.string"]),
+        ("c23", "0b1010", ["literal.number"]),
+    ]
+    _TIERS = {
+        "baseline": [],
+        "c11": ["c11"],
+        "c23": ["c11", "c17", "c23"],
+    }
+
+    @pytest.mark.parametrize(
+        "tier,src,expected", _CASES, ids=[f"{c[0]}-{c[1]}" for c in _CASES]
+    )
+    def test_token_split_follows_tier(self, tier, src, expected):
+        ConfigRegistry.load_language(
+            _RULES, plugins_dir=os.path.join(_RULES, "plugins"), enabled=self._TIERS[tier]
+        )
+        lexer = Lexer(rules_dir=_RULES)
+        got = [
+            t.type
+            for t in lexer.tokenize(src + "\n")
+            if t.type not in ("newline", "comment")
+        ]
+        assert got == expected, f"{tier} 档下 {src!r} 切分不符：{got}"
+
+    @pytest.fixture(autouse=True)
+    def _restore(self):
+        yield
+        ConfigRegistry.load_language(
+            _RULES, plugins_dir=os.path.join(_RULES, "plugins")
+        )

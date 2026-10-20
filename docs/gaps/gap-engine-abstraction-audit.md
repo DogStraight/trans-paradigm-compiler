@@ -43,6 +43,7 @@ C 包的价值之一是**抽象压力测试**：每出现一次"这台语言要�
 | 3 | **精化基座**（`pre_scan` / raw 承载与理解 / sites） | 引擎有通用机制与声明键；**C 用全链路，Verilog 走 `peek` + typed_ports，yaml/c4 不用** | 待复用实验 | 机制：`linter/lookahead.py`（`pre_scan` 提示面）、`grammar/c/plugins/semantics/_raw_*.py`、`tools/feature_sites.py`；语言音用法差异见各包 README | 若第二语言复用成立 ⇒ 抽象成立；若必须改引擎 ⇒ 内置化为引擎能力面（raw/understand 的通用钩子） | 待取证（复用实验未做） |
 | 4 | **文件链接 / 入口点** | C 的 `#include` 全链路（`path_forms`、内容进流、行映射、渲染剪枝）；Verilog 的 `module_index` 项目符号可见性；CLI 单文件 vs `ProjectChecker.check(paths)` 多入口 | **新引擎代码**（缺统一 unit graph） | `preprocessor/primitives/include.py`、`pipeline/__init__.py`（include 剪枝）、`analyzer` 的 `module_index`、`ROADMAP.md`「用户侧 CLI 形态」；两门语言各一套索引 | 引擎级 **unit graph / 入口协议**（根文件集 + 解析器声明 + 单位索引 + 链接策略），两门语言的索引收敛为配置 | 待审查（阶段 5 真实 C 语料接入会先逼一遍） |
 | 5 | **容器成员位增量**（轮 #35） | `StructBody = { (@StructMember\|@StructMemberExtra)* }` + 空槽位注入 | **原样**（零引擎改动） | `tests/languages/c/test_c_standard_conformance.py::TestStaticAssertMemberPosition`；门禁变异 101 | —（抽象成立） | 已过 |
+| 7 | **字面量前缀 / 数字形态声明面**（轮 #37） | C 用 `[string] prefixes` + `[[number.based]]` 按名合并表达 L/u/U/u8 与 `0b…`；其余语言包不声明即无影响 | **原样**（引擎声明面） | `tests/languages/c/test_c_lexer.py::TestLiteralPrefixes/TestLiteralPrefixTiers`；门禁变异 103 | —（抽象成立） | 已过 |
 | 6 | **注释归属**（行中/行尾/前置/容器项间） | 引擎统一槽位模型，各语言布局只消费槽位 | **原样** | `renderer/renderer_architecture.md`（注释处理节）；`tests/engine/renderer/test_comment_slots.py` + C/verilog 渲染门禁 | —（抽象成立） | 已过（本轮 #32/#33 的修复未引入语言分支） |
 
 ## 可实现性（leak 候选的内置化骨架；审查轮细化）

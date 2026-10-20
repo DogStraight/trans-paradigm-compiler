@@ -33,3 +33,8 @@ _BitInt = "_BitInt"
 _Decimal32 = "_Decimal32"
 _Decimal64 = "_Decimal64"
 _Decimal128 = "_Decimal128"
+
+# C23 §6.4.4.4 / §6.4.5：`u8` 前缀同时用于字符常量与字符串（c11 声明表按"前缀 →
+# 允许的定界符"深合并，同名键在此被覆盖为两种定界符；u/U 仍由 c11 提供）。
+[string.prefixes]
+u8 = ['"', "'"]

@@ -1060,6 +1060,22 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": '    "@StaticAssertC23MsgDecl",  # 变异：丢单参分支\n',
         "test": "tests/languages/c/test_c23_increment_plugin.py",
     },
+    {
+        "why": "字面量前缀表若被忽略（引擎只按裸定界符捕获）⇒ 合法 `u8\"x\"` / `L'x'` "
+               "退化为 id + literal.string 两 token、整条声明解析失败（2026-10-21 补）",
+        "file": "lexer/capture_runner.py",
+        "old": '    prefixes = section.get("prefixes", {}) or {}\n',
+        "new": '    prefixes = {}  # 变异：忽略前缀声明\n',
+        "test": "tests/languages/c/test_c_lexer.py",
+    },
+    {
+        "why": "C23 二进制常量靠 c_prefix 形态的 base_prefix 加分支实现；去掉 `0b` 分支 ⇒ "
+               "`0b1010` 又切回 `0` + `b1010`（2026-10-21 补）",
+        "file": "grammar/c/plugins/c23/_number_c23.toml",
+        "old": 'base_prefix = "0x|0b"\n',
+        "new": 'base_prefix = "0x"  # 变异：丢二进制分支\n',
+        "test": "tests/languages/c/test_c_lexer.py",
+    },
 ]
 
 

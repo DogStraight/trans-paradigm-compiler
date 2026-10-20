@@ -7,6 +7,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **字面量前缀族 + C23 二进制常量：引擎 `[string] prefixes` 声明面**（2026-10-21，循环 #37，
+  引擎词法面 + C 标准面）：C 的 `L"…"` / `L'…'`（C99）、`u`/`U`/`u8` 字符串与 `u`/`U` 字符
+  （C11）、`u8` 字符与 `0b…`（C23）此前一律切成 `id` + `literal.string` 两个 token ⇒ 合法代码
+  整条解析失败。修法：
+  · **引擎**：`[string] prefixes = { 前缀 = [允许的定界符…] }` 声明面（`lexer/capture_runner.py`
+    `_string_delim_rules`）——每个「前缀 × 定界符」一条捕获规则（start = 前缀+定界符），前缀进
+    token **正文**、渲染原样输出；前缀与定界符必须紧邻；**不声明 = 无前缀语义**（其余语言包零影响），
+    非法条目 fail-fast（前缀非空串 / 定界符须在 `delimiters` 中）。
+  · **C 包**（档位 = 声明面组合）：核心基线声明 `L`（C99）；c11 插件补 `u`/`U`（两种字面量）与
+    `u8`（字符串）；c23 插件把 `u8` 覆盖为两种定界符（C23 字符常量）。二进制走**按名合并**给核心
+    `c_prefix` 形态加 `0b` 分支 + `b → bin`（`plugins/c23/_number_c23.toml`），基线/c11 档仍切两个 token。
+  **行为变化**：上述字面量现在是单个 `literal.string` token 并进 AST（`char *s = u8"x";` 等）；
+  未达档位的形态保持两 token（自然不进树）——档位判别由声明面决定，引擎无语言判断。
+  验证：`test_c_lexer.py` 新增 `TestLiteralPrefixes`（8 形态单 token / 4 形态正文含前缀 / 紧邻性）
+  与 `TestLiteralPrefixTiers`（12 条逐档切分）；`test_c_standard_conformance.py` 新增
+  `TestLiteralForms`（10 接受端到端 + 4 逐档拒绝），缺口清单 6 → 3 条（余 `_Static_assert(1)`
+  单参 / 数字分隔符 / enum 固定底层类型）；全量 **4201 passed / 7 skipped / 3 xfailed**；
+  `eval_lint_accuracy` hit_code 33 / detached 0 / fp 0；`c_acceptance` 42 / 空洞 0；
+  A/B `--products` verilog **0/144**；pyright strict 0；门禁变异 **102 → 104**
+  （忽略前缀声明 / 丢掉 `0b` 分支）。文档：`lexer/README.md`（`[string]` 声明表）、
+  `docs/language_walkthrough.md`、`grammar/c/README.md`、gap「C 标准等效缺口」、TODO/PROGRESS/ROADMAP。
+
 - **引擎能力面全项审查：方法 + 台账建档**（2026-10-21，循环 #36，作者定方向）：C 包被重新定位为
   引擎抽象的**压力测试**（"每多一门语言多一套特殊处理 = 一个未审查的抽象"），刻度 7→9 完成后、
   P3/性能类改动之前做一次全项审查。本轮只落方法与台账、不改生产代码：

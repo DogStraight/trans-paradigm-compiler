@@ -67,7 +67,7 @@
 
 > 阶段 5 缺的是**按标准分档的断言面**（ROADMAP「C 语言包」）。第一批先把**静态断言族**
 > 做成接受/拒绝双向断言，并用 oracle 把「合法但被拒」的标准项逐条照出来——本节是
-> 缺口全表（当前余 **6 条样本**，成员位两条已转正）；判据在
+> 缺口全表（当前余 **3 条样本**，成员位与字面量族已转正）；判据在
 > `tests/languages/c/test_c_standard_conformance.py`（`xfail(strict=True)`：**修好一条就红一条**，
 > 提醒移出清单并转正）。
 
@@ -78,13 +78,14 @@
 | # | 构造（合法标准代码） | 标准归属 | gcc | tpc 现状 | 成因 / 修法 |
 |---|---|---|---|---|---|
 | 1 | `_Static_assert(1);`（下划线拼写、单参） | C23 §6.7.10（消息可省，与 `static_assert` 同语法） | c23 OK | 拒绝 | c23 插件不能为它写规则：`enabled` 只门控**声明面**，插件规则文件无条件加载 ⇒ c23 里引用 `keyword._Static_assert` 的规则会在 c11/c17 档生效，把 C11 该拒的形态放进来。修法 = 规则按档位门控（`enabled` 语义扩展） |
-| 2 | `char *s = u8"x";` | C11 §6.4.5（UTF-8 字符串字面量） | c11 OK | 拒绝 | 词法缺 `u8` 前缀形态（字符串/字符字面量的前缀集里没有 `u8`） |
-| 3 | `char c = u8'a';` | C23 §6.4.4.4（`u8` 字符常量） | c23 OK | 拒绝 | 词法缺 `u8` 前缀形态（同 #2） |
-| 4 | `int n = 0b1010;` | C23 §6.4.4.1（binary-constant） | c23 OK | 拒绝 | 词法 `[[number.based]]` 无二进制形态（加一条 c23 数字形态即可；注意档位：基线档不得接受） |
-| 5 | `int n = 1'000'000;` | C23 §6.4.4.1（digit separator） | c23 OK | 拒绝 | 数字扫描器的 DFA 不支持分隔符（引擎 `lexer/number_gen.py`；c23 侧需声明式开关） |
-| 6 | `enum e : int { A };` | C23 §6.7.2.2（enum-type-specifier） | c23 OK | 拒绝 | `EnumSpecifier` 缺"标签后 `: 类型说明符`"位；core 生产式要加可选组，属包内语法改动 |
+| 2 | `int n = 1'000'000;` | C23 §6.4.4.1（digit separator） | c23 OK | 拒绝 | 数字扫描器的 DFA 不支持分隔符（引擎 `lexer/number_gen.py`；c23 侧需声明式开关） |
+| 3 | `enum e : int { A };` | C23 §6.7.2.2（enum-type-specifier） | c23 OK | 拒绝 | `EnumSpecifier` 缺"标签后 `: 类型说明符`"位；core 生产式要加可选组，属包内语法改动 |
 
-**已收口**：① C23 单参 `static_assert(1)`（循环 #33）；② **静态断言的 struct/union
+**已收口**：① C23 单参 `static_assert(1)`（循环 #33）；② **字面量前缀族 + 二进制常量**
+（循环 #37，原表 u8 字符串 / u8 字符 / 二进制三行）——修法 = 引擎 `[string] prefixes`
+声明面（前缀进 token 正文，按档位由插件 `token_ext` 增删：L 在核心、u/U/u8 字符串在 c11、
+u8 字符在 c23）+ c23 数字形态按名合并给 `c_prefix` 加 `0b` 分支；
+③ **静态断言的 struct/union
 成员表位**（循环 #35，原表 #1/#2）——修法 = 容器级**空槽位**
 （`StructBody = { (@StructMember|@StructMemberExtra)* }`，增量注入 `@StructMemberExtra`），
 **不碰 `StructMember` 自身**：注入它会让 FIRST 混入 `keyword._Static_assert`，顶层同类语句
