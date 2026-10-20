@@ -71,6 +71,8 @@
 
 - **决策（为什么）** → `decisions/`（ADR），**≤10 决策点**：只在决策成立时建档、
   完成即删（未立项设计输入不进 ADR）；删除前机制先落部件文档（历史 git log）。
+  现存流程型：`decisions/0022-engine-capability-audit.md`（刻度完成后的引擎能力面审查：
+  方法/判据/台账位置；台账在 `gaps/gap-engine-abstraction-audit.md`）。
 - **长期暂缓项/触发条件（策略）** → `decisions/` 的**策略型 ADR**（"长期项不列待办" +
   「结论/为什么不做/触发条件」表，现存 `decisions/0021-long-term-deferral-strategy.md`）；
   **不进 TODO**——触发出现时按体量取回 TODO/ROADMAP，

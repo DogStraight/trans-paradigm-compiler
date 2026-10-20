@@ -67,4 +67,5 @@
 | `gap-c-semantic-base.md` | C 语义基座（符号表/作用域/声明顺序：`(myint)x` 截断丢内容、`myint *b;` 不可分、`sizeof` 宽进、引擎语义钩子空转；落点三案 + parser 接口四选一 + 待拍板 8 条） |
 | `gap-c-preprocessor-scope.md` | C 预处理器范围基线（标准宏与指令全集三表 + 扩展排除表 + tpc 承载面与 4 处机制级缺口 + 首片 A/B；作者 2026-10-17 定"只考虑 C 标准中的宏"） |
 | `gap-verification-engineering.md` | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
+| `gap-engine-abstraction-audit.md` | 引擎能力面抽象审查（能力×语言矩阵 + 第二语言复用判据；刻度 7→9 完成后执行，日常循环顺带补行） |
 | `gap-feature-scatter.md` | 功能散点与上游契约耦合（一处功能 N 处登记；P-A/P-B/P-C + 步 2 收敛目标与接受边界） |
