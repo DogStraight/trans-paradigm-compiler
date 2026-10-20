@@ -58,6 +58,8 @@ _INCREMENT_MATRIX = [
     ("_Noreturn（c11）", "_Noreturn void die(void);\n", "NoreturnSpec", "c11"),
     ("_Thread_local（c11）", "_Thread_local int t;\n", "ThreadLocalSpec", "c11"),
     ("static_assert（c23）", _C23_SRC, "StaticAssertC23Decl", "c23"),
+    # C23 §6.7.10：消息可省 ⇒ 单参形态也从 c23 档起（两参/单参是同一条规则的可选组）
+    ("static_assert 单参（c23）", "static_assert(1);\n", "StaticAssertC23Decl", "c23"),
     ("nullptr（c23）", "int *p = nullptr;\n", "NullptrLiteral", "c23"),
     ("true（c23）", "int b = true;\n", "BoolLiteral", "c23"),
     ("bool（c23）", "bool f;\n", "BoolType", "c23"),

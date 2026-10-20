@@ -1,15 +1,34 @@
 # ============================================================================
-# c23 插件 — 小写 `static_assert ( 常量表达式 , 字面量 ) ;`（C23 §6.7.5）
+# c23 插件 — 小写 `static_assert ( 常量表达式 [, 字面量] ) ;`（C23 §6.7.10）
 # ============================================================================
-# 与 c11 的 `_Static_assert` 同形；C23 同时保留 `_Static_assert`（向后兼容）。
-# 文件作用域与**块作用域**都可用，两处各有一条通路（同 c11 那条，见其头注）：
-#   · 文件作用域：`is_statement = true` → 引擎的全局语句发现直接认它；
-#   · 块作用域：核心 `Stmt` 选择器里要有这一支 → 结构化注入 `targets = ["@Stmt"]`。
+# 与 c11 的 `_Static_assert` 同构造；C23 同时保留 `_Static_assert`（向后兼容拼写）。
+# **C23 的新增点**：消息是**可选**的——`static_assert(cond);` 与
+# `static_assert(cond, "msg");` 都合法（C11/C17 只有后者）。生产式因此把
+# `(comma, literal.string)` 写成**尾随可选组**，`message` 绑到组内第二元素。
+#
+# 文件作用域与**块作用域**都可用，两处各有一条通路：文件侧靠 `is_statement = true`
+# （全局语句发现直接认它），块作用域侧靠结构化注入 `targets = ["@Stmt"]`（同 c11 那条，
+# 见其头注）。**成员表位（struct/union 内）与 c11 `_Static_assert` 同一缺口**：合法但
+# 当前不支持，成因与修法见 c11 `10_static_assert.toml` 头注与 gap 档「C 标准等效缺口」。
+#
+# ⚠ **为什么"可选组"而不是"两条规则"**（2026-10-20 实测，本轮踩到）：同首 token 的
+#   两条规则（两参一条、单参一条）会让 linter 的语句发现二义——它对同一 FIRST 集的
+#   候选不做跨规则回溯，单选了较短的单参形态后把 `, "x"` 留成
+#   `phase-statement: unexpected end of statement`（实测：加了第二条规则后，
+#   连 `static_assert(1, "x");` 与新规则的 `_Static_assert` 全部报该错）。
+#   一条规则 + 尾随可选 = 候选唯一，解析器内部回溯即可消歧。
 #
 # ⚠ **旧注释作废（2026-09-26 实测）**：本条曾写"块作用域不可用（需在核心 `Stmt` 选择器加
 #   分支 → 属『改』核心，与 C23 其余语法增量同批待办）"——**不成立**：现役
 #   `inject_productions` 的直接注入就是"往既有交替里加一支"（树层
 #   `insert_choice_candidate`），c11 的 `_Static_assert` 已按它落地块作用域，本条照做即可。
+#
+# ⚠ **已知缺口（本轮实测，已登记）**：C23 里 `_Static_assert(1);`（下划线拼写、单参）
+#   同样合法，但本插件**不能**为它另写规则——`enabled` 只门控**声明面**（token/词法），
+#   插件规则文件**无条件加载**（`setup_grammar` → `load_all_components`），故 c23 插件
+#   里引用 `keyword._Static_assert` 的规则会在 c11/c17 档也生效，把"C11 该拒"的形态
+#   放进来（上面"两条规则"的教训也不允许给 c11 规则加单参形态）。
+#   登记：`docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」。
 
 [StaticAssertC23Decl]
 is_statement = true
@@ -22,22 +41,26 @@ production = [
     "keyword.static_assert",
     "bracket.l_parentheses",
     "@Expression",
-    "symbol.base.comma",
-    "literal.string",
+    "(symbol.base.comma,literal.string)?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
 ]
 
 [StaticAssertC23Decl.parser.node]
 cond = "$3"
-message = "$5"
+# 可选组缺省时该属性不存在（`getattr(node, "message", None) is None`），
+# 渲染侧由 `opt` 整体消失——同 `InitDeclarator.init` 的既有用法。
+message = "$4.sub_node[0].sub_node[1]"
 
-# 渲染（世界 A）：小写 `static_assert(条件, 消息);`（同 c11 那条的形态）
+# 渲染（世界 A）：两参 `static_assert(条件, 消息);` / 单参 `static_assert(条件);`。
+# 逗号+空格写在 opt group 开头（缺省时不留悬挂分隔符）。
 [StaticAssertC23Decl.renderer.layout]
 line = [
     "static_assert(",
     { ref = "cond" },
+    { opt = { group = [
     ", ",
     { ref = "message" },
+] } },
     ");",
 ]

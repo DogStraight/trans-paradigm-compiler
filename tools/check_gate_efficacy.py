@@ -1043,6 +1043,22 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        elif after is None or after.type.startswith(\"symbol\"):\n",
         "test": "tests/languages/c/test_c_initializers.py",
     },
+    {
+        "why": "C23 单参静态断言（消息可省）若把尾随可选组改回必选 ⇒ 合法 "
+               "`static_assert(1);` 整条解析失败（C23 §6.7.10 新增形态，2026-10-20 补）",
+        "file": "grammar/c/plugins/c23/10_static_assert_alias.toml",
+        "old": '    "(symbol.base.comma,literal.string)?",\n',
+        "new": '    "(symbol.base.comma,literal.string)",\n',
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
+    {
+        "why": "可选消息的**绑定路径**若少一层 `.sub_node[0]`（绑到组节点而非字符串 token）"
+               "⇒ 两参形态渲成 `static_assert(1);`（静默丢消息，2026-10-20 补）",
+        "file": "grammar/c/plugins/c23/10_static_assert_alias.toml",
+        "old": 'message = "$4.sub_node[0].sub_node[1]"\n',
+        "new": 'message = "$4"\n',
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
 ]
 
 

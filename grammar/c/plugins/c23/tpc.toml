@@ -2,10 +2,12 @@
 #
 # 与 c11/c17 的分工：`requires = ["c17"]` 让包含关系在**加载期可执行**（缺前置响亮失败）。
 #
-# **本插件落地了哪些**：`static_assert`（C23 关键字化，**文件 + 块两处作用域**）+
-#   `nullptr` / `true` / `false`（表达式原子）+ `bool` / `typeof` / `typeof_unqual`
-#   （类型说明符，注入核心 `SimpleType` 交替）+ `constexpr`（存储类，注入 `StorageClass`）+
-#   `alignas` / `alignof` / `thread_local`（c11 三个关键字的 C23 拼写）。
+# **本插件落地了哪些**：`static_assert`（C23 关键字化；**文件 + 块 + struct/union 成员表
+#   三处作用域**；两参形态 + C23 新增的**单参形态**）+ `nullptr` / `true` / `false`
+#   （表达式原子）+ `bool` / `typeof` / `typeof_unqual`（类型说明符，注入核心 `SimpleType`
+#   交替）+ `constexpr`（存储类，注入 `StorageClass`）+ `alignas` / `alignof` /
+#   `thread_local`（c11 三个关键字的 C23 拼写）+ `[[属性]]` + `_BitInt` /
+#   `_Decimal32/64/128`。
 #
 # ⚠ **同构造异拼写的包内约定（2026-09-26 定；TODO 里"需先定约定"的那条答复）**：
 #   **c23 侧各写一条同形规则**，不做跨插件 token 引用、也不用 `inject_replace_rule` 去改
@@ -20,11 +22,10 @@
 #   production 的交替，`parser/grammar_inject.py`），fail-fast；缺的只是插件没写那几行
 #   声明。上面各项即按此落地（各文件头注写明注入点与"为什么选那个最窄的注入点"）。
 #
-# ⚠ **仍未落地（各自有真实前置，不是"注入做不了"）**：
-#     · `[[属性]]`（attribute-specifier）——要加进**声明/语句前缀**位，涉及"属性可出现在
-#       多处"的位点设计与 linter 的语句区间判定，属独立一小项；
-#     · `_BitInt` / `_Decimal32/64/128`——类型说明符，形态简单（同 `bool`），
-#       但要先定"宽度参数"（`_BitInt(N)`）与十进制浮点的接受域，归接受域清单一起做。
+# ⚠ **仍未落地的标准项**（真实缺口，清单与判据见 `docs/gaps/gap-language-pack-scope.md`
+#   「C 标准等效缺口」）：字面量形态（二进制常量、数字分隔符、`u8` 字符/字符串字面量）、
+#   `enum` 固定底层类型；以及 `_Static_assert(constant-expression)`（单参、下划线拼写）——
+#   后者受"规则文件不按档位门控"限制（见 `22_static_assert_single.toml` 头注）。
 #
 # 词法面：C23 新增关键字**全部声明**（词法完整）；没有规则的用起来就是语法错误
 #   （响亮失败，不会静默当标识符）——与 c11 插件同一策略。

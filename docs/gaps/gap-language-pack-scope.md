@@ -63,6 +63,40 @@
 - ⚠ 工具的构造清单必须与本表**逐行对照**：清单自己也会漏项（"专治无声空洞的工具自己
   有一个无声空洞"），纪律写在 `tools/c_acceptance.py` 的清单注释里。
 
+## C 标准等效缺口（阶段 5「标准等效断言面」第一批，2026-10-20）
+
+> 阶段 5 缺的是**按标准分档的断言面**（ROADMAP「C 语言包」）。第一批先把**静态断言族**
+> 做成接受/拒绝双向断言，并用 oracle 把「合法但被拒」的标准项逐条照出来——本节是
+> 缺口全表；判据在 `tests/languages/c/test_c_standard_conformance.py`（`xfail(strict=True)`：
+> **修好一条就红一条**，提醒移出清单并转正）。
+
+**oracle**：`gcc 16.1.0`（MinGW-W64），逐样本
+`gcc -std=c11|c17|c23 -pedantic-errors -fsyntax-only case.c`。下表「gcc」列 = 该样本首个
+不接受的标准档位之前全部 OK；tpc 列 = 当前实现（`enabled` 档位下）的实测归宿。
+
+| # | 构造（合法标准代码） | 标准归属 | gcc | tpc 现状 | 成因 / 修法 |
+|---|---|---|---|---|---|
+| 1 | `struct s { int a; _Static_assert(1, "x"); };`（union 同） | C11 §6.7.2.1（struct-declaration 含 static_assert-declaration） | c11 OK | **拒绝**（空 AST） | 不能往 `@StructMember` 注入：linter 候选表按"一条规则 = 一种形态"建模，`StructMember` 的 FIRST 会混入 `keyword._Static_assert` ⇒ 顶层 `_Static_assert(…)` 被分类成 `StructMember` 并报 `phase-statement: unexpected end of statement` 假红（2026-10-20 实测）。修法 = linter 按"规则内分支"分别建候选（框架级） |
+| 2 | `struct s { static_assert(1, "x"); };` | C23 §6.7.2.1 | c23 OK | 拒绝 | 同 #1（同一注入面） |
+| 3 | `_Static_assert(1);`（下划线拼写、单参） | C23 §6.7.10（消息可省，与 `static_assert` 同语法） | c23 OK | 拒绝 | c23 插件不能为它写规则：`enabled` 只门控**声明面**，插件规则文件无条件加载 ⇒ c23 里引用 `keyword._Static_assert` 的规则会在 c11/c17 档生效，把 C11 该拒的形态放进来。修法 = 规则按档位门控（`enabled` 语义扩展） |
+| 4 | `char *s = u8"x";` | C11 §6.4.5（UTF-8 字符串字面量） | c11 OK | 拒绝 | 词法缺 `u8` 前缀形态（字符串/字符字面量的前缀集里没有 `u8`） |
+| 5 | `char c = u8'a';` | C23 §6.4.4.4（`u8` 字符常量） | c23 OK | 拒绝 | 词法缺 `u8` 前缀形态（同 #4） |
+| 6 | `int n = 0b1010;` | C23 §6.4.4.1（binary-constant） | c23 OK | 拒绝 | 词法 `[[number.based]]` 无二进制形态（加一条 c23 数字形态即可；注意档位：基线档不得接受） |
+| 7 | `int n = 1'000'000;` | C23 §6.4.4.1（digit separator） | c23 OK | 拒绝 | 数字扫描器的 DFA 不支持分隔符（引擎 `lexer/number_gen.py`；c23 侧需声明式开关） |
+| 8 | `enum e : int { A };` | C23 §6.7.2.2（enum-type-specifier） | c23 OK | 拒绝 | `EnumSpecifier` 缺"标签后 `: 类型说明符`"位；core 生产式要加可选组，属包内语法改动 |
+
+**已收口（第一批交付）**：C23 单参 `static_assert(1)`（#3 的小写拼写那一半）已按
+「一条规则 + 尾随可选组」落地（两条规则会让 linter 语句发现二义——实测同 FIRST 集不做
+跨规则回溯，`_, "x"` 被留成 `phase-statement` 假红）。接受面继承既有 27 构造 × 4 档矩阵，
+拒绝面与下档三态（generic / rejected）新增在
+`test_c_standard_conformance.py::TestRejectSide / TestBelowTierState`；
+`gcc` 对照样本见 `_GAPS` 每条注释。
+
+**下档三态是"接受域"口径的一部分**（"未声明关键字 ≠ 拒绝"）：同一形态在未达档位时要么
+被当普通构造照常解析（`bool f;` / `_Static_assert(1, "x");` 在基线档当 typedef 名/函数调用），
+要么整体套不进任何语句形态（`typeof(int) z;` / `_BitInt(8) a;` 在基线档 ⇒ 空 AST）。
+两态都有断言，避免"没报错 = 支持"的误读。
+
 ## C 包渲染/保真面现状
 
 **闭环判据** = `tests/languages/c/test_c_render_fidelity.py`（**62 例**；3 样本
@@ -129,7 +163,7 @@ render → 与源比对，七条：
 - **入口**：`ConfigRegistry.load_language / load_all / resolve(..., enabled=[...])`
   （`None` = 用包内 `[plugins] enabled`）。显式档位会被登记为该包"当前档位"，故
   `Lexer` 之类隐式消费方无需额外参数即可跟随（缓存键含档位）。
-- **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **26 例参数化 × 4 档矩阵**
+- **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **27 例参数化 × 4 档矩阵**
   （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个
   节点**判定；复现：`python -m pytest tests/languages/c/test_c_standard_tiers.py --collect-only -q`），
   外加同进程连续切档、`Lexer` 跟随档位、非法 `enabled` 参数与清单里不可解析的插件名

@@ -59,6 +59,12 @@ _CASES = [
      "StaticAssertC23Decl"),
     ("static_assert 在 if body", 'void f(int a) {\n    if (a)\n        static_assert(1, "x");\n}\n',
      "StaticAssertC23Decl"),
+    # C23 §6.7.10：消息可省（单参形态）——尾随可选组，与两参形态**同一规则**
+    ("static_assert 单参（消息可省）", "static_assert(1);\n", "StaticAssertC23Decl"),
+    ("static_assert 单参块作用域", "void f(void) {\n    static_assert(1);\n}\n",
+     "StaticAssertC23Decl"),
+    ("static_assert 单参在 if body", "void f(int a) {\n    if (a)\n        static_assert(1);\n}\n",
+     "StaticAssertC23Decl"),
     ("alignas 常量表达式", "alignas(16) char buf[64];\n", "AlignasC23Spec"),
     ("alignas 说明符序列其余位", "int alignas(8) x;\n", "AlignasC23Spec"),
     ("alignas 类型名形态", "alignas(double) char c;\n", "AlignasC23TypeSpec"),
@@ -431,6 +437,34 @@ class TestC23InjectionPoints:
         rules = _env()["rules"]
         stmt = " ".join(str(p) for p in rules["Stmt"].production)
         assert "@StaticAssertC23Decl" in stmt, stmt
+
+    def test_static_assert_message_is_optional(self, restore_language):
+        """C23 §6.7.10：消息**可选**——一条规则 + 尾随可选组，而不是两条规则。
+
+        判据三条（缺陷态各自会红）：
+          ① 两参形态的 `message` 属性存在并绑定到字符串字面量（**丢了就是
+             `static_assert(1);`——渲染静默丢消息**）；
+          ② 单参形态没有 `message` 属性（`opt` 整组消失，不留悬挂 `, `）；
+          ③ c23 侧只有**一条**规则（`StaticAssertC23Decl`）：同首 token 的两条规则会让
+             linter 的语句发现二义（实测 `, "x"` 被留成 `phase-statement: unexpected
+             end of statement`），故规则清单也一并钉住。
+        """
+        env = _env()
+        names = sorted(n for n in env["rules"] if n.startswith("StaticAssert"))
+        assert names == ["StaticAssertC23Decl", "StaticAssertDecl"], names
+
+        def assert_of(src: str):
+            ast = env["parse"](src)
+            return next(n for n in iter_nodes(ast) if n.node_name == "StaticAssertC23Decl")
+
+        two = assert_of('static_assert(1, "x");\n')
+        assert getattr(two, "message", None) is not None
+        # 绑的是 literal.string **token**（normalize 后即含引号的字符串，layout `ref` 原样输出）
+        assert two.message.node_name == "literal.string", two.message
+        one = assert_of("static_assert(1);\n")
+        assert getattr(one, "message", None) is None
+        assert env["render"]('static_assert(1, "x");\n') == 'static_assert(1, "x");'
+        assert env["render"]("static_assert(1);\n") == "static_assert(1);"
 
     def test_injections_are_declared_in_plugin_files(self, restore_language):
         want = {

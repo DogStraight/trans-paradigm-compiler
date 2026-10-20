@@ -105,6 +105,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **C23 单参静态断言（消息可省）被拒 + 标准等效断言面第一批**（2026-10-20，循环 #33，
+  C 标准面）：C23 §6.7.10 起 `static_assert` 的消息可省（`static_assert(1);` 合法，两种拼写
+  同语法），此前 c23 插件只认两参形态 ⇒ 合法 C23 代码整条解析失败。修法：`StaticAssertC23Decl`
+  的产生式把 `(comma, literal.string)` 改为**尾随可选组**、`message` 绑组内第二元素
+  （`$4.sub_node[0].sub_node[1]`），布局用 `{ opt = { group = [", ", { ref = "message" }] } }`
+  ⇒ 一条规则覆盖两形态（**不能写两条规则**：同首 token 会让 linter 语句发现二义，实测
+  `_, "x"` 被留成 `phase-statement: unexpected end of statement`）。**新增断言面**（阶段 5
+  缺的那片）：拒绝面 6 条（缺消息 / 消息非字符串 / 多实参，c11 与 c23 各一组，断言
+  "不误读 + 空 AST + linter 有诊断"）、下档三态 8 条（generic / rejected，"未声明关键字 ≠
+  拒绝"）、标准缺口清单 9 条（`xfail(strict=True)`：修好一条红一条）。**同时用外部 oracle
+  （gcc 16.1.0 `-std=c11|… -pedantic-errors`）照出 8 类合法但被拒的标准项**（静态断言的
+  struct/union 成员位、`_Static_assert(1)` 单参、`u8` 字符串与字符字面量、二进制常量、
+  数字分隔符、`enum` 固定底层类型），全部登记在
+  `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」+ `TODO.md`（两条最难项各有
+  框架级前置：linter 候选表按"一条规则 = 一种形态"建模 / 规则文件不按 `enabled` 门控）。
+  验证：`test_c_standard_conformance.py` 15 passed + 9 xfailed；`test_c23_increment_plugin.py`
+  +4 用例；档位矩阵 26→27；门禁变异 **100→102**（可选组退回必选 / 消息绑定少一层）；
+  全量 / pyright / A-B / lint 精度见收口记录。
+
 - **初始化列表内注释：丢 / 双份 / 前移三症状**（2026-10-19，循环 #32，引擎注释归属面）：
   行中注释归属有三个引擎缺陷：① `inline` 通道按 `context.current_rule` 判——内层 inline
   规则（`Initializer`）返回或失败探索后 `current_rule` 残留，容器（`InitList`）内注释被挂成

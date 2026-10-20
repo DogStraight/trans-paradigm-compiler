@@ -4,7 +4,7 @@
 # 文件作用域与块作用域均合法。**两处都要，缺一档就有一半的合法代码进不来**：
 #   · 文件作用域：`is_statement = true` → 引擎的全局语句发现直接认它；
 #   · 块作用域：核心 `Stmt` 选择器里得有这一支 → 用**结构化注入**声明
-#     （`[StaticAssertDecl.inject] targets = ["@Stmt"]`），插件不必改核心规则文件。
+#     （`targets = ["@Stmt"]`），插件不必改核心规则文件。
 # ⚠ 旧注释说"块作用域需要在核心 `Stmt` 里加分支，属跨文件改动，留待注入机制补『改』
 #   路径"——**该判断是错的**（2026-09-26 实测）：现役 `inject_productions` 的**直接注入**
 #   就是把 `@ExtRule` 作为候选并进目标规则 production 的树
@@ -15,6 +15,14 @@
 #
 # ⚠ 剩余边界（记在此防"看起来支持"）：
 #   · 消息必须是字符串字面量（C11 允许任意字符串字面量拼接，此处不处理）。
+#   · **成员表位未支持**（C11 §6.7.2.1 `struct-declaration` 含 static_assert-declaration）：
+#     合法 `struct s { int a; _Static_assert(1, "x"); };` 当前整条解析失败。成因不在
+#     production 写得出来（往 `@StructMember` 注入即可解析），而在 **linter 候选表按
+#     "一条规则 = 一种形态"建模**：把另一形态并进 `StructMember` 会让它的 FIRST 混入
+#     `keyword._Static_assert`，顶层 `_Static_assert(…)` 被分类成 `StructMember` 并报
+#     `phase-statement: unexpected end of statement` 假红（2026-10-20 实测）。修法 =
+#     linter 按"规则内分支"分别建候选（框架级，独立一项）；缺口清单见
+#     `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」。
 
 [StaticAssertDecl]
 is_statement = true

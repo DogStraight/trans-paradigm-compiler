@@ -36,7 +36,9 @@
     `_Alignof`、`_Generic`、`_Noreturn`、`_Thread_local`、`_Alignas`（常量表达式与
     类型名两形态）、`_Atomic`（限定符形态 + `_Atomic(T)` 说明符形态）；
   · **c17**：无新语法（缺陷修正版，只表达包含关系）；
-  · **c23**：`static_assert`（小写关键字化，**文件与块两处作用域**）、`nullptr`、
+  · **c23**：`static_assert`（小写关键字化，**文件与块两处作用域**；C23 §6.7.10 起
+    **消息可省** ⇒ 两参 `static_assert(1, "x")` / 单参 `static_assert(1)` 同一条规则、
+    尾随可选组绑定）、`nullptr`、
     `true`/`false`、`bool`、`typeof`/`typeof_unqual`、`constexpr`，**c11 三个关键字的
     C23 拼写** `alignas` / `alignof` / `thread_local`（同构造异拼写，见下条约定），
     以及**类型词** `_BitInt(N)`（宽度收 `@Expression`，"是不是整型常量表达式/宽度范围"
@@ -98,6 +100,7 @@
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
 | `[[属性]]`（c23）的**实参形态** | **已收口两条（2026-09-28）**：✅ **多实参** `[[gnu::nonnull(1, 2)]]`（实参由 `@Expression` 改收 `@ArgumentList`——`Expression` 是 assignment-expression 层级、不含逗号）+ ✅ **属性表尾随逗号** `[[nodiscard,]]`（`AttributeList` 加独立可选元素 `(comma)?` + **单独绑定**，**不得塞进 `items`**：join 分隔符会叠加成 `, ,`）。**仍未覆盖 ①②④⑤**，"现状 / 为什么不做 / 触发条件"逐条登记在 `plugins/c23/21_attributes.toml` 头注与 `TODO.md`：① 空实参 `[[deprecated()]]`（**低优先**：实测可配置面实现，代价 +1 规则 +1 AST 节点层；触发 = 真实语料）；② 相邻字面量拼接 `[[deprecated("a" "b")]]`（**不做**：硬拼只能覆盖 `literal.string+` 一种形态、+2 规则；旧记的"备选写全序列会被 `parser/follow.py` 的 choice 盲区卡掉"已随该盲区修复作废）；④ 空属性表 `[[]]`（**不做**：`@Attribute?` 一行即可，但**与③合体后 `[[,]]` 会被接受**）；⑤ 配平 token 序列 `[[f(int)]]` / `[[f(1 2)]]`（**暂不做**：现役 production 微语法是闭集，需新增元素类型，改动面横跨 parser/linter/preprocessor 10+ 处分派表；触发 = 真实语料出现非表达式 token 序列）。**位点已全部落地**（2026-09-28：说明符位 / 属性声明 / 声明符内 / 枚举项——后两处走**共用空槽位** `@AttributeSlot`）；另有**一处过接受**（`(f) [[deprecated]]` 也认，标准只允许紧跟 identifier 之后）如实登记在 `plugins/c23/21_attributes.toml` 头注。判据 `test_c23_increment_plugin.py`：`test_attribute_known_boundaries`（①②④⑤ 仍须被拒）+ `test_attribute_over_acceptance_boundaries`（③ 的 `[[nodiscard,,]]` / `[[,]]` 仍须被拒）+ `test_attribute_list_binds_trailing_comma_separately` / `test_attribute_args_bind_through_argument_list` |
 | 十进制浮点**字面量后缀**（`1.5df`/`1.5dd`/`1.5dl`） | ✅ **已落地**（2026-09-26）：走声明级合并 `merge = "by-name"`（`plugins/c23/_number_c23.toml` 只补 `c_dec` 的 `suffix`），**不是**改核心 `base/_number.toml`（那会让基线档也接受 `1.5dd`） |
+| **C11/C23 语法面缺口 9 项**（静态断言的**成员表位** / `_Static_assert(` 单参 / `u8` 字符与字符串字面量 / 二进制常量 / 数字分隔符 / `enum` 固定底层类型） | 阶段 5「标准等效断言面」第一批实测（oracle = gcc 16.1.0 `-std=… -pedantic-errors`）：**合法标准代码当前被拒**。逐条判据、标准归属、成因与修法在 `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」；用 `tests/languages/c/test_c_standard_conformance.py` 的 `xfail(strict=True)` 钉住（修好一条就红一条，提醒转正）。两条最难项各有前置：成员表位 = linter 候选表按"一条规则 = 一种形态"建模（框架级）；`_Static_assert(` 单参 = 规则文件不按 `enabled` 门控（规则会漏进 c11/c17 档） |
 | VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
 | 完整类型系统 / 求值 / 实现定义行为 / K&R 老式定义 | **明确不做**（超出一致性检查工具链的定位） |
 
@@ -150,7 +153,7 @@ grammar/c/
   `ConfigRegistry.load_language/load_all/resolve(..., enabled=[...])`（`None` = 用包内
   `[plugins] enabled`；显式档位会被登记为该包"当前档位"，`Lexer` 之类隐式消费方自动跟随）。
   于是**同一个 pack、同一次进程内** `enabled=["c11"]` → `enabled=[]` 会真的换档。
-  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **26 构造 × 4 档矩阵**（每构造在同
+  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **27 构造 × 4 档矩阵**（每构造在同
   一进程内切 4 档断言"解析成哪个节点"，能直接抓出缓存串档；该文件共 43 例）。两条静默
   失效根因已修（声明缓存键、解析缓存键都须含档位）——细节见
   `docs/gaps/gap-language-pack-scope.md`「运行时档位：`enabled` 的语义边界」。
