@@ -1,10 +1,16 @@
 # ============================================================================
 # c11 插件 — 静态断言 `_Static_assert ( 常量表达式 , 字面量 ) ;`（C11 §6.7.4）
 # ============================================================================
-# 文件作用域与块作用域均合法。**两处都要，缺一档就有一半的合法代码进不来**：
+# **三处**作用域都合法（C11 §6.7.4 + §6.7.2.1）：文件、块、struct/union 成员表。
+# 三条注入通路各管一处（缺一档就有一档合法代码进不来）：
 #   · 文件作用域：`is_statement = true` → 引擎的全局语句发现直接认它；
-#   · 块作用域：核心 `Stmt` 选择器里得有这一支 → 用**结构化注入**声明
-#     （`targets = ["@Stmt"]`），插件不必改核心规则文件。
+#   · 块作用域：核心 `Stmt` 选择器里得有这一支 → 结构化注入 `targets = ["@Stmt"]`；
+#   · 成员表：注入核心**空槽位** `@StructMemberExtra`（C 核心 `02_types.toml` 的
+#     `StructBody = { (@StructMember|@StructMemberExtra)* }`）——**不要**注入 `@StructMember`：
+#     那会把静态断言并成它的一条分支、污染它的 FIRST（顶层 `_Static_assert(…)` 被分类成
+#     `StructMember` ⇒ `phase-statement` 假红，2026-10-20 实测；干净对照与结论见
+#     c23 `10_static_assert_alias.toml` 头注与 `policy/collaboration.md`「因果句必须带对照」）。
+#
 # ⚠ 旧注释说"块作用域需要在核心 `Stmt` 里加分支，属跨文件改动，留待注入机制补『改』
 #   路径"——**该判断是错的**（2026-09-26 实测）：现役 `inject_productions` 的**直接注入**
 #   就是把 `@ExtRule` 作为候选并进目标规则 production 的树
@@ -15,22 +21,15 @@
 #
 # ⚠ 剩余边界（记在此防"看起来支持"）：
 #   · 消息必须是字符串字面量（C11 允许任意字符串字面量拼接，此处不处理）。
-#   · **成员表位未支持**（C11 §6.7.2.1 `struct-declaration` 含 static_assert-declaration）：
-#     合法 `struct s { int a; _Static_assert(1, "x"); };` 当前整条解析失败。成因不在
-#     production 写得出来（往 `@StructMember` 注入即可解析），而在 **linter 候选表按
-#     "一条规则 = 一种形态"建模**：把另一形态并进 `StructMember` 会让它的 FIRST 混入
-#     `keyword._Static_assert`，顶层 `_Static_assert(…)` 被分类成 `StructMember` 并报
-#     `phase-statement: unexpected end of statement` 假红（2026-10-20 实测）。修法 =
-#     linter 按"规则内分支"分别建候选（框架级，独立一项）；缺口清单见
-#     `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」。
 
 [StaticAssertDecl]
 is_statement = true
 
-# 注入核心 `Stmt` 的候选交替（`Stmt.production[0]` 是 choice → 插 alternatives 首），
-# 并**传播**到所有引用 `@Stmt` 的规则（if/while/for/switch/标号/复合语句的 body 位）。
+# `@Stmt`：文件/块作用域（并**传播**到所有引用 `@Stmt` 的规则——if/while/for/switch/
+#   标号/复合语句的 body 位；`Stmt.production[0]` 是 choice → 插 alternatives 首）。
+# `@StructMemberExtra`：struct/union 成员表的空槽位（容器级分支，不碰 `StructMember` 自身）。
 [StaticAssertDecl.inject]
-targets = ["@Stmt"]
+targets = ["@Stmt", "@StructMemberExtra"]
 
 [StaticAssertDecl.parser]
 production = [

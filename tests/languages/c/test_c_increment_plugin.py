@@ -7,9 +7,10 @@
 2. **插件随包生效**：`setup_grammar("grammar/c")` 的规则表里**有**该规则、词法扩展也生效
    （`_Static_assert` 是关键字）；
 3. **增量往核心交替里「加一支」而不是「改一支」**：核心 `Stmt` 选择器经**声明的注入**
-   （`[StaticAssertDecl.inject] targets = ["@Stmt"]`）获得该候选，原候选一支不少、序不变；
-4. **两处作用域都进 AST**：文件作用域（`is_statement` + 全局语句发现）与**块作用域**
-   （注入进 `Stmt` 交替，并经传播覆盖 if/while/… 的 body 位）——C11 §6.7.4 两处都合法；
+   （`[StaticAssertDecl.inject] targets = ["@Stmt", "@StructMemberExtra"]`）获得该候选，原候选一支不少、序不变；
+4. **三处作用域都进 AST**：文件（`is_statement` + 全局语句发现）、**块**（注入进 `Stmt`
+   交替，经传播覆盖 if/while/… 的 body 位）、**struct/union 成员表**（注入容器级空槽位
+   `@StructMemberExtra`）——C11 §6.7.4 + §6.7.2.1；
 5. **解析形态确实变了**：`_Static_assert(1, "x");` → `StaticAssertDecl`（条件与消息都挂上）。
 
 ⚠ **历史更正（2026-09-26 实测）**：本文件原先断言"核心 `Stmt` 选择器里**不能有**
@@ -211,7 +212,10 @@ class TestIncrementAddsCandidateNotRewrites:
         path = ROOT_DIR / "grammar" / "c" / "plugins" / "c11" / "10_static_assert.toml"
         with open(path, "rb") as f:
             data = tomllib.load(f)
-        assert data["StaticAssertDecl"]["inject"]["targets"] == ["@Stmt"]
+        assert data["StaticAssertDecl"]["inject"]["targets"] == [
+            "@Stmt",
+            "@StructMemberExtra",
+        ]
 
     def test_core_stmt_selector_source_unchanged(self, restore_language):
         """核心 `03_statements.toml` 的 `Stmt` 候选仍等于读出来的那批（没有增量名）。"""

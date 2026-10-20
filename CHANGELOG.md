@@ -103,7 +103,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   PRE（HEAD 代码）新判据 **30 failed + 1 error / 16 passed** → POST 全绿；全量 **3952 passed / 7 skipped**；
   policy **458 passed**；pyright strict **0**（本包插件已纳入 strict 面）；A/B verilog **0/144**。
 
+### Changed
+
+- **任务循环：调查/实现分轮 + 因果句对照纪律 + 分层验证 + 状态入口**（2026-10-21，循环 #34，
+  协作制度）：作者确认的四项调整落进 `policy/collaboration.md`「任务循环」与执行细则：
+  ① **轮型分耦**——调查轮交付"位置/方案/反例/判据草案"（落档到实现轮能检索即可，**不要求修好、
+  结果不必向作者汇报**），实现轮才动生产代码；同一缺陷 1+n 轮属正常；
+  ② **因果句必须带对照**——写进 CHANGELOG/头注/gap 的因果解释要附干净 A/B 对照或标「未对照」
+  （先例即循环 #33 的错误归因：把"两条同首 token 规则导致 linter 二义"写进版本库，实测真凶是
+  同时注入 `@StructMember` 污染 FIRST）；
+  ③ **验证分层写实**——文档/语言包/引擎三类改动各自的测试范围，全量只在跨子系统轮与里程碑跑
+  （此前"每轮全量"是测试目录整理前的保守做法）；
+  ④ **状态入口**：`PROGRESS.md`「当前时刻」改「下一轮入口」三行（意图/待验证假设/要更正的结论），
+  每轮替换不追加——压缩或换 session 后的恢复入口。
+  同步：`PROGRESS.md` 数字口径改为"通过数不入档、未通过数必记"（复现用命令），`ROADMAP.md`
+  阶段 5 入口去掉通过数硬编码。判据（纯文档改动）= `tests/policy`（文档预算 / 引用一致性 /
+  变异锚点静态守）全绿。
+
 ### Fixed
+
+- **静态断言补全三处作用域（struct/union 成员表）+ C23 改分派器两分支**（2026-10-21，循环 #35，
+  C 标准面；含一条旧结论更正）：① C11 §6.7.2.1 的成员表位（`struct s { int a;
+  _Static_assert(1, "x"); };`）此前整条解析失败——修法 = 容器级**空槽位**：核心
+  `StructBody = { (@StructMember|@StructMemberExtra)* }` + 空规则 `@StructMemberExtra`
+  （`inline` + 渲染兜底声明，同 `@AttributeSlot` 先例），c11/c23 插件把静态断言注入该槽位，
+  **不碰 `StructMember` 自身**（注入它会让 FIRST 混入 `keyword._Static_assert`、顶层同类语句
+  被分类成 `StructMember` 报 `phase-statement` 假红——旧 #33 笔记的"同首 token 二义"即此，
+  干净对照已翻案，`policy/collaboration.md`「因果句必须带对照」以此为反例）。② C23 两形态
+  改为 Verilog `FuncDecl` 同款的 **inline 分派器 + 两分支**：`StaticAssertC23Decl`（分派器，
+  不进 AST）→ `StaticAssertC23MsgDecl` / `StaticAssertC23NoMsgDecl`（贴 §6.7.10 的两条
+  产生式，免掉尾随可选组的嵌套绑定）。**行为变化**：成员表位现接受 `_Static_assert`（c11+）
+  与 `static_assert`（c23+，含单参），渲染 token 逐项相同、幂等、成员顺序保持；C23 静态断言
+  节点名由单一 `StaticAssertC23Decl` 变为两分支名（dump/分析侧需按新名匹配）。
+  验证（分层按新制度：语言包改动 ⇒ 该包 + 相关引擎子系统 + policy + A/B + 变异）：
+  `test_c_standard_conformance.py` 新增 `TestStaticAssertMemberPosition`（接受 5 形态 / 顺序 /
+  拒绝 2 形态）+ 缺口清单 9 → 6 条；C 包 **955 passed / 6 xfailed**（成员位 3 条 xfail 转正）；
+  `tests/engine/linter` 全绿（空槽位不触碰候选表模型）；policy 全绿；`eval_lint_accuracy`
+  hit_code 33 / fp 0；`c_acceptance` 42/0；A/B `--products` verilog **0/144**；pyright strict 0；
+  门禁变异替换 2 条陈旧项（#33 的可选组/绑定）为新设计的两条（成员位槽失效 / 分派器丢单参分支），
+  总数仍 **102**，`--only 101/102` 待跑。
 
 - **C23 单参静态断言（消息可省）被拒 + 标准等效断言面第一批**（2026-10-20，循环 #33，
   C 标准面）：C23 §6.7.10 起 `static_assert` 的消息可省（`static_assert(1);` 合法，两种拼写

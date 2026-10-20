@@ -25,12 +25,11 @@
 
 ### 1.3 标准等效（阶段 5，循环 #33 第一批断言面已交付）
 
-- [ ] **C11/C23 语法面缺口 9 条样本（8 类）**：静态断言的 struct/union **成员表位**、
-      `_Static_assert(1)` 单参（下划线拼写）、`u8` 字符串/字符字面量、二进制常量、数字
-      分隔符、`enum` 固定底层类型——**合法标准代码当前被拒**（oracle = gcc 16.1.0
-      `-std=… -pedantic-errors`）。判据：`tests/languages/c/test_c_standard_conformance.py`
-      的 `xfail(strict=True)` 逐条转正；两条难项前置 = linter 按"规则内分支"建候选 /
-      规则文件按档位门控。链：`docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」
+- [ ] **C11/C23 语法面缺口 6 条样本**：`_Static_assert(1)` 单参（下划线拼写）、`u8` 字符串/
+      字符字面量、二进制常量、数字分隔符、`enum` 固定底层类型——**合法标准代码当前被拒**
+      （oracle = gcc 16.1.0 `-std=… -pedantic-errors`；成员位两条已于循环 #35 转正）。
+      判据：`tests/languages/c/test_c_standard_conformance.py` 的 `xfail(strict=True)` 逐条转正；
+      `_Static_assert` 单参前置 = 规则文件按档位门控。链：gap「C 标准等效缺口」
 
 ## 二、工具与门禁基础设施（非主线，收口时按影响做）
 

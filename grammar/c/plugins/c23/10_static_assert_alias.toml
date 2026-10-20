@@ -1,66 +1,116 @@
 # ============================================================================
-# c23 插件 — 小写 `static_assert ( 常量表达式 [, 字面量] ) ;`（C23 §6.7.10）
+# c23 插件 — 静态断言 `static_assert ( 常量表达式 [, 字面量] ) ;`（C23 §6.7.10）
 # ============================================================================
 # 与 c11 的 `_Static_assert` 同构造；C23 同时保留 `_Static_assert`（向后兼容拼写）。
-# **C23 的新增点**：消息是**可选**的——`static_assert(cond);` 与
-# `static_assert(cond, "msg");` 都合法（C11/C17 只有后者）。生产式因此把
-# `(comma, literal.string)` 写成**尾随可选组**，`message` 绑到组内第二元素。
+# **C23 的新增点**：消息**可选** ⇒ 标准本身就是两条 static-assert-declaration 产生式
+# （带 `, string-literal` 与不带）。本文件按这个形状落成 Verilog `FuncDecl`/`TaskDecl`
+# 同款结构：**inline 分派器 + 两条同首 token 分支**
 #
-# 文件作用域与**块作用域**都可用，两处各有一条通路：文件侧靠 `is_statement = true`
-# （全局语句发现直接认它），块作用域侧靠结构化注入 `targets = ["@Stmt"]`（同 c11 那条，
-# 见其头注）。**成员表位（struct/union 内）与 c11 `_Static_assert` 同一缺口**：合法但
-# 当前不支持，成因与修法见 c11 `10_static_assert.toml` 头注与 gap 档「C 标准等效缺口」。
+#   StaticAssertC23Decl（inline 分派器，无自有节点）
+#     ├─ @StaticAssertC23MsgDecl    两参
+#     └─ @StaticAssertC23NoMsgDecl  单参
 #
-# ⚠ **为什么"可选组"而不是"两条规则"**（2026-10-20 实测，本轮踩到）：同首 token 的
-#   两条规则（两参一条、单参一条）会让 linter 的语句发现二义——它对同一 FIRST 集的
-#   候选不做跨规则回溯，单选了较短的单参形态后把 `, "x"` 留成
-#   `phase-statement: unexpected end of statement`（实测：加了第二条规则后，
-#   连 `static_assert(1, "x");` 与新规则的 `_Static_assert` 全部报该错）。
-#   一条规则 + 尾随可选 = 候选唯一，解析器内部回溯即可消歧。
+# ⚠ **为什么分派器 + 两条分支，而不是"一条规则 + 尾随可选组"**（2026-10-21 定）：
+#   ① 贴标准：两条产生式 ↔ 两个节点名，且免掉"尾随可选组 + `$4.sub_node[0].sub_node[1]`"
+#      这种按组内层级取绑定的写法（组层级随 `?` 增删而变，易踩）；
+#   ② linter 对同首 token 分支是既有力：分派器 `inline = true` 不参与候选注册，
+#      两条分支各自按 `keyword.static_assert` 注册，靠判别路径 / 试解析区分
+#      （先例 = `grammar/verilog/04_statements/50_func_task.toml` 的 `FuncDeclANSI|FuncDeclOld`）。
+#
+# ⚠ **旧注释作废（循环 #33 的错误归因）**：本文件曾写"两条同首 token 规则会让 linter
+#   语句发现二义、`_, "x"` 被留成 `phase-statement: unexpected end of statement`"。
+#   **不成立**——2026-10-21 干净对照（只加两条规则、不碰 `@StructMember`）两形态均 lint
+#   干净；当时假红的真凶是**同时**把静态断言注入 `@StructMember`，污染了它的 FIRST
+#   （顶层 `_Static_assert(…)` 被分类成 `StructMember`）。成员表位现改走容器级空槽位
+#   `@StructMemberExtra`（见 C 核心 `02_types.toml` §StructBody / §StructMemberExtra），
+#   不再触碰任何规则自身的 FIRST。教训已写进 `policy/collaboration.md`「因果句必须带对照」。
+#
+# 作用域三条通路（缺一档就有一档合法代码进不来）：
+#   · 文件作用域：两条**分支**都 `is_statement = true` → 引擎全局语句发现直接认；
+#   · 块作用域：分派器注入核心 `Stmt` 交替（同 c11 的 `_Static_assert`）；
+#   · struct/union 成员表：分派器注入核心空槽位 `@StructMemberExtra`。
+#
+# ⚠ **已知缺口（本轮实测，已登记）**：C23 里 `_Static_assert(1);`（下划线拼写、单参）
+#   同样合法，但本插件**不能**为它写规则——`enabled` 只门控**声明面**（token/词法），
+#   插件规则文件**无条件加载**（`setup_grammar` → `load_all_components`），故 c23 插件
+#   里引用 `keyword._Static_assert` 的规则会在 c11/c17 档也生效，把"C11 该拒"的形态
+#   放进来。登记：`docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」。
 #
 # ⚠ **旧注释作废（2026-09-26 实测）**：本条曾写"块作用域不可用（需在核心 `Stmt` 选择器加
 #   分支 → 属『改』核心，与 C23 其余语法增量同批待办）"——**不成立**：现役
 #   `inject_productions` 的直接注入就是"往既有交替里加一支"（树层
 #   `insert_choice_candidate`），c11 的 `_Static_assert` 已按它落地块作用域，本条照做即可。
-#
-# ⚠ **已知缺口（本轮实测，已登记）**：C23 里 `_Static_assert(1);`（下划线拼写、单参）
-#   同样合法，但本插件**不能**为它另写规则——`enabled` 只门控**声明面**（token/词法），
-#   插件规则文件**无条件加载**（`setup_grammar` → `load_all_components`），故 c23 插件
-#   里引用 `keyword._Static_assert` 的规则会在 c11/c17 档也生效，把"C11 该拒"的形态
-#   放进来（上面"两条规则"的教训也不允许给 c11 规则加单参形态）。
-#   登记：`docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」。
 
-[StaticAssertC23Decl]
-is_statement = true
-
-[StaticAssertC23Decl.inject]
-targets = ["@Stmt"]
+# ── 分派器（inline：不产生节点，两条分支各自成为节点）──
 
 [StaticAssertC23Decl.parser]
+production = [
+    "@StaticAssertC23MsgDecl|@StaticAssertC23NoMsgDecl",
+]
+inline = true
+
+[StaticAssertC23Decl.parser.node]
+body = "$1"
+
+# 渲染配置是**兜底**（inline 分派器展平后不进 AST；先例 `Stmt` / `AttributeSlot`）：
+# 包内自查口径 = 每条规则都有渲染声明，不留例外（`tools/render_coverage.py`）。
+[StaticAssertC23Decl.renderer.layout]
+ref = "body"
+
+[StaticAssertC23Decl.inject]
+targets = ["@Stmt", "@StructMemberExtra"]
+
+
+# ── 两参分支：static_assert ( 条件 , 消息 ) ; ──
+
+[StaticAssertC23MsgDecl]
+is_statement = true
+
+[StaticAssertC23MsgDecl.parser]
 production = [
     "keyword.static_assert",
     "bracket.l_parentheses",
     "@Expression",
-    "(symbol.base.comma,literal.string)?",
+    "symbol.base.comma",
+    "literal.string",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
 ]
 
-[StaticAssertC23Decl.parser.node]
+[StaticAssertC23MsgDecl.parser.node]
 cond = "$3"
-# 可选组缺省时该属性不存在（`getattr(node, "message", None) is None`），
-# 渲染侧由 `opt` 整体消失——同 `InitDeclarator.init` 的既有用法。
-message = "$4.sub_node[0].sub_node[1]"
+message = "$5"
 
-# 渲染（世界 A）：两参 `static_assert(条件, 消息);` / 单参 `static_assert(条件);`。
-# 逗号+空格写在 opt group 开头（缺省时不留悬挂分隔符）。
-[StaticAssertC23Decl.renderer.layout]
+[StaticAssertC23MsgDecl.renderer.layout]
 line = [
     "static_assert(",
     { ref = "cond" },
-    { opt = { group = [
     ", ",
     { ref = "message" },
-] } },
+    ");",
+]
+
+
+# ── 单参分支：static_assert ( 条件 ) ;（C23 §6.7.10 新增）──
+
+[StaticAssertC23NoMsgDecl]
+is_statement = true
+
+[StaticAssertC23NoMsgDecl.parser]
+production = [
+    "keyword.static_assert",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+
+[StaticAssertC23NoMsgDecl.parser.node]
+cond = "$3"
+
+[StaticAssertC23NoMsgDecl.renderer.layout]
+line = [
+    "static_assert(",
+    { ref = "cond" },
     ");",
 ]

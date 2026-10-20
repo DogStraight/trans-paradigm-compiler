@@ -299,9 +299,10 @@ _MUTATIONS: list[dict[str, str]] = [
     {
         "why": "小写 `static_assert` 的**块作用域**靠 `targets = [\"@Stmt\"]` 这一行（旧注曾写"
                "『块作用域不可用，需改核心』）。删掉它 ⇒ 函数体内的 `static_assert(1,\"x\");`"
-               "不再进 Stmt 交替——本变异证明那三条块作用域用例真的握着这行声明",
+               "不再进 Stmt 交替——本变异证明那三条块作用域用例真的握着这行声明"
+               "（同一条声明还管成员表位，两条通路都在 tests/languages/c/test_c_standard_conformance.py）",
         "file": "grammar/c/plugins/c23/10_static_assert_alias.toml",
-        "old": '[StaticAssertC23Decl.inject]\ntargets = ["@Stmt"]\n',
+        "old": '[StaticAssertC23Decl.inject]\ntargets = ["@Stmt", "@StructMemberExtra"]\n',
         "new": "",
         "test": "tests/languages/c/test_c23_increment_plugin.py",
     },
@@ -1044,19 +1045,19 @@ _MUTATIONS: list[dict[str, str]] = [
         "test": "tests/languages/c/test_c_initializers.py",
     },
     {
-        "why": "C23 单参静态断言（消息可省）若把尾随可选组改回必选 ⇒ 合法 "
-               "`static_assert(1);` 整条解析失败（C23 §6.7.10 新增形态，2026-10-20 补）",
-        "file": "grammar/c/plugins/c23/10_static_assert_alias.toml",
-        "old": '    "(symbol.base.comma,literal.string)?",\n',
-        "new": '    "(symbol.base.comma,literal.string)",\n',
-        "test": "tests/languages/c/test_c23_increment_plugin.py",
+        "why": "成员位空槽位注入丢失 ⇒ 合法 C11 的 `struct s { int a; _Static_assert(1, \"x\"); };` "
+               "整条解析失败（C11 §6.7.2.1；空槽位是容器级分支的唯一入口，2026-10-21 补）",
+        "file": "grammar/c/plugins/c11/10_static_assert.toml",
+        "old": 'targets = ["@Stmt", "@StructMemberExtra"]\n',
+        "new": 'targets = ["@Stmt"]  # 变异：丢成员位槽\n',
+        "test": "tests/languages/c/test_c_standard_conformance.py",
     },
     {
-        "why": "可选消息的**绑定路径**若少一层 `.sub_node[0]`（绑到组节点而非字符串 token）"
-               "⇒ 两参形态渲成 `static_assert(1);`（静默丢消息，2026-10-20 补）",
+        "why": "C23 分派器若只留两参分支 ⇒ 合法的单参 `static_assert(1);` 解析失败"
+               "（C23 §6.7.10 消息可省，2026-10-21 补）",
         "file": "grammar/c/plugins/c23/10_static_assert_alias.toml",
-        "old": 'message = "$4.sub_node[0].sub_node[1]"\n',
-        "new": 'message = "$4"\n',
+        "old": '    "@StaticAssertC23MsgDecl|@StaticAssertC23NoMsgDecl",\n',
+        "new": '    "@StaticAssertC23MsgDecl",  # 变异：丢单参分支\n',
         "test": "tests/languages/c/test_c23_increment_plugin.py",
     },
 ]

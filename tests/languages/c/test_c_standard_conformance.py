@@ -1,8 +1,9 @@
 """tests/languages/c/test_c_standard_conformance.py — 标准等价断言面（接受 + 拒绝双向）。
 
 ROADMAP「阶段 5 标准等效验证」缺的那片：**按标准分档、每条构造各断言一次接受与一次拒绝**。
-第一批 = 静态断言族（C11 `_Static_assert` / C23 `static_assert`）；另附本轮实测发现的
-C11/C23 语法面缺口（`xfail(strict=True)` 钉住，修好即变红提醒移出清单）。
+第一批 = 静态断言族（C11 `_Static_assert` / C23 `static_assert`，含**三处作用域**：文件 /
+块 / struct·union 成员表）；另附仍开着的 C11/C23 语法面缺口（`xfail(strict=True)` 钉住，
+修好即变红提醒移出清单）。
 
 ## 判据三态（本包"接受域"的口径，见 `docs/gaps/gap-language-pack-scope.md`）
 
@@ -76,15 +77,11 @@ _BELOW_TIER_STATE = [
     ("alignas 同上（基线档）", "alignas(16) char c;\n", "baseline", "rejected"),
 ]
 
-# 标准等效**缺口清单**（本轮 oracle 实测 + tpc 对照；`xfail(strict=True)`：修好即变红
-# 提醒转正）。每条 = (标签, 源码, 档位, 标准依据 + gcc 结论)
+# 标准等效**缺口清单**（oracle 实测 + tpc 对照；`xfail(strict=True)`：修好即变红提醒转正）。
+# 每条 = (标签, 源码, 档位, 标准依据 + gcc 结论)
+# ⚠ 成员表位（struct/union 内的 static_assert）已于循环 #35 转正，移出本清单；
+#   `_Static_assert(1)`（下划线拼写、单参）仍因"规则文件不按 enabled 门控"开着。
 _GAPS = [
-    ("C11 struct 体内静态断言", 'struct s { int a; _Static_assert(1, "x"); };\n', "c11",
-     "C11 §6.7.2.1 struct-declaration 含 static_assert-declaration；gcc -std=c11 OK"),
-    ("C11 union 体内静态断言", 'union u { int a; _Static_assert(1, "x"); };\n', "c11",
-     "同上（union-declaration 同表）；gcc -std=c11 OK"),
-    ("C23 struct 体内静态断言（小写拼写）", 'struct s { int a; static_assert(1, "x"); };\n',
-     "c23", "C23 §6.7.2.1；gcc -std=c23 OK"),
     ("C23 单参 _Static_assert（下划线拼写）", "_Static_assert(1);\n", "c23",
      "C23 §6.7.10 消息可省，两种拼写同语法；gcc -std=c23 OK"),
     ("C11 u8 字符串字面量", 'char *s = u8"x";\n', "c11",
@@ -156,8 +153,9 @@ class TestRejectSide:
         env = _env(tier)
         ast = env["parse"](src)
         names = {n.node_name for n in iter_nodes(ast)} if ast is not None else set()
-        assert "StaticAssertDecl" not in names, f"{label}：被误读成插件节点（{basis}）"
-        assert "StaticAssertC23Decl" not in names, f"{label}：被误读成插件节点（{basis}）"
+        for node in ("StaticAssertDecl", "StaticAssertC23Decl",
+                     "StaticAssertC23MsgDecl", "StaticAssertC23NoMsgDecl"):
+            assert node not in names, f"{label}：被误读成插件节点 {node}（{basis}）"
         # 空 AST：形态不属任何既有语句 ⇒ 整条不进树（发现阶段无 FIRST 命中）
         assert ast is not None
         assert not getattr(ast, "sub_node", None), f"{label}：不该解析出顶层节点"
@@ -185,6 +183,67 @@ class TestBelowTierState:
             assert top, f"{label}：应为 generic（照常解析）却得到空 AST"
         else:
             assert not top, f"{label}：应为 rejected（整体不进树）却解析出 {[n.node_name for n in top]}"
+
+
+class TestStaticAssertMemberPosition:
+    """静态断言的**成员表位**（C11 §6.7.2.1：struct-declaration 含 static_assert-declaration）。
+
+    实现口径 = 容器级**空槽位**（`StructBody = { (@StructMember|@StructMemberExtra)* }`，
+    增量注入 `@StructMemberExtra`），不碰 `StructMember` 自身形态。判据：
+      ① 增量节点进 `StructBody.members`，顺序与源一致；
+      ② 空槽位不产生包装节点（`StructMemberExtra` 不进 AST）；
+      ③ linter 零诊断（**顶层**同类语句不得被成员规则抢去分类——旧注入点的假红现场）；
+      ④ 渲染 token 序列逐项相同 + 幂等。
+    """
+
+    _CASES = [
+        ("C11 struct 成员", 'struct s { int a; _Static_assert(1, "x"); };\n',
+         "c11", "StaticAssertDecl"),
+        ("C11 union 成员", 'union u { int a; _Static_assert(1, "x"); };\n',
+         "c11", "StaticAssertDecl"),
+        ("C11 成员（首位）", 'struct s { _Static_assert(1, "x"); int a; };\n',
+         "c11", "StaticAssertDecl"),
+        ("C23 struct 成员两参", 'struct s { int a; static_assert(1, "x"); };\n',
+         "c23", "StaticAssertC23MsgDecl"),
+        ("C23 struct 成员单参", 'struct s { int a; static_assert(1); };\n',
+         "c23", "StaticAssertC23NoMsgDecl"),
+    ]
+
+    @pytest.mark.parametrize("label,src,tier,node", _CASES, ids=[c[0] for c in _CASES])
+    def test_member_position_accepted_and_faithful(self, label, src, tier, node):
+        env = _env(tier)
+        ast = env["parse"](src)
+        assert ast is not None, label
+        names = {n.node_name for n in iter_nodes(ast)}
+        assert node in names, f"{label}: 缺 {node}（{sorted(names)}）"
+        assert "StructMemberExtra" not in names, f"{label}: 空槽位应展平，不进 AST"
+        assert env["lint"](src) == [], f"{label}: linter 有诊断"
+        out = env["render"](src)
+        assert env["tokens"](out) == env["tokens"](src), f"{label}: {src!r} → {out!r}"
+        assert env["render"](out) == out, f"{label}: 不幂等"
+
+    def test_members_order_preserved(self):
+        """成员表顺序 = 源顺序（静态断言穿插在成员之间）。"""
+        src = 'struct s { int a; _Static_assert(1, "x"); int b; };\n'
+        ast = _env("c11")["parse"](src)
+        body = next(n for n in iter_nodes(ast) if n.node_name == "StructBody")
+        members = getattr(body, "members")
+        kinds = [m.node_name for m in getattr(members, "items")]
+        assert kinds == ["StructMember", "StaticAssertDecl", "StructMember"], kinds
+
+    @pytest.mark.parametrize(
+        "label,src,tier",
+        [
+            ("C11 成员位单参（C11 该拒）", "struct s { int a; _Static_assert(1); };\n", "c11"),
+            ("C23 成员位空实参（C23 该拒）", "struct s { int a; static_assert(); };\n", "c23"),
+        ],
+        ids=["C11 成员位单参", "C23 成员位空实参"],
+    )
+    def test_member_position_rejects_invalid_shape(self, label, src, tier):
+        env = _env(tier)
+        names = {n.node_name for n in iter_nodes(env["parse"](src))} if env["parse"](src) else set()
+        assert "StaticAssertDecl" not in names and "StaticAssertC23NoMsgDecl" not in names, label
+        assert env["lint"](src), f"{label}: linter 零诊断（静默接受非法形态）"
 
 
 class TestStandardGaps:

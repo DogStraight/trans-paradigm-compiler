@@ -108,7 +108,7 @@ class TestPackLoadsWithChain:
 
 class TestC23IncrementWorks:
     def test_static_assert_parses_with_c23(self, config_loaded):
-        """小写 `static_assert(1, "x");` → `StaticAssertC23Decl`（C23 关键字化生效）。"""
+        """小写 `static_assert(1, "x");` → `StaticAssertC23MsgDecl`（C23 关键字化生效）。"""
         del config_loaded
         import os as _os
 
@@ -138,7 +138,7 @@ class TestC23IncrementWorks:
                 Lexer(rules_dir=_PACK).tokenize('static_assert(1, "x");\n')
             )
             assert ast is not None
-            assert [n.node_name for n in ast.sub_node] == ["StaticAssertC23Decl"]
+            assert [n.node_name for n in ast.sub_node] == ["StaticAssertC23MsgDecl"]
         finally:
             ConfigRegistry.load_language(
                 "grammar/verilog", plugins_dir="grammar/verilog/plugins"

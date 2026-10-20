@@ -11,7 +11,7 @@
     核心基线档    []                       ExprStmt（当调用表达式）  ExprStmt
     c11 档        ["c11"]                  StaticAssertDecl         ExprStmt
     c11+c17 档    ["c11","c17"]            StaticAssertDecl         ExprStmt
-    c23 全档      ["c11","c17","c23"]      StaticAssertDecl         StaticAssertC23Decl
+    c23 全档      ["c11","c17","c23"]      StaticAssertDecl         StaticAssertC23MsgDecl
 
 ⚠ **未声明关键字 ≠ 拒绝**：关键字没声明时，`_Static_assert(1, "x");` 会被当作
 **普通函数调用**（`ExprStmt`）**静默接受**——C 语法本就宽进（调用未声明的函数合法）。
@@ -57,9 +57,9 @@ _INCREMENT_MATRIX = [
     ("_Generic（c11）", "int g = _Generic(x, default: 1);\n", "GenericSelection", "c11"),
     ("_Noreturn（c11）", "_Noreturn void die(void);\n", "NoreturnSpec", "c11"),
     ("_Thread_local（c11）", "_Thread_local int t;\n", "ThreadLocalSpec", "c11"),
-    ("static_assert（c23）", _C23_SRC, "StaticAssertC23Decl", "c23"),
+    ("static_assert 两参（c23）", _C23_SRC, "StaticAssertC23MsgDecl", "c23"),
     # C23 §6.7.10：消息可省 ⇒ 单参形态也从 c23 档起（两参/单参是同一条规则的可选组）
-    ("static_assert 单参（c23）", "static_assert(1);\n", "StaticAssertC23Decl", "c23"),
+    ("static_assert 单参（c23）", "static_assert(1);\n", "StaticAssertC23NoMsgDecl", "c23"),
     ("nullptr（c23）", "int *p = nullptr;\n", "NullptrLiteral", "c23"),
     ("true（c23）", "int b = true;\n", "BoolLiteral", "c23"),
     ("bool（c23）", "bool f;\n", "BoolType", "c23"),
@@ -76,7 +76,16 @@ _INCREMENT_MATRIX = [
      "AtomicSpec", "c11"),
     # c23 小写拼写（同构造异拼写 = c23 侧各写一条同形规则）：从 c23 档起
     ("static_assert 块作用域（c23）", 'void f(void) {\n    static_assert(1, "x");\n}\n',
-     "StaticAssertC23Decl", "c23"),
+     "StaticAssertC23MsgDecl", "c23"),
+    # 成员表位（C11 §6.7.2.1）：容器级空槽位，不进任何规则自身的 FIRST
+    ("_Static_assert struct 成员（c11）",
+     'struct s { int a; _Static_assert(1, "x"); };\n', "StaticAssertDecl", "c11"),
+    ("_Static_assert union 成员（c11）",
+     'union u { int a; _Static_assert(1, "x"); };\n', "StaticAssertDecl", "c11"),
+    ("static_assert struct 成员 两参（c23）",
+     'struct s { int a; static_assert(1, "x"); };\n', "StaticAssertC23MsgDecl", "c23"),
+    ("static_assert struct 成员 单参（c23）",
+     'struct s { int a; static_assert(1); };\n', "StaticAssertC23NoMsgDecl", "c23"),
     ("alignas（c23）", "alignas(16) char buf[64];\n", "AlignasC23Spec", "c23"),
     ("alignof（c23）", "int a = alignof(int);\n", "AlignofC23Expr", "c23"),
     ("thread_local（c23）", "thread_local int t;\n", "ThreadLocalC23Spec", "c23"),
@@ -171,7 +180,7 @@ class TestThreeTiersInOneProcess:
         ⚠ 这条语义是刻意选的：`None` 含"用包默认"，否则一个测试把档位切成 c11 之后，
         后续任何 `load_language(pack)` 都会静默停在上一次的档位上。
         """
-        assert "StaticAssertC23Decl" in _nodes_with(_PACK, _C23_SRC, enabled=None)
+        assert "StaticAssertC23MsgDecl" in _nodes_with(_PACK, _C23_SRC, enabled=None)
 
     def test_block_scope_follows_the_tier(self):
         """块作用域同样随档位变（只看文件作用域会漏掉——那条靠 is_statement 全局发现）。"""
@@ -191,12 +200,12 @@ class TestDefaultTierEntry:
         """
         pack = _make_pack(tmp_path, [])
         assert "StaticAssertDecl" not in _nodes_with(pack, _C11_SRC)
-        assert "StaticAssertC23Decl" not in _nodes_with(pack, _C23_SRC)
+        assert "StaticAssertC23MsgDecl" not in _nodes_with(pack, _C23_SRC)
 
     def test_c23_tier_accepts_both(self, tmp_path):
         pack = _make_pack(tmp_path, ["c11", "c17", "c23"])
         assert "StaticAssertDecl" in _nodes_with(pack, _C11_SRC)
-        assert "StaticAssertC23Decl" in _nodes_with(pack, _C23_SRC)
+        assert "StaticAssertC23MsgDecl" in _nodes_with(pack, _C23_SRC)
 
     def test_real_pack_meta_matches_c23_tier(self):
         """真实包的启用清单等于最强档（c11+c17+c23）——避免"文档说一套、包里另一套"。"""

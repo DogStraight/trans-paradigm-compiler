@@ -68,15 +68,40 @@ production = [
 base = "$1"
 
 
+# 成员表：**容器级分支**——常规成员声明 + 一个**空槽位**（成员位增量的公共宿位）。
+# ⚠ 为什么不是"把增量并进 `StructMember`"（2026-10-20/21 实测定案）：并进去会让
+#   `StructMember` 的 FIRST 混入被注入形态的首 token，linter 的候选注册（按"规则的
+#   FIRST → 候选"建表）于是把**顶层**同类语句误分类成 `StructMember`，报
+#   `phase-statement: unexpected end of statement` 假红。容器级分支只往重复元素里
+#   加一支，`StructMember` 自身形态与 FIRST 不变（`_collect_member_only` 也保持有效）。
+#   先例 = `@AttributeSlot`（空槽位 = 无自有形态的规则，插件注入后"给规则加形态"）。
 [StructBody.parser]
 production = [
     "bracket.l_curly_bracket",
-    "@StructMember*",
+    "(@StructMember|@StructMemberExtra)*",
     "bracket.r_curly_bracket",
 ]
 
 [StructBody.parser.node]
 members = "$2"
+
+
+# 成员位**空槽位**（C99 基线无自有形态）：留给标准增量的成员级声明
+# （C11 §6.7.2.1 起 static_assert-declaration 属 struct-declaration 的一支）。
+# 单子节点 + 无自有属性 ⇒ normalize 后不产生包装节点，成员列表直接持有增量节点。
+[StructMemberExtra]
+inline = true
+
+[StructMemberExtra.parser]
+production = []
+
+[StructMemberExtra.parser.node]
+value = "$1"
+
+# 渲染配置是**兜底**（同 `@AttributeSlot`）：槽位 inline 展平后不以节点形态进 AST，
+# 布局通常不被消费；写上它是为了包内自查口径不留例外（`tools/render_coverage.py`）。
+[StructMemberExtra.renderer.layout]
+ref = "value"
 
 
 # 成员声明：说明符 + 声明符列表 + `;`（位域在阶段 2b）
