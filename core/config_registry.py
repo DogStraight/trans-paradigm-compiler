@@ -724,6 +724,51 @@ class ConfigRegistry:
         return cls._declared_enabled(pack)
 
     @classmethod
+    def tier_state(
+        cls, rules_dir: str
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """(包内**可选件**清单, **当前档位**) —— 组件 grammar 按档位门控的消费面。
+
+        区分两件事，缺一不可：**可选件** = 包内 `[plugins] enabled` 里列出的组件名
+        （未列出的组件是常驻件，如 C 的 `semantics`/`checks`）；**当前档位** = 显式
+        `enabled=` 覆盖 > `load_language` 登记的档位 > 包内清单。
+        非语言包目录（低层契约 / 临时目录）两者都返回空元组 ⇒ 调用方据此退化为
+        "不过滤"（与 `_ensure_entries_for` 的同款判据）。
+        ⚠ 档位登记表的键是 `load_language` 手里的**路径原样**（调用方可能给包相对
+        路径，也可能给绝对路径：测试的 `_PACK` 就是绝对路径）⇒ 三种键都要试，
+        否则同包切档会静默退回包内清单（门控失效且无报错）。
+        """
+        pack = cls._normalize_pack(rules_dir)
+        if not cls._is_pack(pack):
+            return (), cls._tier_for_resolve(pack, None)
+        declared = cls._declared_enabled(pack)
+        for key in cls._tier_keys(pack):
+            hit = cls._active_enabled.get(key)
+            if hit is not None:
+                return declared, hit
+        return declared, declared
+
+    @classmethod
+    def _tier_keys(cls, pack: str) -> tuple[str, ...]:
+        """同一包在档位登记表里可能用过的键（原样 / 相对 / 绝对三种调用风格）。
+
+        顺序 = 原样优先（`load_language` 与 `tier_state` 拿到同一字符串的最常见情形），
+        再补另一种风格；跨盘符无法求相对路径 ⇒ 只留原样。
+        """
+        keys = [pack]
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        try:
+            rel = os.path.relpath(pack, root).replace(os.sep, "/")
+        except ValueError:
+            return (pack,)
+        if os.path.isabs(pack):
+            if rel != pack and cls._is_pack(rel):
+                keys.append(rel)
+        else:
+            keys.append(os.path.normpath(os.path.join(root, pack)))
+        return tuple(keys)
+
+    @classmethod
     def _ensure_entries_for(
         cls, rules_dir: str, enabled: tuple[str, ...] | None = None
     ) -> str:

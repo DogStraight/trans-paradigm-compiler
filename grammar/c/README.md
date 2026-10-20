@@ -169,16 +169,15 @@ grammar/c/
   于是**同一个 pack、同一次进程内** `enabled=["c11"]` → `enabled=[]` 会真的换档。
   判据：`tests/languages/c/test_c_standard_tiers.py` 的 **构造 × 4 档矩阵**（构造数按
 `pytest tests/languages/c/test_c_standard_tiers.py --collect-only -q` 实测；每构造在同
-  一进程内切 4 档断言"解析成哪个节点"，能直接抓出缓存串档；该文件共 43 例）。两条静默
+  一进程内切 4 档断言"解析成哪个节点"，能直接抓出缓存串档）。两条静默
   失效根因已修（声明缓存键、解析缓存键都须含档位）——细节见
-  `docs/gaps/gap-language-pack-scope.md`「运行时档位：`enabled` 的语义边界」。
-- ⚠ **`enabled` 只门控"声明面"**：插件的**规则文件与 Python 组件**走另一条路径
-  （`setup_grammar` → `load_all_components(<pack>/plugins)`），不受 `enabled` 影响。
-  C 包插件是纯 TOML、c4 插件是纯 Python，两条路径当前**恰好正交**；语义边界与两种候选
-  语义（只门控声明面 / 门控一切）见 `docs/gaps/gap-language-pack-scope.md` 同名节。
-  ⚠ **已有一个真实症状**（2026-09-26 实测）：`[[属性]]` **不依赖任何新关键字**，故
-  **基线档也解析出 `AttributeSpec`**——"档位 = 接受域"在纯语法增量上不成立，判据见
-  `test_c_standard_tiers.py::TestKeywordFreeIncrementsAreNotTierGated`。
+  `docs/gaps/gap-language-pack-scope.md`「运行时档位」。
+- **`enabled` 的语义（ADR-0023 起）**：门控声明面 + **可选件**的 grammar 文件——
+  C 的可选件 = `c11`/`c17`/`c23`（在包内 `[plugins] enabled` 清单里），其规则文件只在
+  档位启用时加载；`semantics`/`checks/*` 是常驻件，与全部 Python 组件一样恒加载。
+  ⇒ "档位 = 接受域"对**纯语法增量**也成立：`[[属性]]` 从 c23 档起才解析（旧边界
+  "基线档也解析出 `AttributeSpec`"已随 ADR-0023 收口），判据见
+  `test_c_standard_tiers.py::TestKeywordFreeIncrementsAreTierGated`。
 - **"加标准"= 声明式注入，不改核心文件**：各插件用
   `[ExtRule.inject] targets = ["@核心规则.production[N]"]` 往既有交替里**加一支**
   （c11：`_Static_assert`→`Stmt`、`_Alignof`/`_Generic`→两处原子清单、
@@ -204,8 +203,8 @@ grammar/c/
 - **仍未落地的标准增量**：只剩 `[[属性]]` 的**四条形态边界** ①②④⑤（① 空实参 = 低优先；
   ② 相邻字面量拼接 / ④ 空属性表 = 不做；⑤ 配平 token 序列 = 暂不做）——见「未做」表。
   ✅ ③ 尾随逗号与多实参已于 2026-09-28 收口（判据见 `test_c23_increment_plugin.py`）。
-  ⚠ 另有一条**档位边界**（不是缺语法）：`[[属性]]` 不依赖新关键字 ⇒ **基线档也解析**
-  （详见「标准档位」节末与 `TODO.md`）。
+  ⚠ 另有一条**档位边界**（不是缺语法）：`[[属性]]` 不依赖新关键字——ADR-0023 前
+  **基线档也解析**，门控后从 c23 档起（详见「标准档位」节末与 ADR-0023）。
 
 ## 渲染保真（原文打印）
 

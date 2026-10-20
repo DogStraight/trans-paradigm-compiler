@@ -380,8 +380,11 @@ Renderer 产出格式化输出
 1. `plugins/<name>/tpc.toml`：声明语法文件 + 处理器 + 槽位/原语。
 2. `plugins/<name>/00_xxx.toml`：语法规则（`inject` 挂到基础语法）。
 3. `plugins/<name>/_handler.py`：Python 处理器（`@register_plugin` / `@register_transform_slot` / `register_primitive`）。
-4. 语言包 tpc.toml `[plugins] enabled = ["<name>", ...]` 挂载。
-5. `setup_grammar` 自动发现加载；`get_component_grammar_files` 取语法文件。
+4. 语言包 tpc.toml `[plugins] enabled = ["<name>", ...]` 挂载（**列在清单里 = 可选件**：
+   其 `[grammar] files` 随档位加载，见 ADR-0023；不列出的组件是常驻件，grammar 恒加载
+   ——Python 处理器两类都恒加载）。
+5. `setup_grammar` 自动发现加载；`get_component_grammar_files` 取语法文件（按可选件
+   × 当前档位过滤）。
 
 ## 9. 常见坑
 

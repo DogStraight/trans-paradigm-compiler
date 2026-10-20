@@ -349,3 +349,28 @@ class TestProdDispatch:
         """无 type 字段返回 None。"""
         result = _parse({}, [])
         assert result is None
+
+
+# ═══════════════════════════════════════════════════════
+# repeat 零进展守卫（空匹配元素）
+# ═══════════════════════════════════════════════════════
+
+class TestRepeatZeroProgress:
+    """`*` / `+` 的元素若能**空匹配**（零 token），迭代必须收敛（ADR-0023）。
+
+    背景：C 的空槽位（`@AttributeSlot*` / `@StructMemberExtra*`）在未注入任何形态时
+    被 parser 判为**不可匹配**（另有判据）；但"元素可空"是语言包能表达的一类形态
+    （生产式只由可选项组成等）——零进展不得算一次迭代，否则 repeat 永不收敛
+    （实测：档位门控后基线档曾出现属性绑定告警风暴 + 进程挂起）。
+    """
+
+    def test_repeat_of_always_empty_element_terminates(self):
+        """元素是空 seq（零 token 成功）⇒ 0 次迭代，不挂起。"""
+        result = _parse(_repeat_feat(_seq_feat()), [_token("a")])
+        assert result is not None and result.node_name == "repeat"
+        assert list(result.items) == []
+
+    def test_plus_of_always_empty_element_fails(self):
+        """`+` 的零进展元素 ⇒ 达不到 min_count=1 ⇒ 整体失败（不是无限循环）。"""
+        assert _parse(_plus_feat(_seq_feat()), [_token("a")]) is None
+

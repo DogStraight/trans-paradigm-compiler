@@ -93,13 +93,13 @@ _INCREMENT_MATRIX = [
     ("_Decimal64（c23）", "_Decimal64 d;\n", "DecimalSpec", "c23"),
     # 十进制浮点**字面量后缀**：词法面的档位判别（基线档 `1.5dd` 被切成两个 token）
     ("_Decimal64 = 1.5dd（c23）", "_Decimal64 e = 1.5dd;\n", "DecimalSpec", "c23"),
-    # 属性**位点**（声明符内 / 枚举项）：不依赖任何新关键字 ⇒ 四档都有节点
-    # （"档位 = 接受域"对纯语法增量不成立的实测样本，见
-    #  `TestKeywordFreeIncrementsAreNotTierGated` 与 `TODO.md` 的 `enabled` 语义边界）
-    ("属性在声明符内（无关键字 ⇒ 基线档就有）", "int x [[deprecated]];\n",
-     "AttributeSpec", "baseline"),
-    ("属性在枚举项（同上）", "enum e { A [[deprecated]] = 1 };\n",
-     "AttributeSpec", "baseline"),
+    # 属性**位点**（声明符内 / 枚举项）：形态不依赖任何新关键字，**曾经**在四档都
+    # 有节点（"档位 = 接受域"对它不成立）——ADR-0023 档位门控后随 c23 档出现：
+    # 可选件的规则文件不再无条件加载，故"纯语法增量"也受档位约束。
+    ("属性在声明符内（c23 起，ADR-0023 后随档）", "int x [[deprecated]];\n",
+     "AttributeSpec", "c23"),
+    ("属性在枚举项（c23 起，同上）", "enum e { A [[deprecated]] = 1 };\n",
+     "AttributeSpec", "c23"),
 ]
 
 _TIERS = {
@@ -270,27 +270,30 @@ class TestTierCacheHygiene:
         )
 
 
-class TestKeywordFreeIncrementsAreNotTierGated:
-    """⚠ **档位的真实边界（2026-09-26 实测，落 `[[属性]]` 时撞上）**：
+class TestKeywordFreeIncrementsAreTierGated:
+    """**纯语法增量也受档位约束**（ADR-0023：可选件 grammar 随 `enabled` 加载）。
 
-    档位判别目前靠"**关键字未声明 ⇒ 规则匹配不上**"（插件规则文件本身是**无条件**加载的：
-    `setup_grammar` → `load_all_components(<pack>/plugins)`，不看 `enabled`）。
-    于是**不依赖任何新关键字的纯语法增量不受档位约束**——`[[属性]]` 就是第一例：
-    `[`/`]`/标识符都在核心词法里，规则在基线档照样匹配。
-
-    本类把这个现状**钉住**：若哪天把 `enabled` 升级成"门控一切"（`TODO.md` 的候选语义 ②），
-    这条会红——那时应把属性移进真正的档位门控，并把本类改成"基线档不认属性"。
+    背景：2026-09-26 落 `[[属性]]` 时实测到旧边界——档位只门控**声明面**，插件规则
+    文件无条件加载 ⇒ 不依赖新关键字的 `[[属性]]` 在基线档也能解析，本类当时把它
+    钉成"现状"。ADR-0023 后该边界收口：C 的可选件（c11/c17/c23）其 `[grammar] files`
+    只在档位启用时加载，故属性从 **c23 档起**才出现；基线/c11/c17 档整体不进树。
+    对照仍在：靠关键字落地的增量（`bool`/`alignas`/`_Atomic`）同样随档。
     """
 
-    def test_attributes_parse_even_in_baseline_tier(self):
+    def test_attributes_do_not_parse_below_c23(self):
         for src in ("[[nodiscard]] int f(void);\n",           # 说明符位
                     "int x [[deprecated]];\n",                 # 声明符内（空槽位）
                     "enum e { A [[deprecated]] = 1 };\n"):     # 枚举项（同一个空槽位）
-            names = _nodes_with(_PACK, src, enabled=[])
-            assert "AttributeSpec" in names, (src, names)
+            for tier in ("baseline", "c11", "c17"):
+                assert "AttributeSpec" not in _nodes_with(
+                    _PACK, src, enabled=_TIERS[tier]
+                ), (tier, src)
+            assert "AttributeSpec" in _nodes_with(
+                _PACK, src, enabled=_TIERS["c23"]
+            ), src
 
     def test_keyword_increments_are_gated_by_tokens(self):
-        """对照：靠关键字落地的增量在基线档**确实**进不来（档位在它们身上是有效的）。
+        """靠关键字落地的增量在基线档**进不来**（档位在它们身上一直有效）。
 
         判据 = "档位看解析成哪个节点"：基线档下 `bool` / `alignas` 只是标识符。
         """
@@ -298,6 +301,35 @@ class TestKeywordFreeIncrementsAreNotTierGated:
                           ("alignas(16) char c;\n", "AlignasC23Spec"),
                           ("_Atomic(int) x;\n", "AtomicSpec")):
             assert node not in _nodes_with(_PACK, src, enabled=[]), src
+
+
+class TestEmptySlotsAtBaseline:
+    """基线档的**空槽位**（`AttributeSlot` / `StructMemberExtra`）不可匹配，而非"匹配空"。
+
+    回归（ADR-0023 落地时实测）：若空槽位"匹配空"，宿主里的 `@Slot*` 迭代项零进展
+    ⇒ repeat 永不收敛（属性绑定告警风暴 + 进程挂起）；且槽位本身不得产生节点。
+    判据 = 基线档 `struct s { int a; };` 能正常解析出 `StructBody` + 成员，且无槽位节点。
+    """
+
+    def test_struct_body_survives_baseline_tier(self):
+        names = _nodes_with(_PACK, "struct s { int a; };\n", enabled=[])
+        assert "StructBody" in names and "StructMember" in names, names
+        assert "StructMemberExtra" not in names, names
+
+    def test_attribute_slot_produces_no_node(self):
+        """声明符内空槽位（`@AttributeSlot*`）在基线档照常解析、不产生节点。"""
+        names = _nodes_with(_PACK, "int x;\n", enabled=[])
+        assert "DirectDeclarator" in names, names
+        assert "AttributeSlot" not in names and "AttributeSpec" not in names, names
+
+    def test_empty_slot_emits_no_binding_warning(self, capsys):
+        """空槽位是"不可匹配"，不是"匹配空"——后者会走属性绑定并告警（噪声 + 错误语义）。
+
+        判据 = 基线档解析 `int x;` 后捕获输出里没有 `AttributeSlot.attrs` 绑定失败告警。
+        """
+        assert "DirectDeclarator" in _nodes_with(_PACK, "int x;\n", enabled=[])
+        captured = capsys.readouterr()
+        assert "AttributeSlot.attrs" not in captured.out + captured.err
 
 
 class TestEnabledOverrideValidation:

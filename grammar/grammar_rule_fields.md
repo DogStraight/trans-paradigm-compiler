@@ -82,6 +82,10 @@ production 串是**微语法**（EBNF 变体），拼写规则如下：
 `@Slot*` / `@Slot?`，增量插件 `targets = ["@Slot.production[0]"]` 往里注规则——于是
 **"往宿主序列中段插元素"变成"给一条规则加形态"**，既不必改宿主、也不依赖跨元素回溯。
 
+- **未注入任何形态时 = 不可匹配**（`parser/_production.py::try_plain_rule`）——**不是**
+  "匹配空"。空匹配会让宿主的 `@Slot*` 迭代项零进展 ⇒ repeat 不收敛（ADR-0023 落地时
+  实测：基线档 `@AttributeSlot*` 告警风暴 + 进程挂起）。块规则的 `production = []` 不在
+  此列（内容由 `block_prods` 驱动，空内容合法）。
 - `node` 绑定对空槽位允许 `$1`（指注入后填入的那个元素）——这是唯一的越界例外，
   实现在 `core/define.py::_check_pos_ref`（`empty_slot` 参数）。
 - 注入语义见 `parser/grammar_inject.py::_inject_direct`；空槽位自身常用

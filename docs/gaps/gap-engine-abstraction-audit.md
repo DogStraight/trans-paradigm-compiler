@@ -38,7 +38,7 @@ C 包的价值之一是**抽象压力测试**：每出现一次"这台语言要�
 
 | # | 能力面 | 语言现状 | 四态 | 证据 / 复现 | 内置化方向 | 状态 |
 |---|---|---|---|---|---|---|
-| 1 | **档位门控**（`enabled`） | `enabled` 只门控**声明面**；插件规则文件无条件加载 ⇒ "档位 = 接受域"对不依赖新关键字的增量不成立 | **新引擎代码**（要门控规则文件才行） | 合法 C23 `_Static_assert(1);` 与 `enum e : int` 均无法落地（两者形态只由核心 token 组成，c23 写规则会漏进 c11/c17 档）；反向证据 = 数字分隔符（#38）**能**收敛到声明层（`[[number.based]] digit_separator`），说明"绕不开"发生在**词法面之外**；档位语义边界见 `gap-language-pack-scope.md`「运行时档位」 | 引擎侧"规则/组件按档位门控"（profile 面），或把该差异收敛到声明层 | 待审查（策略层现记为"暂缓、慢慢补充"；现有 2 条标准缺口都压在这条上） |
+| 1 | **档位门控**（`enabled`） | `enabled` 曾只门控**声明面**；插件规则文件无条件加载 ⇒ "档位 = 接受域"对不依赖新关键字的增量不成立。**已收口**：可选件（包内 `enabled` 清单里的组件）的 `[grammar] files` 随档位加载，常驻件与 Python 组件恒加载（ADR-0023） | **新引擎代码 → 已内置化** | 合法 C23 `_Static_assert(1);` 与 `enum e : int` 曾被此卡住（ADR-0023 后解锁）；反向证据 = 数字分隔符（#38）**能**收敛到声明层，说明"绕不开"发生在词法面之外；判据 = `tests/engine/core/test_tier_gated_grammar.py` + `tests/languages/c/test_c_standard_tiers.py` | 已按"可选件 vs 常驻件"成立（今后新增档位/可选语法增量按同一判据） | 已过（循环 #40；ADR-0023） |
 | 2 | **同构造异拼写** | C11/C23 6 组双拼写各写一条同形规则，节点名分叉（`AlignasConstSpec`/`AlignasC23Spec` …） | **方言复制**（未改引擎） | `grammar/c/plugins/c23/16_alignas_alias.toml` 头注（token 类型由拼写决定 ⇒ 现无别名面）；`grep -l "alias" grammar/c/plugins/c23/*.toml` | 引擎"拼写别名"声明面（token 别名表 + 单规则多拼写策略），或显式接受 | 待审查 |
 | 3 | **精化基座**（`pre_scan` / raw 承载与理解 / sites） | 引擎有通用机制与声明键；**C 用全链路，Verilog 走 `peek` + typed_ports，yaml/c4 不用** | 待复用实验 | 机制：`linter/lookahead.py`（`pre_scan` 提示面）、`grammar/c/plugins/semantics/_raw_*.py`、`tools/feature_sites.py`；语言音用法差异见各包 README | 若第二语言复用成立 ⇒ 抽象成立；若必须改引擎 ⇒ 内置化为引擎能力面（raw/understand 的通用钩子） | 待取证（复用实验未做） |
 | 4 | **文件链接 / 入口点** | C 的 `#include` 全链路（`path_forms`、内容进流、行映射、渲染剪枝）；Verilog 的 `module_index` 项目符号可见性；CLI 单文件 vs `ProjectChecker.check(paths)` 多入口 | **新引擎代码**（缺统一 unit graph） | `preprocessor/primitives/include.py`、`pipeline/__init__.py`（include 剪枝）、`analyzer` 的 `module_index`、`ROADMAP.md`「用户侧 CLI 形态」；两门语言各一套索引 | 引擎级 **unit graph / 入口协议**（根文件集 + 解析器声明 + 单位索引 + 链接策略），两门语言的索引收敛为配置 | 待审查（阶段 5 真实 C 语料接入会先逼一遍） |
@@ -53,8 +53,10 @@ C 包的价值之一是**抽象压力测试**：每出现一次"这台语言要�
   `ProjectChecker.check(paths)` 服务两门语言 + 多文件真实语料跑通（阶段 5 判据 5 复用）。
 - **精化基座（#3）**：把 C 的 `pre_scan`+raw 组合在第二门语言复现一次；只加声明即成立 ⇒ 抽象
   成立；需改引擎 ⇒ 把 raw/understand/sites 提升为引擎能力面（钩子 + 声明键），语言包只声明形态。
-- **档位（#1）**：规则/组件按档位门控是标准演进类语言（C/C++/SV）的共性需求；审查时以"第二门
-  有版本档的语言"（如 SV 的 `--std`）做复用实验，再决定是否立项；不立项则维持"暂缓 + 触发条件"。
+- **档位（#1，已落地）**：按 ADR-0023 只门控**可选件**（包内 `enabled` 清单里的组件名）的
+  `[grammar] files`；常驻件与 Python 组件恒加载——C 的两条标准缺口随之解锁。**第二门带版本档
+  的语言包**（如 SV 的 `--std`）仍未接入 ⇒ 多档语言的复用实验待 SV backlog 出现时补做；
+  当前判据 = 两包（C / verilog）现状与该判据吻合（verilog 9 个 grammar 组件全在清单里）。
 - **拼写别名（#2）**：先统计包内复制量（规则数/节点名数），再评估"别名表"声明面是否值得；
   移植成本 > 收益则显式接受（登记在 `gap-language-pack-scope`「接受域现状」）。
 

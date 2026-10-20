@@ -168,29 +168,24 @@ render → 与源比对，七条：
 触发面：C 样本 3 / verilog `tests/e2e/samples/real` 18 / yaml 测试字面量 96·101 的 union mismatch
 均为 0，仅 C 四构造形态各 1 次。
 
-## 运行时档位：`enabled` 的语义边界
+## 运行时档位：`enabled` 的语义（ADR-0023 后 = 声明面 + 可选件 grammar）
 
 - **入口**：`ConfigRegistry.load_language / load_all / resolve(..., enabled=[...])`
-  （`None` = 用包内 `[plugins] enabled`）。显式档位会被登记为该包"当前档位"，故
-  `Lexer` 之类隐式消费方无需额外参数即可跟随（缓存键含档位）。
-- **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **27 例参数化 × 4 档矩阵**
-  （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个
-  节点**判定；复现：`python -m pytest tests/languages/c/test_c_standard_tiers.py --collect-only -q`），
-  外加同进程连续切档、`Lexer` 跟随档位、非法 `enabled` 参数与清单里不可解析的插件名
-  **fail-fast**。另有 2 条 **keyword-free** 增量用例（`[[属性]]` 基线档也解析）在
-  `TestKeywordFreeIncrementsAreNotTierGated`，**不属**该 ×4 矩阵。
-- **边界（不是 bug）**：`enabled` 只决定**声明面**（`tpc.toml` 声明合并，含
-  `[lexer] token_ext`）；插件的**规则文件与 Python 组件**由 `setup_grammar` →
-  `load_all_components(<pack>/plugins)` 加载，**不看** `enabled`。⇒ **不依赖新关键字的
-  增量在基线档也解析**（"档位 = 接受域"对它不成立）；补齐前不新增依赖该语义的声明。
-- **本边界的两个实例（判断"能不能绕"的判据）**：
-  · **绕得开** = 差异能收敛到**声明层**：数字分隔符（循环 #38）把 `'` 做成
-    `[[number.based]] digit_separator`，c23 插件按名合并补键 ⇒ 引擎零语言判断、
-    四档接受域各不相同（反例见下条）。
-  · **绕不开** = 形态只由**核心 token** 组成：`_Static_assert(1)`（引用 c11 档已存在的
-    `keyword._Static_assert`）与 `enum e : int`（`:` + 核心类型词）——c23 规则文件注入
-    即漏进下档。这两条在「C 标准等效缺口」表内，**前置 = ADR 0021 的档位门控决策**。
-
+  （`None` = 用包内 `[plugins] enabled`）。显式档位登记为该包"当前档位"，隐式消费方
+  （`Lexer` / 数字形态）无需额外参数即可跟随（缓存键含档位）。
+- **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **31 构造 × 4 档矩阵**
+  （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按解析成哪个节点
+  判定；复现用 `--collect-only -q`）+ 同进程连续切档 / `Lexer` 跟随 / 非法 `enabled`
+  **fail-fast**；引擎侧门控判据在 `tests/engine/core/test_tier_gated_grammar.py`。
+- **语义（ADR-0023 收口）**：`enabled` 决定**声明面**（含 `[lexer] token_ext`）与
+  **可选件**（包内 `enabled` 清单里的组件名）的 `[grammar] files`；未列出的**常驻件**
+  （C 的 `semantics`/`checks`）与**全部 Python 组件**恒加载。⇒ "档位 = 接受域"对纯语法
+  增量也成立（`[[属性]]` 从 c23 档起；旧边界与理由见 ADR-0023）。
+- **修复本边界的两个实例（判断"能不能绕"的判据）**：
+  · **绕得开** = 差异可收敛到**声明层**：数字分隔符（#38）走 `[[number.based]]
+    digit_separator`，引擎零语言判断；
+  · **绕不开** = 形态只由**核心 token** 组成：`_Static_assert(1)` 与 `enum e : int`——
+    这正是 ADR-0023 的立项原因（两条在「C 标准等效缺口」表内，门控已解除）。
 ## 关联条目
 
 - ROADMAP「SystemVerilog 语言包（远期 backlog）」/「C 语言包」（预处理阶段 4 / 切片 1b）

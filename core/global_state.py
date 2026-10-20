@@ -99,6 +99,10 @@ INSTALL_STATE: dict[str, tuple[str, str]] = {
     # 语言作用域（当前语言装载了哪些组件）：插件应用按它过滤，
     # **模块级**还原——逐测试清掉会让同模块后续用例的 transform 空转（实测）。
     "core.plugin_loader._active_components": ("deepcopy", "当前语言的组件作用域（插件过滤用）"),
+    # grammar 档位门控的可选件清单/当前档位（ADR-0023）：由 `setup_grammar` 每次装载
+    # 重新写入（幂等重装），故**模块级**还原——测试级还原会与"下一次 setup 重写"打架。
+    "core.plugin_loader._tier_declared": ("deepcopy", "可选组件清单（grammar 档位门控）"),
+    "core.plugin_loader._tier_active": ("deepcopy", "当前档位（grammar 档位门控）"),
     # 各语言包"当前档位"（`load_language(enabled=…)` 登记）：隐式消费方
     # （resolve → Lexer / 数字形态）按它解析。**模块级**还原——否则一个模块
     # 切过档位会把档位泄给下一个模块的同包解析（实测同类：语言作用域串味）。

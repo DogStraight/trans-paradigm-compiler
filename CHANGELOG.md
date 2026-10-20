@@ -172,6 +172,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **档位门控：可选组件的 grammar 文件随 `enabled` 加载（ADR-0023）**（2026-10-21，循环 #40，
+  引擎契约 + 行为变化；作者拍板"只能走 A"，并强调**提交节点要小心** ⇒ 本轮一个原子提交：
+  语义、配套引擎修复、测试与文档同批）：`enabled` 此前只门控**声明面**，插件规则文件由
+  `setup_grammar` 无条件加载 ⇒ "档位 = 接受域"对不依赖新关键字的增量不成立（`[[属性]]` 基线档
+  也解析），并卡住两条 C23 合法标准代码（`_Static_assert(1)` / `enum e : int`，同因受阻、
+  #38 已证无法收敛到声明层）。修法：
+  · **语义**：**可选件**（包内 `[plugins] enabled` 清单里的组件名）的 `[grammar] files` 只在
+    当前档位含它时加载；未列出的**常驻件**（C 的 `semantics`/`checks/*`）与**全部 Python 组件**
+    恒加载（"怎么分析"不是"收哪些语法"）。档位来源沿用既有优先级。
+  · **实现**：`ConfigRegistry.tier_state`（相对/绝对两种包路径风格都命中——只按一种风格查会
+    静默退回包内清单）→ `load_all_components(declared_optional, active_tier)` →
+    `get_component_grammar_files` 过滤；非语言包目录两者皆空 ⇒ 不过滤（旧行为）。
+  · **配套引擎修复**（门控暴露的两个旧缺陷，缺一即挂）：① **空槽位不可匹配**——非块 +
+    `production = []` 是"没有形态"而不是"匹配空"（门控后基线档首次出现未被注入的空槽位；
+    旧语义下 `@Slot*` 迭代项零进展 ⇒ repeat 死循环 + 属性绑定告警风暴，实测挂起）；
+    ② **repeat/plus 零进展守卫**——空匹配（零 token）不算一次迭代，`+` 达不到 min_count 即失败。
+  **行为变化**：C 的基线/c11/c17 档不再加载 c23 规则 ⇒ **纯语法增量也受档位**（`[[属性]]` 从
+  c23 档起，方向 = 接受域）；verilog / yaml / c4 **零行为变化**（verilog 9 个 grammar 组件全在
+  `enabled` 清单里、yaml 无组件、c4 仅 transform 组件）。
+  验证：`test_tier_gated_grammar.py`（11 例：规则表随档 / 常驻件不受影响 / 双路径 `tier_state` /
+  非包目录退化）+ `test_production_engine.py::TestRepeatZeroProgress`（空匹配收敛 2 例）；
+  tier 矩阵 **31 构造 × 4 档**（属性行改为 c23 起、空槽位基线档回归 3 例）；全量
+  **4271 passed / 7 skipped / 2 xfailed**；
+  lint hit_code 33 / fp 0；A/B `--products` verilog **0/144**；pyright strict 0；
+  `check_doc_refs` PASS（D1–D4 = 0）；门禁变异 **106 → 108**（去掉 grammar 档位过滤 /
+  空槽位当可匹配，`--only 107/108` 实测变红）。文档：`docs/decisions/0023-tier-gated-grammar.md`
+  （新增；ADR-0021 原"暂缓"行取回并删除）、`core/config_lifecycle.md` §7、
+  `core/component_protocol.md`、`grammar/grammar_rule_fields.md`、`grammar/c/README.md`、
+  gap 两档、MODEL_INDEX、TODO/ROADMAP/PROGRESS。
+
 - **档位门控决策材料落档（#39 调查轮，待作者拍板）**（2026-10-21，仅文档、无生产代码）：
   C 标准等效缺口最后 2 条（`_Static_assert(1)` / `enum e : int`）同因受阻于 `[plugins] enabled`
   只门控声明面（ADR 0021 现记"暂缓"）；#38 已证两条都**不能**收敛到声明层。本轮把候选材料

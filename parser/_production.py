@@ -502,7 +502,22 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
 
     帧清理（path_stack/scope_stack）由调用方 rule_frame 统一处理，本函数
     只负责节点恢复。
+
+    ⚠ **空槽位（非块规则 + `production = []`）是"不可匹配"，不是"匹配空"**：
+    槽位在未注入任何形态时没有自有产生式，`match_productions` 对空列表会返回
+    空匹配（= 零 consume 的成功）——语义错误且危险：`@Slot*` 的迭代项零进展
+    ⇒ repeat 永不收敛（实测：ADR-0023 档位门控后基线档 `@AttributeSlot*` 死
+    循环 + 属性绑定告警风暴）。块规则不受此判据影响（`is_block` 走块路径，
+    其空内容 `block_prods` 由块机制消费）。
     """
+    if not rule.prods and not getattr(rule, "is_block", False):
+        self._record_fail_site(
+            context,
+            rule=rule.name,
+            reason="empty slot rule（`production = []`，未注入任何形态 ⇒ 不可匹配）",
+        )
+        return None
+
     self._log_state(
         lambda: f"尝试规则: {rule.name} | {self._debug_token_info(context)}",
         context=context,
@@ -1194,9 +1209,18 @@ def _repeat_loop(
     last_end_line: int | None = start_tok.line if start_tok else 0
     while True:
         snapshot = context.create_snapshot()
+        before = context.token_pointer
         with _repeat_iter_scope(self, lift_gap_comments):
             result = self._process_production_node(elem, context)
         if result is None:
+            context.restore_snapshot(snapshot)
+            break
+        # **零进展守卫**：元素"空匹配"（如空槽位规则在未注入任何形态时**合法地**
+        # 匹配空，ADR-0023 后基线档的 `@AttributeSlot*` / `@StructMemberExtra*`
+        # 即此形态）不得算一次迭代——否则 repeat 永不收敛（实测：基线档
+        # `DirectDeclarator` 的 `@AttributeSlot*` 死循环 + 属性绑定告警风暴）。
+        # 回滚到迭代前，视作"该元素不再出现"。
+        if context.token_pointer == before:
             context.restore_snapshot(snapshot)
             break
         # B1：迭代成功——行号窗口内独占行注释上浮为 Comment 迭代项（插本次

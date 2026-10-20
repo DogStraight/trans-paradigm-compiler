@@ -1096,6 +1096,23 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": 'name = "c_dec"\nsuffix = { chars = "uUlLfFd", max = 3 }\n# 变异：丢十进制分隔符声明\n',
         "test": "tests/languages/c/test_c_lexer.py",
     },
+    {
+        "why": "可选件 grammar 的档位门控若被去掉（`get_component_grammar_files` 不再看档位）"
+               "⇒ C23 规则在基线档照样上膛 → `[[属性]]` 在基线档被解析、`_Static_assert(1)` "
+               "这类『只由核心 token 组成』的形态又会漏进下档（ADR-0023）",
+        "file": "core/plugin_loader.py",
+        "old": "        if not _grammar_tier_allows(info[\"name\"]):\n            continue\n",
+        "new": "        # 变异：去掉可选件 grammar 的档位过滤\n",
+        "test": "tests/engine/core/test_tier_gated_grammar.py",
+    },
+    {
+        "why": "空槽位规则若恢复成『匹配空』（而非不可匹配）⇒ 宿主的 `@Slot*` 迭代项零进展，"
+               "repeat 不收敛（基线档 `@AttributeSlot*` 告警风暴 + 挂起，ADR-0023 实测）",
+        "file": "parser/_production.py",
+        "old": "    if not rule.prods and not getattr(rule, \"is_block\", False):\n",
+        "new": "    if False:  # 变异：把空槽位当可匹配\n",
+        "test": "tests/languages/c/test_c_standard_tiers.py",
+    },
 ]
 
 

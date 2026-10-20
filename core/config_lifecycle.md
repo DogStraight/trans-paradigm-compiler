@@ -323,7 +323,10 @@ ConfigRegistry.resolve("grammar/c")                              # 跟随该包"
 - ⚠ **两处缓存键必须含档位**（都属于"静默失效"型缺陷，症状 = 改了 `enabled` 毫无变化）：
   `_ensure_entries_for` 的来源判据 `(_entries_source, _entries_enabled)`；`_resolve_cache`
   的 key（否则同包两档算同一个 key，`Lexer` 拿回上一档 token）。判据：
-  `tests/languages/c/test_c_standard_tiers.py` 的 26 构造 × 4 档矩阵。
-- ⚠ **边界：`enabled` 只门控"声明面"**——插件的**规则文件与 Python 组件**由
-  `setup_grammar` → `load_all_components(<pack>/plugins)` 加载，**不看** `enabled`。
-  两种候选语义与拍板判据见 `TODO.md`「`[plugins] enabled` 的语义边界」。
+  `tests/languages/c/test_c_standard_tiers.py` 的 31 构造 × 4 档矩阵。
+- **语义（ADR-0023 起）**：`enabled` 门控**声明面** + **可选件**（包内 `enabled` 清单里
+  的组件名）的 `[grammar] files`——可选件的规则不再无条件上膛；未列出的**常驻组件**
+  （C 的 `semantics`/`checks`）与**全部 Python 组件**恒加载。实现在 `setup_grammar`
+  （`ConfigRegistry.tier_state` → `load_all_components` → `get_component_grammar_files`）。
+  空槽位规则（未注入形态时不可匹配）与 repeat 零进展守卫是其配套引擎修复，理由与证据
+  见 `docs/decisions/0023-tier-gated-grammar.md`。

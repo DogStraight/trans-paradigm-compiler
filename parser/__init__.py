@@ -87,6 +87,7 @@ def setup_grammar(
     # 部分初始化等）会被静默吞掉，语言作用域停在上一语言（实测症状：
     # 切到 verilog 后 c4 的插件仍在作用域内、组件规则缺失），与"配置加载
     # fail-fast、不静默降级"硬约束冲突。
+    from core.config_registry import ConfigRegistry
     from core.plugin_loader import (
         load_all_components,
         get_component_grammar_files,
@@ -94,7 +95,17 @@ def setup_grammar(
     )
 
     _loaded_components.clear()
-    load_all_components(plugins_dir=f"{rules_dir}/plugins")
+    # 档位门控（ADR-0023）：**可选件**（包内 `[plugins] enabled` 清单里的组件名）的
+    # grammar 文件随档位加载，常驻件（C 的 semantics/checks）恒加载 ⇒ 插件规则文件
+    # 不再"无条件上膛"，"档位 = 接受域"对不依赖新关键字的增量也成立。
+    # 档位来源 = `load_language(enabled=…)` 登记的该包档位 > 包内清单；非语言包目录
+    # （低层契约 / 临时目录）两者皆空 ⇒ 不过滤（旧行为）。
+    declared_optional, active_tier = ConfigRegistry.tier_state(rules_dir)
+    load_all_components(
+        plugins_dir=f"{rules_dir}/plugins",
+        declared_optional=declared_optional,
+        active_tier=active_tier,
+    )
     for gf_path in get_component_grammar_files():
         comp_rules = register.rules_registration_from_file(gf_path)
         ext_rules.update(comp_rules)

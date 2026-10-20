@@ -25,61 +25,16 @@
 
 | # | 项 | 结论 | 为什么现在不做 | 触发条件 | 链 |
 |---|----|------|----------------|----------|----|
-| 1 | 档位 `[plugins] enabled` 语义边界 | 暂缓 | `enabled` 只门控**声明面**，插件规则与 Python 组件无条件加载 ⇒ "档位=接受域"对不依赖新关键字的增量不成立；作者定调（2026-09-28）**慢慢补充、不急着选** | 作者定调改变，或出现依赖"档位=接受域"的声明 | `docs/gaps/gap-language-pack-scope.md`「运行时档位」 |
-| 2 | `[macro_policy] when` 声明表上提 | 暂缓 | 评估结论今天不上提：按"多语言共有且形态稳定"判据，实测只有 verilog 一个声明方 | 第二个语言包出现**同形**判定 ⇒ 以"`call_site` 事实合取 → mode"小表上提，**替代而非并存** | `preprocessor/README.md`「跨语言文本能力原型」 |
-| 3 | S2 链接性语义检查 | **不采** | 无真阳样本（可解析真实语料仅 8 个小文件、冲突命中 0）；朴素实现 4/19 误报（含 `static int x; extern int x;` 依 §6.2.2p423 继承 internal 的合法形态）；基座错位未修；且**条款是 UB 非约束**、GCC/clang 本就诊断 | 基座错位修完 **且**出现可解析真实语料（含真阳） | `docs/gaps/gap-c-semantic-base.md`（task-45） |
-| 4 | 符号基座两处错位（形参符号落 `<global>`；函数定义符号落 `<FunctionScope>`） | **另立**（待作者拍板） | F1/F2 会改 **P1 公开产物** ⇒ 命中升级判据①（契约面）；当前已落 N1/N2 派生视图（`_api.declaration_view()`，产物逐字节不变）兜住"声明位置"唯一入口 | 作者批准变更 P1 公开产物 | `docs/gaps/gap-c-semantic-base.md` |
-| 5 | 阶段 3 S3 函数原型/定义一致性 | 暂缓 | 需**类型模型**（所有语义片里代价最大）；同批 S5 部分条款未取得原文，**枚举值重复属 C 档反证 ⇒ 永不实现** | 类型模型因别的需求先行引入 | `docs/gaps/gap-c-semantic-base.md` |
-| 6 | CSC001 函数位 / CSC B 档 7 条 | 暂缓 | 一 id 一 kind ⇒ 函数位组合需"一 id 多 kind"或组件 postpass（引擎检查分发面变更）；CSC004/007–012 仅权威转述、`default=false` | 取得原文句（C11/C23 §6.7.1 各段）**或**更大真实语料零误报；或"一 id 多 kind"被别的规则一并需要 | `grammar/c/plugins/checks/`（循环 #10 裁定） |
-| 7 | 语法缺口（真实语料驱动）：逐声明符位宽 `int a : 3, b : 4;`｜参数位 `register`｜ENUM003 的 C23 豁免｜复合字面量 `(t){1}` raw 候选 | 暂缓 | 均需**形态改动/语法落地/check 需求**才有意义：位宽标准上属声明符（本包绑在成员声明末尾）；`void f(register int x);` 合法但参数位不接受存储类；`enum E : int;` 语法面尚不支持；复合字面量**承载期建候选失败**（`not_understood: candidate_missing`，用户面不变） | 真实语料/头文件出现该形态；ENUM003 例外——**将来实现固定底层类型枚举时必须加"带底层类型 ⇒ 恒完整"豁免**，否则误报 | `grammar/c/02_types.toml::StructMember`、`grammar/c/README.md`（循环 #10/#11 交付边界） |
-| 8 | L1 渗透剩余面：插件侧 AST-first 改写｜引擎侧未声明的取值形态假设 | 暂缓（长期方向） | 动机是**插件代码质量**与**多形态语言包**，无当前行为缺陷；且须自带验证（无引擎侧渗透判据兜底）⇒ 不占主线 | 该子系统再动时顺带做（判据②/③），或新增第二形态语言包 | `ROADMAP.md`「语言知识渗透复审（L1）」 |
-| 9 | 循环纪律机械化 4 项（判据色产物门禁 / `cycle_triggers.py` / 审计反例入库 / `policy/*.md` 逐文件上限） | 暂缓 | 现靠 `policy/collaboration.md` + 审计执行；机械化本身要维护（且 `policy` 逐文件上限的数字待压缩收口后才有意义） | 认为"循环纪律须机器化"时逐项立项 | `policy/collaboration.md`（task-52 审计派生） |
-| 10 | Verilog 宏**定义侧**形式语法声明（补 `[macro_syntax]` 段启用 linter 检查） | 暂缓 | C 侧检查已改为声明驱动（未声明 ⇒ 不跑）；verilog 的宏定义语法不同——形参项可带默认值（`a=1`）、无 `...`/`#`/`##` ⇒ 启用前引擎需先支持形参默认值形态（`param_default_operator`），否则把合法定义误报为非法 | Verilog 包需要宏定义形式语法检查（或真实语料出现畸形 `` `define ``） | `linter/macro_syntax.py`、`preprocessor/macro_shape.py`、`grammar/verilog/base/_macro.toml` |
-| 11 | 展开核心的变参占位常量统一到声明面（`macro_expand` / `_expand` 仍以字面量 `"..."` 识别变参标记） | 暂缓 | `[macro_syntax].variadic_marker` 已是 linter 侧单一来源；但展开核心仍写字面量。今日只有 C 用变参，且"改后占位仍是 `...`"**无法用行为判据区分**（要第二门用**不同占位写法**的语言包才能证）⇒ 按"先证后开"记债，不造无判据机制 | 第二门带变参（且占位写法不同）的语言包接入，或动展开核心源码 | `preprocessor/macro_expand.py`、`preprocessor/_expand.py` |
-
-## 候选材料：#1 档位语义（#39 调查轮，2026-10-21；**待作者拍板，未采纳**）
-
-**为什么重新摆上桌**：C 标准等效缺口最后 2 条（`_Static_assert(1)` / `enum e : int`）**同因受阻**；
-#38 调查已证两条都**无法**收敛到声明层（对照实例写进 `gap-language-pack-scope.md`「运行时档位」）。
-即"暂缓"的成本从"暂不动"变成"合法标准代码持续被拒"。
-
-**实测约束（决定方案形状的 4 条）**
-
-1. 现状：`enabled` 只合并**声明面**；`load_all_components` 无条件扫描 `<pack>/plugins` 全树
-   （`core/plugin_loader.py::discover_components`），组件 `[grammar] files` 由此加载、注入随之上膛。
-2. **不能按"名字 ∈ enabled"门控整棵树**：C 的 `plugins/semantics` 与 `plugins/checks/*` 是常驻
-   组件（不在 enabled 清单里、无 grammar 文件）；按名字门控会误伤常驻件。⇒ 判据应是
-   「**可选件**（名字在包内 `[plugins] enabled` 清单里）的 grammar 才受档位门控；未列出的 = 常驻」。
-3. 两包现状与该判据吻合：C 可选件 c11/c17/c23（c11/c23 有 grammar；c17 无）；
-   verilog 的 **9 个** grammar 组件全部在 enabled 清单里；yaml 无组件；c4 的 `asm_gen` 只有 transform。
-4. 档位数据现成：`ConfigRegistry` 已缓存包内清单与当前档位（`_declared_enabled` / `_active_enabled`），
-   门控不需要新状态，也不需要新配置键。
-
-**候选 A（推荐）：可选组件的 `[grammar] files` 按档位加载**
-
-- 改动点（估算，非实测）：`plugin_loader.load_all_components(..., tier)` 记录可选件清单 + 当前档位
-  → `get_component_grammar_files` 过滤（≈30 行）；`setup_grammar` 取档位（显式参数优先，缺省读
-  `ConfigRegistry` 登记；≈15 行）；`ConfigRegistry` 一个只读取值（≈5 行）。**Python 组件
-  （semantics / checks / postpass）不受影响**；语言包 0 行（无需新键）。
-- 测试面：`test_c_standard_tiers.py` 2 行矩阵改档位 + `TestKeywordFreeIncrementsAreNotTierGated`
-  改写为"基线档不认 `[[属性]]`"（**该测试头注已预告这一天**）+ 门控判据 3–4 例（规则表有/无、
-  同进程切档、verilog 零回归）。
-- 行为变化：C 基线/c11/c17 档不再加载 c23 规则（关键词 free 的属性也随档消失），c23 档不变
-  ⇒ **档位 = 接受域**，与作者 2026-10-21 的架构判断同向。
-- 反向风险：verilog / yaml / c4 必须零回归（依据 = 上面第 3 条；由全量 + A/B `--products` 守）；
-  规则表按 setup_grammar 每次重建、切档缓存键已含档位（#37 前修复）⇒ 同进程切档无残留。
-- 解锁量：两条标准缺口各约 1 轮（`_Static_assert(1)` 单参规则；`enum e : int` = core 空槽位 +
-  c23 条款规则 + 渲染），完成后**缺口清零**，阶段 5 判据 4 的缺口部分收口。
-
-**候选 B（维持现状）**
-
-- 成本 0；两条缺口继续 `xfail` 钉住，keyword-free 泄漏保持为"已声明边界"。
-- 代价：合法标准代码被拒与"阶段 5 标准等效断言面"的目标直接冲突；C 包作为抽象压力测试主角，
-  长期留着"档位 ≠ 接受域"的例外。
-
-**建议**：取 A。理由 = 成本小（≈1 轮引擎 + 2 轮缺口）、判据清晰（门控本身就是档位语义）、
-把"可选件 vs 常驻件"这条**已有区分**显式化（今后新增档位/可选语法增量按同一判据）。
-**若否 A**：row #1 触发条件收紧为"第二门带版本档的语言包出现"，两条缺口保留 `xfail`。
+| 1 | `[macro_policy] when` 声明表上提 | 暂缓 | 评估结论今天不上提：按"多语言共有且形态稳定"判据，实测只有 verilog 一个声明方 | 第二个语言包出现**同形**判定 ⇒ 以"`call_site` 事实合取 → mode"小表上提，**替代而非并存** | `preprocessor/README.md`「跨语言文本能力原型」 |
+| 2 | S2 链接性语义检查 | **不采** | 无真阳样本（可解析真实语料仅 8 个小文件、冲突命中 0）；朴素实现 4/19 误报（含 `static int x; extern int x;` 依 §6.2.2p423 继承 internal 的合法形态）；基座错位未修；且**条款是 UB 非约束**、GCC/clang 本就诊断 | 基座错位修完 **且**出现可解析真实语料（含真阳） | `docs/gaps/gap-c-semantic-base.md`（task-45） |
+| 3 | 符号基座两处错位（形参符号落 `<global>`；函数定义符号落 `<FunctionScope>`） | **另立**（待作者拍板） | F1/F2 会改 **P1 公开产物** ⇒ 命中升级判据①（契约面）；当前已落 N1/N2 派生视图（`_api.declaration_view()`，产物逐字节不变）兜住"声明位置"唯一入口 | 作者批准变更 P1 公开产物 | `docs/gaps/gap-c-semantic-base.md` |
+| 4 | 阶段 3 S3 函数原型/定义一致性 | 暂缓 | 需**类型模型**（所有语义片里代价最大）；同批 S5 部分条款未取得原文，**枚举值重复属 C 档反证 ⇒ 永不实现** | 类型模型因别的需求先行引入 | `docs/gaps/gap-c-semantic-base.md` |
+| 5 | CSC001 函数位 / CSC B 档 7 条 | 暂缓 | 一 id 一 kind ⇒ 函数位组合需"一 id 多 kind"或组件 postpass（引擎检查分发面变更）；CSC004/007–012 仅权威转述、`default=false` | 取得原文句（C11/C23 §6.7.1 各段）**或**更大真实语料零误报；或"一 id 多 kind"被别的规则一并需要 | `grammar/c/plugins/checks/`（循环 #10 裁定） |
+| 6 | 语法缺口（真实语料驱动）：逐声明符位宽 `int a : 3, b : 4;`｜参数位 `register`｜ENUM003 的 C23 豁免｜复合字面量 `(t){1}` raw 候选 | 暂缓 | 均需**形态改动/语法落地/check 需求**才有意义：位宽标准上属声明符（本包绑在成员声明末尾）；`void f(register int x);` 合法但参数位不接受存储类；`enum E : int;` 语法面尚不支持；复合字面量**承载期建候选失败**（`not_understood: candidate_missing`，用户面不变） | 真实语料/头文件出现该形态；ENUM003 例外——**将来实现固定底层类型枚举时必须加"带底层类型 ⇒ 恒完整"豁免**，否则误报 | `grammar/c/02_types.toml::StructMember`、`grammar/c/README.md`（循环 #10/#11 交付边界） |
+| 7 | L1 渗透剩余面：插件侧 AST-first 改写｜引擎侧未声明的取值形态假设 | 暂缓（长期方向） | 动机是**插件代码质量**与**多形态语言包**，无当前行为缺陷；且须自带验证（无引擎侧渗透判据兜底）⇒ 不占主线 | 该子系统再动时顺带做（判据②/③），或新增第二形态语言包 | `ROADMAP.md`「语言知识渗透复审（L1）」 |
+| 8 | 循环纪律机械化 4 项（判据色产物门禁 / `cycle_triggers.py` / 审计反例入库 / `policy/*.md` 逐文件上限） | 暂缓 | 现靠 `policy/collaboration.md` + 审计执行；机械化本身要维护（且 `policy` 逐文件上限的数字待压缩收口后才有意义） | 认为"循环纪律须机器化"时逐项立项 | `policy/collaboration.md`（task-52 审计派生） |
+| 9 | Verilog 宏**定义侧**形式语法声明（补 `[macro_syntax]` 段启用 linter 检查） | 暂缓 | C 侧检查已改为声明驱动（未声明 ⇒ 不跑）；verilog 的宏定义语法不同——形参项可带默认值（`a=1`）、无 `...`/`#`/`##` ⇒ 启用前引擎需先支持形参默认值形态（`param_default_operator`），否则把合法定义误报为非法 | Verilog 包需要宏定义形式语法检查（或真实语料出现畸形 `` `define ``） | `linter/macro_syntax.py`、`preprocessor/macro_shape.py`、`grammar/verilog/base/_macro.toml` |
+| 10 | 展开核心的变参占位常量统一到声明面（`macro_expand` / `_expand` 仍以字面量 `"..."` 识别变参标记） | 暂缓 | `[macro_syntax].variadic_marker` 已是 linter 侧单一来源；但展开核心仍写字面量。今日只有 C 用变参，且"改后占位仍是 `...`"**无法用行为判据区分**（要第二门用**不同占位写法**的语言包才能证）⇒ 按"先证后开"记债，不造无判据机制 | 第二门带变参（且占位写法不同）的语言包接入，或动展开核心源码 | `preprocessor/macro_expand.py`、`preprocessor/_expand.py` |
 
 ## 权衡
 
@@ -90,9 +45,9 @@
 
 ## 验证
 
-- 无行为验证（决策 = 暂缓/不做）。可验证面是**分类纪律本身**：容量由
+- 本档**剩余**策略项均为暂缓/不采 ⇒ 无行为验证。可验证面是**分类纪律本身**：容量由
   `tests/policy/test_planning_doc_budget.py` 守；"TODO 不再出现本表条目"由待办盘点核对（2026-10-17 已执行：
-  `TODO.md` 117 行，见 CHANGELOG）。
+  `TODO.md` 117 行，见 CHANGELOG）。已取回实现的行按纪律删除（#1 档位门控 → ADR-0023）。
 - **反向自检**：触发条件出现却未取回 = 本决策失效。届时**先改本档（删该行）再立项**，不许绕过。
 
 > Impl: —（决策为暂缓/不采，无实现）

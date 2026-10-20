@@ -48,6 +48,15 @@ _components_initialized: bool = False
 # 插件也滤掉（实测：c4 模块内第二个用例开始 transform 空转）。
 _active_components: set[str] = set()
 
+# 组件 **grammar 文件**的档位门控（ADR-0023）：**可选件** = 包内 `[plugins] enabled`
+# 清单里列出的组件名（C 的 c11/c17/c23）；未列出的组件是**常驻件**（C 的
+# semantics/checks），其 grammar 恒加载。`None` = 未接档位（直接调用方 / 低层契约）
+# ⇒ 不过滤（旧行为，零影响）。
+# ⚠ 只门控 `[grammar] files`：组件 Python（handler/postpass）不随档位 —— 它们是
+#   "怎么分析"而非"收哪些语法"，门控它们会让基线档失去符号/检查基座。
+_tier_declared: set[str] | None = None
+_tier_active: set[str] | None = None
+
 
 def discover_components(plugins_dir: str = "") -> list[dict[str, Any]]:
     """递归扫描 plugins/ 目录树，收集所有含 tpc.toml 的组件目录。
@@ -210,16 +219,28 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
     return info
 
 
-def load_all_components(plugins_dir: str = "") -> list[dict[str, Any]]:
+def load_all_components(
+    plugins_dir: str = "",
+    declared_optional: list[str] | tuple[str, ...] | None = None,
+    active_tier: list[str] | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     """Discover, dependency-sort, and load all components.
 
     plugins_dir 非空时从指定语言包加载组件（单语言选择）；空时用默认包。
     调用即建立**语言作用域**（`_components_initialized`）——即使该语言没有
     组件（如 yaml），也要知道"当前作用域=空"，否则插件按作用域过滤会退化成
     "不过滤"（见 `transform.engine.active_plugin_classes`）。
+
+    Args:
+        declared_optional: 包内 `[plugins] enabled` 清单（**可选件**名字）。
+        active_tier: 当前档位（实际启用的组件名）。
+        两者都给定时，`get_component_grammar_files` 只返回"非可选件或档位含它"
+        的组件的 grammar 文件（ADR-0023）；任一为 None ⇒ 不过滤（旧行为）。
     """
-    global _components_initialized
+    global _components_initialized, _tier_declared, _tier_active
     _components_initialized = True
+    _tier_declared = set(declared_optional) if declared_optional is not None else None
+    _tier_active = set(active_tier) if active_tier is not None else None
     metas = discover_components(plugins_dir)
     ordered = _resolve_dependencies(metas)
     result = []
@@ -232,12 +253,30 @@ def load_all_components(plugins_dir: str = "") -> list[dict[str, Any]]:
     return result
 
 
+def _grammar_tier_allows(name: str) -> bool:
+    """该组件的 grammar 文件是否随当前档位加载（ADR-0023）。
+
+    可选件（包内 `[plugins] enabled` 列出的名字）只在档位含它时加载；未列出的
+    常驻件（C 的 semantics/checks、c4 的 asm_gen）恒加载。
+    `_tier_declared is None`（未接档位）⇒ 恒加载（旧行为）。
+    """
+    if _tier_declared is None or _tier_active is None:
+        return True
+    return name not in _tier_declared or name in _tier_active
+
+
 def get_component_grammar_files(lang: str = "") -> list[str]:
-    """Get grammar file paths for all loaded components, optionally filtered by lang."""
+    """Get grammar file paths for all loaded components, optionally filtered by lang.
+
+    可选件按档位过滤（ADR-0023）：未启用的档位不加载其规则文件——规则文件由此
+    不再无条件上膛，"档位 = 接受域"对**不依赖新关键字**的增量也成立。
+    """
     files = []
     for info in _loaded_components.values():
         meta = info.get("meta", {})
         if lang and meta.get("lang", "*") not in (lang, "*"):
+            continue
+        if not _grammar_tier_allows(info["name"]):
             continue
         files.extend(info.get("grammar_files", []))
     return files
