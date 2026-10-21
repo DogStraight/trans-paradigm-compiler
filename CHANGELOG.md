@@ -232,6 +232,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **C 真实语料接入调查：方案与判据草案 + 两类 linter FP 最小复现**（2026-10-21，循环 #43，
+  调查轮；**docs-only**，不动生产代码）：退出判据 5（真实 C 语料误报基线进门禁）此前空白，
+  本轮实测确认**当前不可直接落地**：
+  · **语料 / harness**：候选 = cJSON（MIT，2 文件 97KB）+ zlib 子集（zlib license，6 文件
+    ~130KB + 头）；前置 = 库头文件 + **12 个最小系统头 stub** + `include_dirs`（C 包
+    `include.on_missing = "error"`，缺 include 是硬错误）。7 文件实测 **parser 全接受**。
+  · **误报面**：linter 在**合法代码**上报 35–124 条/文件（`cJSON.c` 124、`zutil.c` 86、
+    `crc32.c` 45、`adler32.c` 43、`gzread.c` 40、`compress.c` 36、`uncompr.c` 35）——与
+    verilog 先例"已裁决真诊断基线"性质不同，直接固化会把误报制度化。
+  · **两类已定位根因**（parser 接受 / linter `phase-statement`，最小复现见档内）：
+    `typedef int T; extern T *p;`（zlib `ZEXTERN` 形态）与
+    `typedef struct S S; int f(const S * const p);`（cJSON 55 处 `* const`）。
+  方案 A（推荐：先修 FP #44 → 再门禁 #45）/ B（过渡基线、须标注待清偿）/ C（否：合成语料，
+  不满足"真实"）；判据草案（语料目录 + `CREDITS.md` + `stubs/`、`eval_diag_baseline_c.py`、
+  `tests/policy/test_diag_baseline_c.py`、`parse_ok` sanity、确定性、预算与止损点）全部落
+  `docs/gaps/gap-c-real-corpus.md`。文档：新 gap 档 + `docs/gaps/README.md` 登记 +
+  `ROADMAP.md` 阶段 5 指针 + `PROGRESS.md` 判据 5 / 下一轮入口。
+
 - **档位门控：可选组件的 grammar 文件随 `enabled` 加载（ADR-0023）**（2026-10-21，循环 #40，
   引擎契约 + 行为变化；作者拍板"只能走 A"，并强调**提交节点要小心** ⇒ 本轮一个原子提交：
   语义、配套引擎修复、测试与文档同批）：`enabled` 此前只门控**声明面**，插件规则文件由
