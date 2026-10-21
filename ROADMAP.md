@@ -87,6 +87,10 @@
 
 ## C 语义层切片 1b / 语义基座（typedef 名起头的转换）
 
+> **后续替代（2026-10-22 立项）**：**退役 `pre_scan`、改两阶段 lint**——raw 资格改符号无关
+> （双读试解析），符号判定后移 analyze（E002/E003 安全网），落地后删除 lexer 预扫描机制；
+> 设计/分片/判据见 `docs/decisions/0024-two-phase-lint-prescan-retirement.md`，执行项在 `TODO.md`。
+>
 > **已全线交付**：切片 1a（关键字起头）随 0.1.3；切片 1b = P1 符号收集 → P2a 收敛判定 → P2b-1 标记
 > → P3b-M1 资格判定 → P3c 位点发现面 → M2 raw 承载 + 窄档摘诊断 → P4 理解路径（循环 #2–#9，
 > `(myint)x` 闭环 + 渲染保真）。**完成项已删**（历史见 `CHANGELOG.md` + git log）；裁决全表与实现

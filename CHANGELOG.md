@@ -276,6 +276,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **决策：退役 lexer 预扫描，改两阶段 lint（ADR-0024）**（2026-10-22，#45 调查/设计轮；
+  **docs-only**，未动生产代码）：作者判断 `pre_scan`（lexer 后、parser 前的文本级正则扫描）
+  信息量不足以支撑符号判定，要求"延后到分析阶段"。本轮实测消费面后立项：
+  · **唯一承重消费** = C linter 的 raw 资格（`typedef` 名集合 + kind 过滤 → 换型试解析 →
+    `symbol_dependent/eligible` → M2 摘诊断 + parser raw 承载）；禁用后合法 `x=(myint)y;`
+    由 0 诊断变 1 误报 + parse 截断，C 语言套件 9 红、linter 定向套件 33 红；
+  · parser 候选重排（verilog `rule_hints`）**实测零消费**（去掉后 A/B 0/144、无测试引用）；
+  · C 产物"两期"（`two_phase_product`/`PHASE_PRE_SCAN`）管线无消费者（仅测试/文档引用）；
+  · `raw_exclude_rules` 只是借配置段读取（语义与符号无关，可迁 linter 自有面）。
+  决策 = **两阶段裁决**：lint 符号无关（双读试解析定候选 raw；替换 token 型由包声明）→
+  parse raw 承载（不变）→ **analyze 权威裁决**（既有 E002/E003 安全网），随后删除
+  `pre_scan` 机制本体；`tpc lint` 明确为"纯语法检查 + deferred 候选"，最终裁决在 `tpc check`。
+  分片 S1–S5（每片独立绿、S4 前可逐片回滚）与判据（A/B 0/144、lint accuracy 33/33 fp 0、
+  全量套件、C 语料诊断不增、`c_acceptance` 48/0）见 ADR 验证节。
+  文档：新增 `docs/decisions/0024-two-phase-lint-prescan-retirement.md`（导航登记于
+  `docs/README.md`）；`gap-c-semantic-base.md` 决策 ③⑧ 与预扫描期条目注方向变更；
+  `gap-parser-linter-approximation.md` M1 段注符号无关化；`ROADMAP.md` 切片 1b 段、
+  `TODO.md` §3.1（S1–S5 执行项）、`PROGRESS.md` 下一轮入口、`MODEL_INDEX.md` 行注"退役中"。
+
+### Changed
+
 - **C 真实语料调查第二轮：根因更正 + 语法面方案（决策材料）**（2026-10-21，循环 #44，
   **决策轮**；未动生产代码）：#43 把两类缺口判成"linter 单侧误报"**不成立**——实测
   `parser._parse_truncated=True`（部分 AST），根因在**语法面**：「typedef 名」只在首个说明符位

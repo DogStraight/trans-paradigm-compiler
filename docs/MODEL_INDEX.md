@@ -47,7 +47,7 @@
 | 数字字面量 DFA（`[[number.based]]` 配置驱动；`suffix` / `lead_dot` / `digit_separator` 声明键） | `language_walkthrough.md`（数字字面量 DFA） | `lexer/number_gen.py`<br>`lexer/number_runner.py` | `tests/engine/lexer/test_number_gen.py`<br>`tests/engine/lexer/test_number_baseline.py`<br>`tests/engine/lexer/test_number_digit_separator.py` |
 | 原始文本捕获（注释/字符串/块标量） | `language_walkthrough.md`（注释/字符串 token 扫描） | `lexer/capture_runner.py` | `tests/engine/lexer/test_capture_runner.py` |
 | 注释形态读取（行注释起始 + 成对定界符，声明驱动） | `preprocessor/README.md`（marker 书写形态） | `lexer/comment_syntax.py::load_comment_syntax` | `tests/engine/lexer/test_comment_syntax.py` |
-| 顶层声明预扫描 | `language_walkthrough.md`（预扫描：顶层声明收集） | `lexer/pre_scan.py` | `tests/engine/lexer/test_lexer.py` |
+| 顶层声明预扫描（**退役中**：改两阶段 lint，符号判定后移 analyze） | `language_walkthrough.md`（预扫描：顶层声明收集） | `lexer/pre_scan.py` | `tests/engine/lexer/test_lexer.py` |
 | 配置加载 fail-fast | `core/config_lifecycle.md` | `core/config_registry.py::ConfigRegistry.load_all`<br>`lexer/lexer_utils.py::merge_token_define` | `tests/engine/core/test_config_loading.py` |
 
 ### linter — 前置 token 级 lint（反解析器，复用同一 TOML 语法）

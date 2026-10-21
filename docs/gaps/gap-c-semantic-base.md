@@ -36,8 +36,8 @@
      `parser/parser_core.py:168` 的 `_ScopeStack.register` **全仓无调用方**（实测 grep）⇒
      符号 store 恒空、`lookup` 恒返回 `None`。`parse_sentence`（`block_parser.py:37-44`）
      与 atom 路径（`parser/parser_core.py:196-215`）都**不记录"还有别的候选也成立"**。
-   - 词法预扫描 `lexer/pre_scan.py`（`{name: kind}` + `rule_hints`，只做**候选重排**）机制齐备，
-     但 C 包未声明 `[lexer] pre_scan`（实测配置为空）；verilog 在用。
+   - 词法预扫描 `lexer/pre_scan.py`（`{name: kind}` + `rule_hints`）机制齐备；C 包现已声明（`base/_pre_scan.toml`）。
+    ⚠ **2026-10-22 方向变更**：改两阶段 lint（raw 资格符号无关、符号判定后移 analyze），落地后删 `pre_scan`（ADR-0024）。
    - analyzer 侧另有**完整**的 `analyzer/scope.py::Scope/Symbol`（post-parse，声明驱动
      `[*.analyzer.scope/symbol]`）——C 包未声明，且与 parser 侧 `_ScopeStack` **无共享**。
 
@@ -151,8 +151,8 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 - **① 回溯式 + 声明式谓词闸门**：曾为首选（`(` 后试解析类型名 → 问符号谓词），现**延后**——
   谓词键是 parser 契约面，作者要求先由 linter 承担"收敛与否"的判定。
 - **② 查询钩子**（pack 提供 `is_type_name` callable）：**延后**（与①同缺口，且倾向先用数据）。
-- **③ 两遍**：真两遍破"先声明后使用"语义 ⇒ 不做；只保留既有 `[lexer] pre_scan` 的候选重排
-  （自述"不是精确的"，`lexer/pre_scan.py:1-5` ⇒ 必须连带登记不精确偏差）。
+- **③ 两遍**：真两遍破"先声明后使用"⇒ 原不做；2026-10-22 改**两阶段 lint**（lint 符号无关 →
+  parse raw 承载 → analyze 权威裁决），"保留 pre_scan"作废（随 S4 删）。
 - **④ raw 路径**：**采纳为内部机制**——不选边、保留原样节点交后端定，渲染走引擎既有
   raw 直出（先例 `_verbatim_text`）。它能立刻把"整函数截断丢内容"变成"完整保留"，且不碰
   契约面。
@@ -193,7 +193,7 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 | 5 | raw 路径是否升格 | **作为内部机制存在**，不升格为公开一等判据；先例 = 宏体（raw 源区间），"把问题上移一层" |
 | 6 | 两套 scope 是否合并 | **不合并**；但机制文档须写明两者**本质是一套识别系统的不同时期**、能力不同 |
 | 7 | 两遍是否允许影响形态 | 非核心问题——**只允许 pre-scan 重排候选、不允许影响形态**（fail-open） |
-| 8 | C 包 `pre_scan` 是否落地 | **落**（细节级自决；须登记"预扫描不精确"偏差） |
+| 8 | C 包 `pre_scan` 是否落地 | **曾落，现将删**（2026-10-22 方向变更：两侧改两阶段 lint，见决策 ③ 更新与 `docs/decisions/0024-two-phase-lint-prescan-retirement.md`） |
 
 **关键设计句（作者原话要点）**：关键在 **linter** —— linter 先过歧义路径；路径**无法收敛**
 时 linter 给出**内部 warning**；之后 parser 经过此处**走 raw 路径、暂缓建树**；之后由

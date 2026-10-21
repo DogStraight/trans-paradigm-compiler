@@ -78,6 +78,23 @@
       `python tools/feature_sites.py compare` 实测 **`check` 8→13**（其中 `check:MAC001` 为循环 #21 新增实例）、
       **`config` 29→30**、**`config:lexer.pre_scan` 2→3** ⇒ 合并登记点或写保持理由。
 
+### 3.1 `pre_scan` 退役（两阶段 lint）
+
+- [ ] **S1 配置面**（纯加法）：C 包 `[linter]` 段新增 `type_name_form` / `raw_exclude_rules`
+      声明键（双写期，消费方仍读旧源，零行为变化）。
+- [ ] **S2 符号无关 M1**：`linter/lookahead.py::_record_convergence` 改双读试解析
+      （删判据② name/kind 过滤，字段改 `candidate_names`），M2/raw 配方不变；补 C 用例矩阵
+      （合法 typedef 强转提升 / 非 typedef E002 / 遮蔽 E002 / 声明序 / 复合字面量静默）。
+- [ ] **S3 lint/check 分工**：deferred 候选面 + `--json` 字段 + CLI 文档 + e2e expected 更新；
+      `tpc lint` 语义登记为"纯语法检查，最终裁决在 `tpc check`"。
+- [ ] **S4 删除机制**：删 `lexer/pre_scan.py` + 两包 `_pre_scan.toml`/`[lexer] pre_scan` 行 +
+      parser `pre_symbols/pre_hints`/`rule_hints` + `analyzer/structure.py` 接线 +
+      C 两期产物（`two_phase_product` 等） + `raw_exclude_rules` 迁移 + 测试/工具/文档同步。
+- [ ] **S5 文档收口**：两阶段口径进 linter/parser 机制文档后删 ADR 与 gap 预扫描期条目。
+
+判据：A/B 0/144、lint accuracy 33/33 fp 0、全量 `pytest tests/` 绿、C 语料诊断不增、
+`c_acceptance` 48/0；详见 ADR 验证节与 `docs/gaps/gap-c-semantic-base.md`。
+
 ## 四、策略层（不进本档）
 
 > 触发式 / 长期规划项**不占待办队列**：结论（不做/暂缓/另立）、为什么现在不做、触发条件统一在
