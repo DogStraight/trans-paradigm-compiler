@@ -106,6 +106,10 @@ CASES: list[tuple[str, str, str]] = [
      "int b11 = 0b1010;\nunsigned b12 = 0B1010ULL;\n"),
     ("增量", "c23 数字分隔符（1'000'000 / 0x1'F / 0b1'0）",
      "int n11 = 1'000'000;\nint n12 = 0x1'F;\nint n13 = 0b1'0;\n"),
+    # C23 §6.7.2.2 enum-type-specifier（循环 #42 收口最后一条标准等效缺口）：
+    # 带体 / 不透明声明 / 匿名体三种合法形态一并试解析
+    ("增量", "c23 枚举固定底层类型（enum e : int，§6.7.2.2）",
+     "enum e11 : int { A11 };\nenum e12 : unsigned char;\nenum : int { B11 };\n"),
 ]
 
 

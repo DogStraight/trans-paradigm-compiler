@@ -79,6 +79,13 @@ _CASES = [
      "StaticAssertC23UnderscoreNoMsgDecl"),
     ("_Static_assert 单参在 if body", "void f(int a) {\n    if (a)\n        _Static_assert(1);\n}\n",
      "StaticAssertC23UnderscoreNoMsgDecl"),
+    # C23 §6.7.2.2 enum-type-specifier：枚举固定底层类型（循环 #42；核心空槽位 @EnumSpecExtra）
+    ("enum 固定底层类型（带体）", "enum e : int { A };\n", "EnumUnderlyingType"),
+    ("enum 固定底层类型（不透明声明）", "enum e : int;\n", "EnumUnderlyingType"),
+    ("enum 固定底层类型（限定符）", "enum e : const unsigned long { A };\n", "EnumUnderlyingType"),
+    ("enum 固定底层类型（typedef 名）", "typedef int myint;\nenum e : myint { A };\n",
+     "EnumUnderlyingType"),
+    ("enum 固定底层类型（匿名体）", "enum : int { A };\n", "EnumUnderlyingType"),
     ("alignas 常量表达式", "alignas(16) char buf[64];\n", "AlignasC23Spec"),
     ("alignas 说明符序列其余位", "int alignas(8) x;\n", "AlignasC23Spec"),
     ("alignas 类型名形态", "alignas(double) char c;\n", "AlignasC23TypeSpec"),
@@ -509,6 +516,7 @@ class TestC23InjectionPoints:
                 "@AttributeSlot.production[0]",
             ),
             "22_static_assert_no_msg.toml": ("@Stmt", "@StructMemberExtra"),
+            "23_enum_underlying.toml": ("@EnumSpecExtra.production[0]",),
         }
         for fname, targets in want.items():
             path = ROOT_DIR / "grammar" / "c" / "plugins" / "c23" / fname

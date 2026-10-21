@@ -1133,6 +1133,33 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "",
         "test": "tests/languages/c/test_c_standard_conformance.py",
     },
+    {
+        "why": "枚举固定底层类型的槽位若从核心宿位漏写（`EnumSpecifier` 少一个 `@EnumSpecExtra?`）"
+               "⇒ C23 合法形态 `enum e : int { A };` 整条解析失败（循环 #42；槽位 = 标签后中段"
+               "注入的唯一入口，同 `@AttributeSlot` 的教训）",
+        "file": "grammar/c/02_types.toml",
+        "old": '    "@EnumSpecExtra?",\n    "@EnumBody?",\n',
+        "new": '    "@EnumBody?",  # 变异：去掉固定底层类型槽位\n',
+        "test": "tests/languages/c/test_c_standard_conformance.py",
+    },
+    {
+        "why": "C23 枚举底层类型规则若没注入槽位（丢掉 `[EnumUnderlyingType.inject]`）⇒ 槽位"
+               "仍是空产生式 ⇒ 合法 `enum e : int { A };` 解析失败（循环 #42；注入点 = 核心"
+               "空槽位 `@EnumSpecExtra.production[0]`，命名体/匿名体共用）",
+        "file": "grammar/c/plugins/c23/23_enum_underlying.toml",
+        "old": '[EnumUnderlyingType.inject]\ntargets = ["@EnumSpecExtra.production[0]"]\n',
+        "new": "",
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
+    {
+        "why": "ENUM003 的 C23 豁免若被去掉（`enum E : int;` 不再算完整）⇒ 合法不透明枚举声明"
+               "被误报 'enum E 无枚举列表'（循环 #42；ADR-0021 行 6 的触发条件：实现固定底层"
+               "类型枚举时必须加豁免）",
+        "file": "grammar/c/plugins/checks/type_semantics/rules/_tag_check.py",
+        "old": '        if _tag_kind(symbol) != "enum" or _has_body(symbol) or _has_complete_type(symbol):\n',
+        "new": '        if _tag_kind(symbol) != "enum" or _has_body(symbol):  # 变异：去掉固定底层类型豁免\n',
+        "test": "tests/languages/c/test_c_type_semantics_checks.py",
+    },
 ]
 
 

@@ -147,17 +147,23 @@ rest = "$2"
 
 
 # ── EnumSpecifier ──
-
+# ⚠ **空槽位 `@EnumSpecExtra?`（标签之后、枚举体之前）**：C23 §6.7.2.2 的
+#   `enum-type-specifier`（`: specifier-qualifier-list`）只由核心 token 组成
+#   （`:` + 类型词），增量规则由 c23 插件注入槽位——基线空产生式不可匹配（ADR-0023），
+#   故下档 `enum e : int …` 整体拒。命名体 / 匿名体两处共用同一槽位（一处注入两处生效，
+#   同 `@AttributeSlot` 的公共宿主收益）；槽位 `inline` ⇒ 不进 AST，父节点直接持有注入节点。
 [EnumSpecifier.parser]
 production = [
     "keyword.enum",
     "@Identifier",
+    "@EnumSpecExtra?",
     "@EnumBody?",
 ]
 
 [EnumSpecifier.parser.node]
 tag = "$2"
-body = "$3"
+underlying = "$3"
+body = "$4"
 
 # 标签命名空间（enum tag）——匿名形态走 `AnonEnumSpecifier`，不产生记录。
 [EnumSpecifier.analyzer.c_symbol_collect]
@@ -165,19 +171,43 @@ site = "named"
 name_attr = "tag"
 kind = "tag"
 # 同上：enum 说明符**没有** kind 子节点 ⇒ 种类用字面 `default_kind`；
-# `body_path` = 枚举列表（存在 = 完整定义）。C23 固定底层类型形态（`enum E : int;`）视语法面支持情况
-# 另判（若该形态解析成功，它**总是完整**，不属"无枚举列表须在完整之后"的违规）。
-tag_capture = { body_path = "body", default_kind = "enum" }
+# `body_path` = 枚举列表（存在 = 完整定义）。
+# `complete_path` = C23 固定底层类型（§6.7.2.2：带底层类型的枚举**总是完整**，即使无
+#   枚举列表）——`enum E : int;` 是合法的"不透明枚举声明"，ENUM003 必须据此豁免。
+tag_capture = { body_path = "body", complete_path = "underlying", default_kind = "enum" }
 
 
 [AnonEnumSpecifier.parser]
 production = [
     "keyword.enum",
+    "@EnumSpecExtra?",
     "@EnumBody",
 ]
 
 [AnonEnumSpecifier.parser.node]
-body = "$2"
+underlying = "$2"
+body = "$3"
+
+
+# EnumSpecExtra — 枚举说明符的**空槽位**（标签后 / 枚举体前；基线无自有形态）。
+# 为什么单列规则：`inject` 只能把形态并进**某条既有元素**或越界追加到末尾，做不到
+#   "往序列中段插元素"；把中段做成一条原子规则槽位，注入就退化成"给规则加形态"
+#   （同 `@AttributeSlot` / `@StructMemberExtra`；机制说明见 `grammar_rule_fields.md`）。
+# `inline = true`：槽位自身不进 AST，父节点拿到的是槽里的注入节点（如 `EnumUnderlyingType`）。
+[EnumSpecExtra]
+inline = true
+
+[EnumSpecExtra.parser]
+production = []
+
+[EnumSpecExtra.parser.node]
+value = "$1"
+
+# 渲染配置是**兜底**（同 `@AttributeSlot`）：槽位 inline 展平后不以节点形态进 AST，
+# 布局通常不被消费；写上它是为了"每条规则都有渲染配置"这条包内自查口径不留例外
+# （`tools/render_coverage.py`）。
+[EnumSpecExtra.renderer.layout]
+ref = "value"
 
 
 [EnumBody.parser]
@@ -311,14 +341,16 @@ line = [
 line = [
     "enum ",
     { ref = "tag" },
-    { opt = { group = [
-    " ",
-    { ref = "body" },
-] } },
+    { opt = { group = [" ", { ref = "underlying" }] } },
+    { opt = { group = [" ", { ref = "body" }] } },
 ]
 
 [AnonEnumSpecifier.renderer.layout]
-line = ["enum ", { ref = "body" }]
+line = [
+    "enum",
+    { opt = { group = [" ", { ref = "underlying" }] } },
+    { opt = { group = [" ", { ref = "body" }] } },
+]
 
 [EnumBody.renderer.layout]
 line = [

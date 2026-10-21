@@ -1,0 +1,56 @@
+# ============================================================================
+# c23 插件 — 枚举固定底层类型 `enum e : <specifier-qualifier-list>`（C23 §6.7.2.2）
+# ============================================================================
+# 标准形态（C23 §6.7.2.2）：
+#   enum-specifier: enum attribute-specifier-sequence_opt identifier_opt
+#                   enum-type-specifier_opt { enumerator-list } …
+#   enum-type-specifier: : specifier-qualifier-list
+# 说明符-限定符列表**不含声明符 / 指针**（`enum e : int *` 非法，gcc 16.1.0 实测拒绝），
+# 本包对应规则 = 核心 `@MemberSpec`（`@TypeQualifier|@SimpleType|@Struct…|@Enum…|@TypedefName`
+# + `@SpecRest*`，**无** `(symbol.base.multiple)*`）——正好是该形态，故直接复用，不新造"类型名"变体。
+#
+# **注入点 = `@EnumSpecExtra.production[0]`**（核心 `02_types.toml` 的空槽位）：
+#   命名体 `EnumSpecifier` 与匿名体 `AnonEnumSpecifier` 共用该槽位（一处注入两处生效）。
+#   槽位 `inline = true` ⇒ 本条不自立节点层，父节点直接绑定 `underlying`。
+#   ADR-0023 档位门控 ⇒ 本文件只在 c23 档加载：基线 / c11 / c17 档槽位无可匹配形态
+#   （空槽位 = 不可匹配，ADR-0023 配套修复），合法 C11 的 `enum e { A };` 不受影响，
+#   而 C23 的 `enum e : int …` 在下档整体拒（拒绝面判据见 conformance 测试）。
+#
+# 覆盖的合法形态（oracle = gcc 16.1.0 `-std=c23 -pedantic-errors`，逐条实测）：
+#   · `enum e : int { A };`（带体）                  ✓
+#   · `enum e : int;`（不透明声明；C23 起该枚举**总是完整**，见 ENUM003 豁免）✓
+#   · `enum e : const unsigned long { A };`（限定符）✓
+#   · `typedef int myint; enum e : myint { A };`（typedef 名作底层类型）✓
+#   · `enum : int { A };`（匿名枚举带底层类型）      ✓
+#
+# ⚠ **一处过接受（如实登记，gcc 拒绝）**——语法层宽进口径（同 typedef 名位置等既有宽进）：
+#   `enum e : int x;`（无枚举体 + 声明符）：`@EnumBody?` 可省、`Declaration` 的声明符表
+#   可省，故本条 + 声明符同时为空时仍能配平；gcc 报 "underlying type may not be
+#   specified here"（固定底层类型只允许出现在"不透明声明（无声明符）"或带体形态）。
+#   要严格禁掉需把"不透明枚举声明"做成独立语句形态（+1 规则 + 声明/语句两层分派），收益低。
+#   对照：`enum : int;`（匿名 + 无体）**被拒**——`AnonEnumSpecifier` 的 `@EnumBody` 必选，
+#   gcc 同样报 expected '{'（实测，不属过接受）。
+#   边界登记在 `docs/gaps/gap-language-pack-scope.md`「仍存的接受边界」，触发 = 真实语料。
+#
+# ⚠ **不实现的语义约束（登记，不在本规则面）**：C23 §6.7.2.2 要求同一枚举 tag 的声明
+#   在"带 / 不带固定底层类型"之间一致（gcc：`enum e : int; enum e { A };` 与
+#   `enum e { A }; enum e : int;` 均报错）。属约束句、非语法形态 ⇒ 语义层（新 check id），
+#   当前不实现；触发 = 真实语料出现或检查需求。ENUM003 的"带底层类型 ⇒ 恒完整"豁免已落地。
+
+[EnumUnderlyingType.parser]
+production = [
+    "symbol.base.colon",
+    "@MemberSpec",
+]
+
+[EnumUnderlyingType.parser.node]
+type = "$2"
+
+# 两处宿主（命名体 / 匿名体）共用的空槽位（一处声明生效两处）。
+[EnumUnderlyingType.inject]
+targets = ["@EnumSpecExtra.production[0]"]
+
+# 渲染：` : 类型`——EnumSpecifier / AnonEnumSpecifier 的布局给槽位位点加前导空格，
+# 本规则只负责 `:` 与类型本体（token 级保真：`:` 是核心 token、类型由 @MemberSpec 还原）。
+[EnumUnderlyingType.renderer.layout]
+line = [": ", { ref = "type" }]

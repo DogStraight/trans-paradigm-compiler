@@ -2,8 +2,9 @@
 
 ROADMAP「阶段 5 标准等效验证」缺的那片：**按标准分档、每条构造各断言一次接受与一次拒绝**。
 第一批 = 静态断言族（C11 `_Static_assert` / C23 `static_assert`，含**三处作用域**：文件 /
-块 / struct·union 成员表）；另附仍开着的 C11/C23 语法面缺口（`xfail(strict=True)` 钉住，
-修好即变红提醒移出清单）。
+块 / struct·union 成员表）；后续补齐：字面量前缀族 / 数字分隔符 / C23 枚举固定底层类型。
+⚠ 原「C11/C23 语法面缺口」`xfail(strict=True)` 清单已清零（#41 单参下划线拼写、#42 枚举
+底层类型），用例全部转正——清单与判据见 `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」。
 
 ## 判据三态（本包"接受域"的口径，见 `docs/gaps/gap-language-pack-scope.md`）
 
@@ -15,7 +16,7 @@ ROADMAP「阶段 5 标准等效验证」缺的那片：**按标准分档、每�
 ## oracle（外部裁判）
 
 `gcc 16.1.0`（MinGW-W64）`-std=c11|… -pedantic-errors -fsyntax-only` 实测同一批样本；
-结论写在 `_GAPS` 每条的注释里，原始命令见 gap 档「C 标准等效缺口」。复现：
+逐条结论写在各用例注释里，原始命令见 gap 档「C 标准等效缺口」。复现：
 
     gcc -std=c23 -pedantic-errors -fsyntax-only case.c
 
@@ -23,7 +24,7 @@ ROADMAP「阶段 5 标准等效验证」缺的那片：**按标准分档、每�
 
 `test_c_standard_tiers.py` 守**档位机制**（同进程切档 / 缓存键 / 启用清单）与各增量的
 "从哪一档起出现节点"矩阵；本文件只补它没有的那一半：**拒绝面**、**下档三态**、
-**标准缺口清单**——接受面的正向断言在那边，不在此重复。
+**过接受边界**——接受面的正向断言在那边，不在此重复。
 """
 
 import os
@@ -77,18 +78,13 @@ _BELOW_TIER_STATE = [
     ("typeof 关键字未声明 ⇒ 整体不解析（基线档）", "typeof(int) z;\n", "baseline", "rejected"),
     ("_BitInt 同上（基线档）", "_BitInt(8) a;\n", "baseline", "rejected"),
     ("alignas 同上（基线档）", "alignas(16) char c;\n", "baseline", "rejected"),
+    # C23 固定底层类型枚举：形态只由核心 token（`:` + 类型词）组成，靠槽位门控挡下档
+    ("enum 固定底层类型（c11 档）", "enum e : int { A };\n", "c11", "rejected"),
 ]
 
-# 标准等效**缺口清单**（oracle 实测 + tpc 对照；`xfail(strict=True)`：修好即变红提醒转正）。
-# 每条 = (标签, 源码, 档位, 标准依据 + gcc 结论)
-# ⚠ 成员表位（#35）、字面量前缀族 / 二进制常量（#37）、数字分隔符（#38）、
-#   C23 单参下划线拼写 `_Static_assert(1)`（#41）已转正，移出本清单；
-#   余 1 条：`enum e : int` 固定底层类型（core 的冒号位若由 c23 规则注入会漏进下档，
-#   #40 门控后前置已解除、待实现）。
-_GAPS = [
-    ("C23 enum 固定底层类型", "enum e : int { A };\n", "c23",
-     "C23 §6.7.2.2 enum-type-specifier；gcc -std=c23 OK"),
-]
+# 标准等效**缺口清单已清零**（2026-10-21 循环 #42）：`enum e : int` 是最后一条，转正后
+# 本文件不再有 `xfail(strict)` 用例。缺口历史与逐条判据见
+# `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」与 CHANGELOG 对应循环。
 
 
 @pytest.fixture(autouse=True)
@@ -352,26 +348,72 @@ class TestC23UnderscoreNoMsg:
         assert "StaticAssertC23UnderscoreNoMsgDecl" not in names, names
 
 
-class TestStandardGaps:
-    """标准等效**缺口清单**（xfail strict：修好后变红，提醒把用例转正并删缺口条目）。
+class TestC23EnumUnderlying:
+    """C23 §6.7.2.2 `enum-type-specifier`：`enum [tag] : <specifier-qualifier-list> …`。
 
-    ⚠ **缺陷态判据**：每条都是"gcc 接受、tpc 拒绝"的合法标准代码——断言的是
-    **接受**（进 AST + linter 零诊断 + 渲染 token 序列不变 + 幂等）。当前全体不成立
-    ⇒ xfail；修好一条就 red 一条，正是"缺口已修"的信号。清单与归属见
-    `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」。
+    缺口原样（oracle 实测）：`enum e : int { A };` 在 gcc C23 接受、tpc 拒绝（最后一条
+    C11/C23 语法面缺口，循环 #42 转正）。修法 = 核心 `EnumSpecifier` / `AnonEnumSpecifier`
+    的"标签后 / 枚举体前"加**空槽位** `@EnumSpecExtra?`，c23 插件注入 `: @MemberSpec`
+    （`specifier-qualifier-list` = 说明符-限定符，**不含指针**；ADR-0023 门控 ⇒ 下档不可匹配）。
+    判据四条：
+      ① 五种合法形态都进 AST 且带 `EnumUnderlyingType` 节点（`type` 绑定到成员说明符）；
+      ② 渲染 token 序列逐项相同 + 幂等；
+      ③ 下档（c11/c17）整体拒（`_BELOW_TIER_STATE` 一条）；非法形态（指针 / 缺类型）仍拒；
+      ④ **两处过接受**如实锁定（gcc 拒绝、语法层宽进）：`enum e : int x;`、`enum : int;`。
     """
 
-    @pytest.mark.parametrize(
-        "label,src,tier,basis", _GAPS, ids=[c[0] for c in _GAPS]
-    )
-    @pytest.mark.xfail(strict=True, reason="C11/C23 语法面缺口（gcc 接受、tpc 拒绝），"
-                                          "清单见 docs/gaps/gap-language-pack-scope.md")
-    def test_standard_gap_is_currently_open(self, label, src, tier, basis):
-        env = _env(tier)
+    _ACCEPT = [
+        # (标签, 源码, 期望 underlying 的类型说明符首 token 拼写)
+        ("带枚举体的固定底层类型（缺口样本）", "enum e : int { A };\n", "int"),
+        ("不透明枚举声明（无体，C23 起即完整）", "enum e : int;\n", "int"),
+        ("限定符 + 多词类型", "enum e : const unsigned long { A };\n", "const"),
+        ("typedef 名作底层类型", "typedef int myint;\nenum e : myint { A };\n", "myint"),
+        ("匿名枚举带底层类型", "enum : int { A };\n", "int"),
+    ]
+
+    @pytest.mark.parametrize("label,src,first", _ACCEPT, ids=[c[0] for c in _ACCEPT])
+    def test_accepted_in_c23(self, label, src, first):
+        env = _env("c23")
         ast = env["parse"](src)
-        assert ast is not None, f"{label}：解析不出 AST（{basis}）"
-        assert getattr(ast, "sub_node", None), f"{label}：空 AST（{basis}）"
-        assert env["lint"](src) == [], f"{label}：linter 有诊断（{basis}）"
+        assert ast is not None and getattr(ast, "sub_node", None), f"{label}: 空 AST"
+        nodes = list(iter_nodes(ast))
+        underlying = [n for n in nodes if n.node_name == "EnumUnderlyingType"]
+        assert underlying, f"{label}: 缺 EnumUnderlyingType（{[n.node_name for n in nodes]}）"
+        type_node = getattr(underlying[0], "type", None)
+        assert type_node is not None, f"{label}: underlying.type 未绑定"
+        assert type_node.node_name == "MemberSpec", f"{label}: {type_node.node_name}"
+        assert env["lint"](src) == [], f"{label}: linter 有诊断"
         out = env["render"](src)
-        assert env["tokens"](out) == env["tokens"](src), f"{label}：渲染 token 序列不同"
-        assert env["render"](out) == out, f"{label}：渲染不幂等"
+        assert env["tokens"](out) == env["tokens"](src), f"{label}: {src!r} → {out!r}"
+        assert env["render"](out) == out, f"{label}: 不幂等"
+
+    def test_underlying_binds_through_anonymous_host_too(self):
+        """命名体与匿名体共用同一空槽位（一处注入两处生效）。"""
+        for src in ("enum e : int { A };\n", "enum : int { A };\n"):
+            names = {n.node_name for n in iter_nodes(_env("c23")["parse"](src))}
+            assert "EnumUnderlyingType" in names, (src, sorted(names))
+
+    def test_invalid_underlying_shapes_rejected(self):
+        """指针 / 缺类型的底层类型仍拒（标准 `enum-type-specifier` 只收说明符-限定符列表）。"""
+        env = _env("c23")
+        for src in ("enum e : int * { A };\n", "enum e : ;\n"):
+            ast = env["parse"](src)
+            assert not getattr(ast, "sub_node", None), f"{src!r}: 不该解析出顶层节点"
+            assert env["lint"](src), f"{src!r}: linter 零诊断（静默接受非法形态）"
+
+    def test_known_over_acceptance_boundary(self):
+        """**一处过接受**（gcc C23 拒；语法层宽进口径）——锁住现状，改动须同步 gap 档。
+
+        `enum e : int x;`：无枚举体 + 声明符可省 ⇒ 配平（gcc：underlying type may not be
+        specified here——固定底层类型只允许出现在"不透明枚举声明（无声明符）"或带体形态）。
+        要严格禁掉需把"不透明枚举声明"做成独立语句形态（+1 规则 +声明/语句两层分派），
+        收益低，登记在 gap 档「仍存的接受边界」。
+
+        ⚠ 对照：`enum : int;`（匿名 + 无体）**被拒**——`AnonEnumSpecifier` 的 `@EnumBody`
+        必选（gcc 同样报 expected '{'），不属过接受（实测，2026-10-21 循环 #42）。
+        """
+        env = _env("c23")
+        src = "enum e : int x;\n"
+        ast = env["parse"](src)
+        assert getattr(ast, "sub_node", None), f"{src!r}: 现状应被宽进接受（边界已变？请复核）"
+

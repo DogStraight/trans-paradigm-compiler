@@ -96,6 +96,11 @@ _INCREMENT_MATRIX = [
     ("_Static_assert struct 成员 单参（下划线拼写，c23）",
      'struct s { int a; _Static_assert(1); };\n',
      "StaticAssertC23UnderscoreNoMsgDecl", "c23"),
+    # C23 §6.7.2.2 enum-type-specifier：形态只由核心 token（`:` + 类型词）组成，
+    # 靠"空槽位 + 可选件规则随档加载"（ADR-0023）才不 leak 到下档（循环 #42）
+    ("enum 固定底层类型（c23）", "enum e : int { A };\n", "EnumUnderlyingType", "c23"),
+    ("enum 固定底层类型 不透明声明（c23）", "enum e : int;\n", "EnumUnderlyingType", "c23"),
+    ("enum 固定底层类型 匿名体（c23）", "enum : int { A };\n", "EnumUnderlyingType", "c23"),
     ("alignas（c23）", "alignas(16) char buf[64];\n", "AlignasC23Spec", "c23"),
     ("alignof（c23）", "int a = alignof(int);\n", "AlignofC23Expr", "c23"),
     ("thread_local（c23）", "thread_local int t;\n", "ThreadLocalC23Spec", "c23"),

@@ -30,7 +30,7 @@
 | 3 | 符号基座两处错位（形参符号落 `<global>`；函数定义符号落 `<FunctionScope>`） | **另立**（待作者拍板） | F1/F2 会改 **P1 公开产物** ⇒ 命中升级判据①（契约面）；当前已落 N1/N2 派生视图（`_api.declaration_view()`，产物逐字节不变）兜住"声明位置"唯一入口 | 作者批准变更 P1 公开产物 | `docs/gaps/gap-c-semantic-base.md` |
 | 4 | 阶段 3 S3 函数原型/定义一致性 | 暂缓 | 需**类型模型**（所有语义片里代价最大）；同批 S5 部分条款未取得原文，**枚举值重复属 C 档反证 ⇒ 永不实现** | 类型模型因别的需求先行引入 | `docs/gaps/gap-c-semantic-base.md` |
 | 5 | CSC001 函数位 / CSC B 档 7 条 | 暂缓 | 一 id 一 kind ⇒ 函数位组合需"一 id 多 kind"或组件 postpass（引擎检查分发面变更）；CSC004/007–012 仅权威转述、`default=false` | 取得原文句（C11/C23 §6.7.1 各段）**或**更大真实语料零误报；或"一 id 多 kind"被别的规则一并需要 | `grammar/c/plugins/checks/`（循环 #10 裁定） |
-| 6 | 语法缺口（真实语料驱动）：逐声明符位宽 `int a : 3, b : 4;`｜参数位 `register`｜ENUM003 的 C23 豁免｜复合字面量 `(t){1}` raw 候选 | 暂缓 | 均需**形态改动/语法落地/check 需求**才有意义：位宽标准上属声明符（本包绑在成员声明末尾）；`void f(register int x);` 合法但参数位不接受存储类；`enum E : int;` 语法面尚不支持；复合字面量**承载期建候选失败**（`not_understood: candidate_missing`，用户面不变） | 真实语料/头文件出现该形态；ENUM003 例外——**将来实现固定底层类型枚举时必须加"带底层类型 ⇒ 恒完整"豁免**，否则误报 | `grammar/c/02_types.toml::StructMember`、`grammar/c/README.md`（循环 #10/#11 交付边界） |
+| 6 | 语法缺口（真实语料驱动）：逐声明符位宽 `int a : 3, b : 4;`｜参数位 `register`｜复合字面量 `(t){1}` raw 候选 | 暂缓 | 均需**形态改动/语法落地/check 需求**才有意义：位宽标准上属声明符（本包绑在成员声明末尾）；`void f(register int x);` 合法但参数位不接受存储类；复合字面量**承载期建候选失败**（`not_understood: candidate_missing`，用户面不变） | 真实语料/头文件出现该形态 | `grammar/c/02_types.toml::StructMember`、`grammar/c/README.md`（循环 #10/#11 交付边界） |
 | 7 | L1 渗透剩余面：插件侧 AST-first 改写｜引擎侧未声明的取值形态假设 | 暂缓（长期方向） | 动机是**插件代码质量**与**多形态语言包**，无当前行为缺陷；且须自带验证（无引擎侧渗透判据兜底）⇒ 不占主线 | 该子系统再动时顺带做（判据②/③），或新增第二形态语言包 | `ROADMAP.md`「语言知识渗透复审（L1）」 |
 | 8 | 循环纪律机械化 4 项（判据色产物门禁 / `cycle_triggers.py` / 审计反例入库 / `policy/*.md` 逐文件上限） | 暂缓 | 现靠 `policy/collaboration.md` + 审计执行；机械化本身要维护（且 `policy` 逐文件上限的数字待压缩收口后才有意义） | 认为"循环纪律须机器化"时逐项立项 | `policy/collaboration.md`（task-52 审计派生） |
 | 9 | Verilog 宏**定义侧**形式语法声明（补 `[macro_syntax]` 段启用 linter 检查） | 暂缓 | C 侧检查已改为声明驱动（未声明 ⇒ 不跑）；verilog 的宏定义语法不同——形参项可带默认值（`a=1`）、无 `...`/`#`/`##` ⇒ 启用前引擎需先支持形参默认值形态（`param_default_operator`），否则把合法定义误报为非法 | Verilog 包需要宏定义形式语法检查（或真实语料出现畸形 `` `define ``） | `linter/macro_syntax.py`、`preprocessor/macro_shape.py`、`grammar/verilog/base/_macro.toml` |
@@ -47,7 +47,8 @@
 
 - 本档**剩余**策略项均为暂缓/不采 ⇒ 无行为验证。可验证面是**分类纪律本身**：容量由
   `tests/policy/test_planning_doc_budget.py` 守；"TODO 不再出现本表条目"由待办盘点核对（2026-10-17 已执行：
-  `TODO.md` 117 行，见 CHANGELOG）。已取回实现的行按纪律删除（#1 档位门控 → ADR-0023）。
+  `TODO.md` 117 行，见 CHANGELOG）。已取回实现的行按纪律删除（#1 档位门控 → ADR-0023；
+  #6 的 ENUM003 C23 豁免 → 循环 #42，随枚举固定底层类型语法落地）。
 - **反向自检**：触发条件出现却未取回 = 本决策失效。届时**先改本档（删该行）再立项**，不许绕过。
 
 > Impl: —（决策为暂缓/不采，无实现）

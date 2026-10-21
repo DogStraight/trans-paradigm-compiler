@@ -253,6 +253,8 @@ def _named_attrs(node: Node, config: dict) -> dict:
     `tag_capture` 声明键（全在 TOML；包内不含语言名）：
       `kind_path`    取种类子节点（`StructOrUnion.base` → `struct`/`union`）
       `body_path`    取"体"子节点；存在 ⇒ `has_body=True`（定义），缺失 ⇒ 引用/前向声明
+      `complete_path` 取"**无体也完整**"的声明信号（C23 固定底层类型枚举：`enum E : int;`
+                     按 §6.7.2.2 总是完整）⇒ `has_complete_type=True`
       `default_kind` 无 `kind_path` 时的字面种类（enum 说明符没有种类子节点）
     """
     attrs: dict = {
@@ -276,6 +278,11 @@ def _named_attrs(node: Node, config: dict) -> dict:
     body_path = capture.get("body_path")
     if body_path:
         attrs["has_body"] = any(isinstance(v, Node) for v in _walk(node, body_path))
+    complete_path = capture.get("complete_path")
+    if complete_path:
+        attrs["has_complete_type"] = any(
+            isinstance(v, Node) for v in _walk(node, complete_path)
+        )
     return attrs
 
 

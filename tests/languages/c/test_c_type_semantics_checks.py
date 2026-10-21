@@ -3,7 +3,7 @@
 被测：`grammar/c/plugins/checks/type_semantics/`（C 包第二个 check 组件）——
 规则表 `rules/types.toml`（id/kind/severity/default/message + 头注条款引文与档位）+
 L2 handler `rules/_tag_check.py`，输入面 = 包侧 `tag_capture` 挂的符号 attrs（`tag_kind`/`has_body`/
-声明起点）+ 同作用域符号表 `scope.symbols`。
+`has_complete_type`（C23 固定底层类型枚举，循环 #42）/ 声明起点）+ 同作用域符号表 `scope.symbols`。
 
 判据覆盖 task-38 的 7 条：
   1. 正样本（不报）：前向+定义、引用+定义、内层同名 tag、跨作用域同名枚举常量、8 语料 default+all 两档 0 条
@@ -61,6 +61,11 @@ POSITIVE: dict[str, str] = {
     "struct 与 union 不同 tag": "struct S { int a; };\nunion U { int b; };\n",
     "枚举定义后引用": "enum E { A };\nenum E;\n",
     "外层完整 enum 的块内引用": "enum E { A };\nvoid f(void){ enum E; }\n",
+    # C23 §6.7.2.2：带固定底层类型的枚举**总是完整**（`enum E : int;` 是合法的
+    # 不透明枚举声明）⇒ ENUM003 必须豁免（循环 #42；ADR-0021 行 6 的触发条件）
+    "C23 固定底层类型枚举（带体）": "enum E : int { A };\n",
+    "C23 固定底层类型枚举（不透明声明）": "enum E : int;\n",
+    "C23 固定底层类型后的裸引用": "enum E : int;\nenum E;\n",
     "枚举常量与 tag 同名": "enum { A };\nstruct A { int x; };\n",
     "同一 struct 多次引用": "struct S;\nstruct S *f(void);\nstruct S *g(void);\n",
 }
@@ -131,6 +136,20 @@ class TestPositiveSamples:
         """tag 命名空间独立：枚举常量与同名 tag 不冲突。"""
         _, diags = _analyze(c_env, "enum { A };\nstruct A { int x; };\n", enabled=_all_ids())
         assert diags == [], diags
+
+    def test_enum003_c23_fixed_underlying_type_is_exempt(self, c_env):
+        """C23 固定底层类型 ⇒ 恒完整 ⇒ ENUM003 不报（ADR-0021 行 6 的豁免，循环 #42）。
+
+        判据取**符号 attrs**（`has_complete_type` 由 `tag_capture.complete_path` 提供）
+        与诊断面两处：attr 缺失时诊断会误报（本轮缺陷态实测 1 条），故两处都要断。
+        """
+        src = "enum E : int;\n"
+        at, diags = _analyze(c_env, src, enabled=_all_ids())
+        assert diags == [], [str(d) for d in diags]
+        tags = [s for s in at.all_symbols if s.kind == "tag"]
+        assert len(tags) == 1, [(s.name, s.attrs) for s in tags]
+        assert tags[0].attrs.get("has_body") is False, tags[0].attrs
+        assert tags[0].attrs.get("has_complete_type") is True, tags[0].attrs
 
 
 class TestNegativeSamples:

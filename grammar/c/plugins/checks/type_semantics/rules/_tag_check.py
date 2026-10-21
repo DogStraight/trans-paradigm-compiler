@@ -7,6 +7,7 @@
 
     tag_kind   struct | union | enum（`StructSpecifier.kind.base` / enum 的字面 `default_kind`）
     has_body   该声明是否带体（定义）——缺省 = 引用 / 前向声明
+    has_complete_type  无体也完整的声明信号（C23 固定底层类型枚举 `enum E : int;`）
     decl_line / decl_start_line / decl_start_col  声明位置（可见性比较与去重键）
 
 **免误报的两条硬约束**（实测语料 9 条带体定义 + 24 条无体引用）：
@@ -37,6 +38,14 @@ def _has_body(symbol: Any) -> bool:
     return bool(_attrs(symbol).get("has_body"))
 
 
+def _has_complete_type(symbol: Any) -> bool:
+    """**无体也完整**的声明信号（C23 §6.7.2.2：带固定底层类型的枚举总是完整）。
+
+    来源 = 包侧 `tag_capture.complete_path`（`EnumSpecifier.underlying` 存在）。
+    """
+    return bool(_attrs(symbol).get("has_complete_type"))
+
+
 def _tag_kind(symbol: Any) -> str | None:
     val = _attrs(symbol).get("tag_kind")
     return val if isinstance(val, str) and val else None
@@ -62,8 +71,9 @@ def _line(symbol: Any) -> int | None:
 
 
 def _visible_complete_enum(symbol: Any) -> bool:
-    """作用域链上是否有**可见**的"带体同名 enum"声明（判定 `enum E;` 是否合法）。
+    """作用域链上是否有**可见**的"完整同名 enum"声明（判定 `enum E;` 是否合法）。
 
+    完整 = 带体（枚举列表）**或**带固定底层类型（C23 §6.7.2.2：`enum E : int;` 总是完整）。
     可见性：同作用域的首例必然在前（返回 True）；外层作用域的声明需**声明行 ≤ 本例声明行**
     （作用域始于 tag 出现之后，故后方定义对本例不可见）。行号缺失时保守视为可见（宁漏报不误报）。
     """
@@ -72,7 +82,7 @@ def _visible_complete_enum(symbol: Any) -> bool:
     while scope is not None:
         cand = getattr(scope, "symbols", {}).get(symbol.name)
         if cand is not None and cand is not symbol:
-            if _tag_kind(cand) == "enum" and _has_body(cand):
+            if _tag_kind(cand) == "enum" and (_has_body(cand) or _has_complete_type(cand)):
                 cand_line = _line(cand)
                 if line is None or cand_line is None or cand_line <= line:
                     return True
@@ -148,8 +158,10 @@ def check_tag(symbol: Any, rule: dict, context: Any) -> str | None:
         )
 
     # ── ENUM003 `enum E;`（无枚举列表）只能出现在该类型完整之后 ──
+    # C23 §6.7.2.2 起：**带固定底层类型**的枚举**总是完整**（`enum E : int;` 合法）⇒ 本条豁免
+    # （ADR-0021 行 6 的"实现固定底层类型枚举时必须加豁免"落地）。
     if rid == "ENUM003":
-        if _tag_kind(symbol) != "enum" or _has_body(symbol):
+        if _tag_kind(symbol) != "enum" or _has_body(symbol) or _has_complete_type(symbol):
             return None
         if _visible_complete_enum(symbol):
             return None

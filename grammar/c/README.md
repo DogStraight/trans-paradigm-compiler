@@ -49,7 +49,11 @@
     `StaticAssertC23NoMsgDecl`）；**下划线拼写 `_Static_assert` 的单参形态**
     （§6.7.10 对两种拼写同语法，循环 #41：c23 插件新增规则
     `StaticAssertC23UnderscoreNoMsgDecl`，与 c11 的两参规则同首 token 靠试解析区分，
-    靠 ADR-0023 档位门控只在 c23 档加载）；`u8` 字符常量前缀、**二进制常量** `0b…`
+    靠 ADR-0023 档位门控只在 c23 档加载）；**枚举固定底层类型** `enum e : int { A };` /
+    不透明声明 `enum e : int;` / 匿名体 `enum : int { A };`（C23 §6.7.2.2
+    `enum-type-specifier: : specifier-qualifier-list`，循环 #42：核心
+    `EnumSpecifier`/`AnonEnumSpecifier` 的空槽位 `@EnumSpecExtra?` + c23 规则注入
+    `: @MemberSpec`，下档空槽位不可匹配 ⇒ 整体拒）；`u8` 字符常量前缀、**二进制常量** `0b…`
     （`[[number.based]]` 按名合并给 `c_prefix` 加分支）、**数字分隔符** `1'000`
     （`digit_separator` 按名合并给 `c_dec`/`c_prefix` 两形态；八进制 digit 序列由
     `c_dec` 的 `digits = "any"` 覆盖，不另声明——避免重复知识）、`nullptr`、
@@ -117,7 +121,7 @@
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
 | `[[属性]]`（c23）的**实参形态** | **已收口两条（2026-09-28）**：✅ **多实参** `[[gnu::nonnull(1, 2)]]`（实参由 `@Expression` 改收 `@ArgumentList`——`Expression` 是 assignment-expression 层级、不含逗号）+ ✅ **属性表尾随逗号** `[[nodiscard,]]`（`AttributeList` 加独立可选元素 `(comma)?` + **单独绑定**，**不得塞进 `items`**：join 分隔符会叠加成 `, ,`）。**仍未覆盖 ①②④⑤**，"现状 / 为什么不做 / 触发条件"逐条登记在 `plugins/c23/21_attributes.toml` 头注与 `TODO.md`：① 空实参 `[[deprecated()]]`（**低优先**：实测可配置面实现，代价 +1 规则 +1 AST 节点层；触发 = 真实语料）；② 相邻字面量拼接 `[[deprecated("a" "b")]]`（**不做**：硬拼只能覆盖 `literal.string+` 一种形态、+2 规则；旧记的"备选写全序列会被 `parser/follow.py` 的 choice 盲区卡掉"已随该盲区修复作废）；④ 空属性表 `[[]]`（**不做**：`@Attribute?` 一行即可，但**与③合体后 `[[,]]` 会被接受**）；⑤ 配平 token 序列 `[[f(int)]]` / `[[f(1 2)]]`（**暂不做**：现役 production 微语法是闭集，需新增元素类型，改动面横跨 parser/linter/preprocessor 10+ 处分派表；触发 = 真实语料出现非表达式 token 序列）。**位点已全部落地**（2026-09-28：说明符位 / 属性声明 / 声明符内 / 枚举项——后两处走**共用空槽位** `@AttributeSlot`）；另有**一处过接受**（`(f) [[deprecated]]` 也认，标准只允许紧跟 identifier 之后）如实登记在 `plugins/c23/21_attributes.toml` 头注。判据 `test_c23_increment_plugin.py`：`test_attribute_known_boundaries`（①②④⑤ 仍须被拒）+ `test_attribute_over_acceptance_boundaries`（③ 的 `[[nodiscard,,]]` / `[[,]]` 仍须被拒）+ `test_attribute_list_binds_trailing_comma_separately` / `test_attribute_args_bind_through_argument_list` |
 | 十进制浮点**字面量后缀**（`1.5df`/`1.5dd`/`1.5dl`） | ✅ **已落地**（2026-09-26）：走声明级合并 `merge = "by-name"`（`plugins/c23/_number_c23.toml` 只补 `c_dec` 的 `suffix`），**不是**改核心 `base/_number.toml`（那会让基线档也接受 `1.5dd`） |
-| **C11/C23 语法面缺口 1 条样本**（`enum` 固定底层类型） | 阶段 5「标准等效断言面」实测（oracle = gcc 16.1.0 `-std=… -pedantic-errors`）：**合法标准代码当前被拒**。逐条判据、标准归属、成因与修法在 `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」；用 `tests/languages/c/test_c_standard_conformance.py` 的 `xfail(strict=True)` 钉住（修好即红提醒转正）。成员表位在循环 #35、字面量族 #37、数字分隔符 #38、**`_Static_assert(1)` 单参下划线拼写 #41** 已转正 |
+| C11/C23 语法面缺口 | **已清零**（2026-10-21 循环 #42）：最后一条 = `enum e : int` 固定底层类型。清单历史 / 逐条修法见 `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」与 CHANGELOG；现行双向断言面在 `tests/languages/c/test_c_standard_conformance.py` |
 | VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
 | 完整类型系统 / 求值 / 实现定义行为 / K&R 老式定义 | **明确不做**（超出一致性检查工具链的定位） |
 
@@ -345,14 +349,15 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
 | 落点 | 作用 |
 |---|---|
 | `02_types.toml:48`（`StructSpecifier`）/ `:145`（`EnumSpecifier`） | `tag_capture = { kind_path/body_path/default_kind }`：种类（`struct`/`union`/`enum`）与**有无体**（定义 vs 引用/前向声明）——语言知识在 TOML |
-| `plugins/semantics/_api.py::_named_attrs` | `site="named"` 采集：把 `tag_kind`/`has_body` + 声明起点挂符号 attrs（`collect_named_site` 统一入口） |
+| `plugins/semantics/_api.py::_named_attrs` | `site="named"` 采集：把 `tag_kind`/`has_body`/`has_complete_type`（C23 固定底层类型枚举）+ 声明起点挂符号 attrs（`collect_named_site` 统一入口） |
 | `plugins/checks/type_semantics/rules/types.toml` | 规则=数据（`id`/`kind`/`severity`/`default`/`message`；**条款引文与档位写在头注**） |
 | `plugins/checks/type_semantics/rules/_tag_check.py` | L2 handler：只读 attrs + 同作用域符号表 `scope.symbols`；**按 `(规则, 名, 作用域)` 去重** |
 
 **规则与档位**（`default` 由条款档位自动定）：
 `TAG001` 同一 tag 内容至多定义一次（§6.7.2.3 原文；**只在冲突双方都带体**时报）、
 `TAG002` 同一 tag 必须同用 struct/union/enum（§6.7.2.3 原文）、
-`ENUM003` `enum E;` 无枚举列表只能出现在完整之后（§6.7.2.3 原文）⇒ 三条 **`default = true`**；
+`ENUM003` `enum E;` 无枚举列表只能出现在完整之后（§6.7.2.3 原文；**C23 豁免**：带固定底层
+类型的枚举总是完整 ⇒ `enum E : int;` 不报，循环 #42）⇒ 三条 **`default = true`**；
 `ENUM001` 同作用域枚举常量重名、`ENUM002` 反向（普通标识符撞枚举常量）——依据是 §6.7.2.2 **脚注 107**
 （非规范性）⇒ **`default = false`**（opt-in）。**枚举值重复永不实现**（§6.7.2.2 note 明确允许）。
 
@@ -361,12 +366,11 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
 实测：真实语料 **9 条带体定义 + 24 条无体引用**，naive"同 tag ≥2 次即报"会误报（未去重 24 条；
 本实现的去重口径下缺陷态复现 3 条）。
 
-判据：`tests/languages/c/test_c_type_semantics_checks.py`（13 正样本 × 全规则启用 + 9 负样本逐条 +
+判据：`tests/languages/c/test_c_type_semantics_checks.py`（16 正样本 × 全规则启用 + 9 负样本逐条 +
 位置 + 三次定义去重 + 两档语料零误报 + 默认开关按档位）；缺陷态变红（去"双方带体" / 去作用域判定
 各一次；对应变异见 `tools/check_gate_efficacy.py`）。**边界**：成员重名（C99 原文无约束句）、不完整类型使用、位域宽度、
-枚举值 representable-as-int、跨 TU；C23 固定底层类型枚举（`enum E : int;`）本包语法面**尚未支持**
-（lint 拒）——**前置是档位门控**（`EnumSpecifier` 的 `:` 位由 c23 注入会漏进下档，同
-`_Static_assert(1)`，见缺口档）⇒ ENUM003 的"固定底层类型恒完整"豁免暂不适用，将来支持时需同步。
+枚举值 representable-as-int、跨 TU；枚举 tag 的"带 / 不带固定底层类型"混用（§6.7.2.2 约束句）
+**未实现**（语法面已接受两形态；触发 = 真实语料 / 检查需求，见缺口档接受边界表）。
 
 ## 标签与 goto 语义（LAB · 本包第三个 check 组件，走 **postpass**）
 

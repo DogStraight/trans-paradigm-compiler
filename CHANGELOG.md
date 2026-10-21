@@ -7,6 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C23 枚举固定底层类型 `enum e : int`（标准等效缺口 1 → 0）**（2026-10-21，循环 #42，
+  C 标准面 + 语义检查面）：C23 §6.7.2.2 `enum-type-specifier: : specifier-qualifier-list`
+  此前未实现 ⇒ 合法标准代码被拒（oracle：gcc 16.1.0 `-std=c23 -pedantic-errors`；同批实测
+  带体 / 不透明声明 `enum e : int;` / 限定符 / typedef 名 / 匿名体五种合法形态与两种拒绝形态）。
+  修法：
+  · **C 包语法面**：核心 `EnumSpecifier` / `AnonEnumSpecifier` 在"标签后 / 枚举体前"加
+    **空槽位 `@EnumSpecExtra?`**（命名体与匿名体共用，一处注入两处生效；空槽位 = 不可匹配，
+    ADR-0023）；c23 插件 `23_enum_underlying.toml` 注入 `: @MemberSpec`
+    （`specifier-qualifier-list` 无指针，与标准同形）。档位门控 ⇒ 下档 `enum e : int …` 整体拒，
+    既有 `enum e { A };` 基线行为逐字不变。
+  · **语义检查面**（ADR-0021 行 6 的触发条件）：`tag_capture` 加 `complete_path`
+    （`_api.py::_named_attrs` → 符号 attr `has_complete_type`）；ENUM003 按 C23 豁免——
+    **带固定底层类型的枚举总是完整**，`enum E : int;` 不再误报（`_visible_complete_enum` 的
+    "完整"判据同步为"带体或带底层类型"）。
+  **行为变化**：c23 档 `enum e : int { A };` / `enum e : int;` / `enum : int { A };` 等接受、
+  linter 零诊断、渲染 token 逐项相同 + 幂等；c11/c17 仍拒（空 AST + 诊断）。
+  **登记边界**（gcc 拒 / 未实现，落 gap 档「仍存的接受边界」+ 用例锁现状）：
+  ① 过接受 `enum e : int x;`（固定底层类型 + 声明符；语法层宽进，
+  `test_known_over_acceptance_boundary` 锁现状）；② 枚举 tag 的"带 / 不带固定底层类型"
+  混用约束（§6.7.2.2 约束句；语义检查未实现，触发 = 真实语料 / 检查需求）。
+  验证：conformance 新增 `TestC23EnumUnderlying`（5 接受 + 绑定形状 + 非法形态拒绝 +
+  过接受边界）+ 下档三态 1 条；c23 插件 `_CASES` 5 行 + 注入点表；档位矩阵 34 → 37 构造；
+  类型语义正样本 13 → 16（ENUM003 豁免含 attrs 断言）；`c_acceptance` 46 → 47 条 / 空洞 0；
+  缺口清单 1 → 0（`test_c_standard_conformance.py` 已无 `xfail` 用例）；全量
+  **4339 passed / 7 skipped / 0 xfailed**；lint hit_code 33 / fp 0 / valid 7；
+  A/B `--mode cli --products` verilog 0/144；pyright strict 0；`check_doc_refs` PASS；
+  门禁变异 **110 → 113**（丢核心槽位 / 丢规则注入 / 去 ENUM003 豁免，
+  `--only 111/112/113` 实测变红）。文档：`grammar/c/README.md`、`02_types.toml` 注释、
+  c23 `tpc.toml` 头注、`checks/type_semantics/rules/{types.toml,_tag_check.py}` 头注、
+  gap 两档、ADR-0021 行 6（已取回实现、按纪律从策略表删除 ENUM003 项）、
+  `docs/MODEL_INDEX.md`、TODO/ROADMAP/PROGRESS。
+
 - **C23 单参下划线拼写 `_Static_assert(1)`（标准等效缺口 2 → 1）**（2026-10-21，循环 #41，
   C 标准面 + 引擎档位面）：C23 §6.7.10 的消息可省对**两种拼写**都成立，但 c11 的
   `_Static_assert` 规则固定两参 ⇒ 合法标准代码被拒（oracle：gcc 16.1.0 `-std=c23
