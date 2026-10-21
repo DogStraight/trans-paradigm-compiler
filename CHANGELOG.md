@@ -232,6 +232,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **C 真实语料调查第二轮：根因更正 + 语法面方案（决策材料）**（2026-10-21，循环 #44，
+  **决策轮**；未动生产代码）：#43 把两类缺口判成"linter 单侧误报"**不成立**——实测
+  `parser._parse_truncated=True`（部分 AST），根因在**语法面**：「typedef 名」只在首个说明符位
+  可用，`SpecRest` 刻意不含它（贪婪重复会吃掉声明符名），于是 `extern T *p;` /
+  `const T *p`（含成员位 / 参数位 / `sizeof` 类型名位 / 函数定义位）共 **6 个宿主形态**
+  整条无产生式可匹配；真实语料 zlib（`ZEXTERN`→`extern`）与 cJSON（55 处
+  `const cJSON * const`）命中。另更正：`ProjectChecker` 结果 dict 的 `parse_ok` 字段
+  **不反映解析截断**（部分 AST 也 True），判完整须用 `parser._parse_truncated`。
+  方案 A（引擎 `pre_scan` 驱动的 typedef 名 token 重定型，与语言包既有
+  `type_name`/`trial_as` 声明同族）**命中「引擎↔插件边界」⇒ 需作者拍板**；
+  方案 B（纯语言包 6 宿主"声明符优先"交替）可细节级自决但影响面大
+  （`_Atomic(int) x` 这类"限定符即类型"是已知陷阱）；C 否。
+  文档：`docs/gaps/gap-c-real-corpus.md`（现状表更正 + 6 宿主最小复现矩阵 + 两方案 +
+  判据草案 sanity 改为 `_parse_truncated`）+ `PROGRESS.md` 下一轮入口。
+
 - **C 真实语料接入调查：方案与判据草案 + 两类 linter FP 最小复现**（2026-10-21，循环 #43，
   调查轮；**docs-only**，不动生产代码）：退出判据 5（真实 C 语料误报基线进门禁）此前空白，
   本轮实测确认**当前不可直接落地**：
