@@ -222,6 +222,16 @@ class TestDefaultTierEntry:
         assert "StaticAssertDecl" in _nodes_with(pack, _C11_SRC)
         assert "StaticAssertC23MsgDecl" in _nodes_with(pack, _C23_SRC)
 
+    def test_baseline_tier_accepts_core_spec_order(self, tmp_path):
+        """说明符顺序自由（存储类/限定符 + typedef 名）是**核心 C99** 语法。
+
+        判据 = 基线档（`enabled=[]`）也解析完整：`TypedefDeclarators` 包装节点出现，
+        说明该能力不会因插件（c11/c23）未启用而丢失。
+        """
+        pack = _make_pack(tmp_path, [])
+        names = _nodes_with(pack, "typedef int T;\nextern T *p;\n")
+        assert "TypedefDeclarators" in names, names
+
     def test_real_pack_meta_matches_c23_tier(self):
         """真实包的启用清单等于最强档（c11+c17+c23）——避免"文档说一套、包里另一套"。"""
         with open(os.path.join(_PACK, "tpc.toml"), "rb") as f:

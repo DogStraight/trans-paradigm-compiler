@@ -7,6 +7,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 声明说明符顺序自由 + 指针限定符**（2026-10-21，循环 #44，C 语法面；作者拍板走 B）：
+  C 的 `declaration-specifiers` 顺序自由——typedef 名可出现在存储类/限定符之后
+  （`extern size_t n;` / `const T *p`），而本包此前只允许 typedef 名在首说明符位
+  （`SpecRest` 是贪婪重复、不能含 `@TypedefName`，否则 `int x;` 的 `x` 会被当类型名）。
+  ⇒ 真实 C 语料 zlib（`ZEXTERN`）、cJSON（55 处 `const cJSON * const`）大面积截断/误报。
+  修法（**纯语言包**，无引擎改动）：宿主声明符位做「**声明符优先**」交替——先按既有
+  `@DeclaratorList` / `@Declarator` / `@InitDeclarator` 读（既有形态逐字不变），失败再读
+  「`@TypedefName` + 声明符」，由三个包装规则（`TypedefDeclarators` / `TypedefDeclarator` /
+  `TypedefInitDeclarator`）承载；节点绑定仿被包装规则的消费面（`items` / `declarator` /
+  `direct`），使 `declarators.items`、`declarator.direct.head.content` 路径对两种包装一致。
+  六个宿主：Declaration / FuncDef / StructMember / ParamDecl / ForInitDecl / TypeName。
+  **指针限定符**（C99 §6.7.6 `pointer: * type-qualifier-list_opt pointer_opt`）：
+  `@Pointer` 加 `@TypeQualifier*` ⇒ `int * const q;` / `const char * const s`。
+  **方案选择**：曾评估引擎侧 `pre_scan` 驱动的 token 重定型（A）——否：只解 G1、与将来
+  切片 1b 的符号感知机制重复投入、且引擎契约面新增；B 由原型 + 全量验证选定。
+  **行为变化**：上述形态由「截断/误报」→ 解析完整 + linter 零诊断 + 渲染 token 逐项相同 +
+  幂等；普通声明仍走第一支（`int x;` 等逐字不变；`_Atomic(int) x;` 因第一支已成功而不误读；
+  块内 `myint *b;` 仍按表达式优先——既有口径不变）。
+  真实语料探针（未入库）：cJSON 124→**56**、zutil 86→**27**、crc32 45→14、adler32 43→13、
+  gzread 40→10、compress 36→12、uncompr 35→11（余量由 G3 未命名抽象指针形参 /
+  G4 typedef 强转=切片 1b 解释，见 `docs/gaps/gap-c-real-corpus.md`）。
+  判据：`tests/languages/c/test_c_declaration_spec_order.py`（24 例：6 宿主 + 指针限定符 +
+  普通声明回归 + 符号收集）+ 档位基线档 1 例 + `c_acceptance` 47 → **48** 条 / 空洞 0；
+  `tests/languages/c` 全量零回归；门禁变异 **113 → 115**（`--only 114/115` 实测变红）。
+  文档：`grammar/c/README.md`、`01_declarations.toml` 头注（SpecRest 说明更正）、
+  `docs/gaps/gap-c-real-corpus.md`（G1/G2 收口、G3/G4 余量+方案 A 否档）、
+  TODO（G3 立项）/ROADMAP/PROGRESS。
+
 - **C23 枚举固定底层类型 `enum e : int`（标准等效缺口 1 → 0）**（2026-10-21，循环 #42，
   C 标准面 + 语义检查面）：C23 §6.7.2.2 `enum-type-specifier: : specifier-qualifier-list`
   此前未实现 ⇒ 合法标准代码被拒（oracle：gcc 16.1.0 `-std=c23 -pedantic-errors`；同批实测

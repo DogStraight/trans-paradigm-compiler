@@ -107,11 +107,13 @@ value = "$2"
 [FuncDef]
 is_statement = true
 
+# 声明符位用「声明符优先」交替（`extern T f(void) {…}`：typedef 名在存储类之后；
+# 既有形态走 `@Declarator` 第一支，逐字不变——循环 #44）。
 [FuncDef.parser]
 production = [
     "@StorageClass|@TypeQualifier|@TypeSpecifier|@FuncSpec",
     "@SpecRest*",
-    "@Declarator",
+    "(@Declarator|@TypedefDeclarator)",
     "@CompoundStmt",
 ]
 
@@ -207,11 +209,12 @@ is_statement = true
 # ⚠ 初值位既可用**表达式**也可用**声明**（C99 §6.8.5.3 的 `for (int i = 0; …)`）——
 #   声明式初值靠阶段 2b 的初始化器才可行。`@ForInitDecl` 是"说明符 + 初始化声明符"
 #   （不含结尾 `;`，因为 `;` 是 for 头自己的分隔符）。
+# 同款「声明符优先」交替（`for (const T *p = …; …)`——循环 #44）。
 [ForInitDecl.parser]
 production = [
     "@TypeQualifier|@TypeSpecifier",
     "@SpecRest*",
-    "@InitDeclarator",
+    "(@InitDeclarator|@TypedefInitDeclarator)",
 ]
 
 [ForInitDecl.parser.node]

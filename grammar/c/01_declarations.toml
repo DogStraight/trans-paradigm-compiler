@@ -30,11 +30,17 @@ production = []
 [Declaration]
 is_statement = true
 
+# ⚠ **说明符顺序自由**：C 允许 typedef 名出现在存储类/限定符**之后**（`extern size_t n;`、
+#   `const T *p`），而 `@SpecRest*` 是贪婪重复、**不得**含 `@TypedefName`（否则 `int x;` 的
+#   `x` 会被当类型名吃掉）。解法 = 声明符位做「**声明符优先**」交替：先按 `@DeclaratorList`
+#   读（既有形态逐字不变），失败再读「一个 typedef 名 + 声明符表」（`@TypedefDeclarators`）。
+#   不需要符号表、不改既有 FIRST/候选注册；同款交替见 `FuncDef` / `StructMember` /
+#   `ParamDecl` / `ForInitDecl` / `TypeName`（真实 C 语料缺口 G1，2026-10-21 循环 #44）。
 [Declaration.parser]
 production = [
     "@StorageClass|@TypeQualifier|@TypeSpecifier|@FuncSpec",
     "@SpecRest*",
-    "@DeclaratorList?",
+    "(@DeclaratorList|@TypedefDeclarators)?",
     "symbol.base.semicolon",
 ]
 
@@ -101,9 +107,11 @@ spec = "$1"
 # SpecRest — 说明符序列的其余部分（`unsigned long long` 等组合靠重复表达）
 # ⚠ **刻意不含 `@TypedefName`**：它（标识符）若进了重复项，贪婪的 `@SpecRest*` 会把
 #   声明符名当类型名吃掉（实测：`int x;` 解析成 specs=int + rest=[x] + 无声明符，
-#   `declarators` 槽位为空）。typedef 名**只允许出现在首个说明符位置**——
-#   代价是 `unsigned myint x;`（类型词之后再跟 typedef 名）暂不支持，属罕见写法，
-#   记在缺口档阶段 2 未落地项里。
+#   `declarators` 槽位为空）。typedef 名仍只在本规则**之外**表达：① 首个说明符位
+#   （`@TypeSpecifier`）；② 存储类/限定符之后的位点由**宿主声明符位的「声明符优先」
+#   交替**接住（`@TypedefDeclarators` / `@TypedefDeclarator` / `@TypedefInitDeclarator`，
+#   见 `[Declaration.parser]` 头注；循环 #44）。`unsigned myint x;` 这类**两个类型说明符**
+#   仍不支持——那不是顺序问题，C 本身也不允许两个 type-specifier。
 [SpecRest.parser]
 production = [
     "@StorageClass|@TypeQualifier|@SimpleType|@StructSpecifier|@AnonStructSpecifier|@EnumSpecifier|@AnonEnumSpecifier|@FuncSpec",
@@ -139,6 +147,63 @@ production = [
 #   `$2.items[*].sub_node[1]`：每个 `(comma,InitDeclarator)` 组的第二个子节点。
 [DeclaratorList.parser.node]
 items = ["$1", "$2.items[*].sub_node[1]"]
+
+# ── 带前缀类型的声明符包装（说明符顺序自由；`extern T *p;` / `const T *p`）──
+# 与 `@DeclaratorList` / `@Declarator` / `@InitDeclarator` 同形 + 一个前置 `@TypedefName`，
+# 由宿主用「声明符优先」交替选用（见 `[Declaration.parser]` 头注）。节点绑定刻意**仿照**
+# 被包装规则的消费面（`items` / `declarator`），让 AST 消费者（符号收集的
+# `declarators.items` + `declarator.direct.head.content`）对两种包装走**同一路径**。
+# 渲染：类型名 + 空格 + 原规则布局（`T *p` / `T f`），由宿主既有布局统一加前置空格。
+
+[TypedefDeclarators.parser]
+production = [
+    "@TypedefName",
+    "@DeclaratorList",
+]
+
+[TypedefDeclarators.parser.node]
+type = "$1"
+items = "$2.items"
+
+[TypedefDeclarators.renderer.layout]
+line = [
+    { ref = "type" },
+    " ",
+    { intent = "compact", items = "items", first_soft = false, nest = 0 },
+]
+
+
+[TypedefDeclarator.parser]
+production = [
+    "@TypedefName",
+    "@Declarator",
+]
+
+[TypedefDeclarator.parser.node]
+type = "$1"
+declarator = "$2"
+# 消费面兼容：函数/形参的符号收集路径是 `declarator.direct.head.content`（相对于宿主
+# 的 `declarator` 属性），包装节点必须把这个属性透出来（否则 `extern T f();` 的函数名、
+# `void g(const T *p)` 的形参名会静默不进符号表）。
+direct = "$2.direct"
+
+[TypedefDeclarator.renderer.layout]
+line = [{ ref = "type" }, " ", { ref = "declarator" }]
+
+
+[TypedefInitDeclarator.parser]
+production = [
+    "@TypedefName",
+    "@InitDeclarator",
+]
+
+[TypedefInitDeclarator.parser.node]
+type = "$1"
+declarator = "$2"
+
+[TypedefInitDeclarator.renderer.layout]
+line = [{ ref = "type" }, " ", { ref = "declarator" }]
+
 
 
 # ── 初始化器（阶段 2b）──
@@ -282,15 +347,19 @@ direct = "$2"
 
 # Pointer — 指针前缀 `*` 序列（自递归表达多级指针）
 # 自递归写法：首元素 `*` 之后可选再跟一层 Pointer，覆盖 `*` / `**` / `***`。
+# C99 §6.7.6：`pointer: * type-qualifier-list_opt pointer_opt`——`int * const p;` /
+#   `const char * const s`（const 指针）此前整条不可解析（真实语料 cJSON 55 处命中，G2）。
 [Pointer.parser]
 production = [
     "symbol.base.multiple",
+    "@TypeQualifier*",
     "@Pointer?",
 ]
 
 [Pointer.parser.node]
 first = "$1"
-more = "$2"
+quals = "$2"
+more = "$3"
 
 
 [ParenDeclarator.parser]
@@ -364,7 +433,7 @@ items = ["$1", "$2.items[*].sub_node[1]"]
 [ParamDecl.parser]
 production = [
     "@ParamSpec",
-    "@Declarator?",
+    "(@Declarator|@TypedefDeclarator)?",
 ]
 
 [ParamDecl.parser.node]
@@ -475,7 +544,13 @@ line = ["[", { ref = "index" }, "]"]
 line = [{ opt = { ref = "pointers" } }, { ref = "direct" }]
 
 [Pointer.renderer.layout]
-line = [{ ref = "first" }, { opt = { ref = "more" } }]
+line = [
+    { ref = "first" },
+    # 限定符列表与后续声明符名之间必须留空格（`* const p`）；无限定符时**不得**多出空格
+    # （`*p` 的既有风格：opt 组不输出）
+    { opt = { group = [" ", { join = " ", items = "quals" }, " "] } },
+    { opt = { ref = "more" } },
+]
 
 # DirectDeclarator — 头 + 属性槽 + 后缀链（`f(int a)` / `a[4]`）：后缀直接拼接，无分隔符。
 # ⚠ **属性槽 `@AttributeSlot*`（C23 §6.7.6 `identifier attribute-specifier-sequence_opt`）**：

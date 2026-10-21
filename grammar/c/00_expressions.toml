@@ -336,17 +336,22 @@ operand = "$2"
 #   语法层不得猜，故另设 `@CastTypeName`（首 token 必须类型关键字）。见 ROADMAP
 #   「C 语义层首个切片」草案：切片 1a（关键字起头，无歧义）已落地；切片 1b（typedef
 #   名起头）需符号表。
+# ⚠ `@TypedefName?` 尾槽：`sizeof(const T *)` / `_Alignas(T)` 这类「限定符在前、typedef 名在后」
+#   的类型名（`@SpecRest*` 不含 typedef 名，同声明符位的 G1；循环 #44）。贪婪尾槽在此**安全**：
+#   类型名之后只可能是指针星号/右括号，不存在「把后续声明符名吃掉」的二义（与声明符位不同）。
 [TypeName.parser]
 production = [
     "@TypeQualifier|@TypeSpecifier",
     "@SpecRest*",
+    "@TypedefName?",
     "(symbol.base.multiple)*",
 ]
 
 [TypeName.parser.node]
 first = "$1"
 rest = "$2"
-pointers = "$3"
+typedef_spec = "$3"
+pointers = "$4"
 
 
 # ── 强制转换与复合字面量（C99 §6.5.4 / §6.5.2.5）——**切片 1a：无歧义面** ──
@@ -481,6 +486,7 @@ line = [
     " ",
     { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },
 ] } },
+    { opt = { group = [" ", { ref = "typedef_spec" }] } },
     { ref = "pointers" },
 ]
 

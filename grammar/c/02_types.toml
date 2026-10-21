@@ -119,10 +119,12 @@ is_statement = true
 #   `declarator : constant-expression` 的一部分，可逐个不同）。单声明符位域
 #   （`unsigned int f : 3;`）与匿名占位（`int : 0;`）均可用；`tools/c_acceptance.py`
 #   的位域用例即单声明符形态。
+# 声明符位用「声明符优先」交替（`const T *p;`：MemberSpec 只吃 `const`，typedef 名由
+# `@TypedefDeclarators` 接；既有形态走 `@DeclaratorList` 第一支，逐字不变——循环 #44）。
 [StructMember.parser]
 production = [
     "@MemberSpec",
-    "@DeclaratorList?",
+    "(@DeclaratorList|@TypedefDeclarators)?",
     "(symbol.base.colon,@Expression)?",
     "symbol.base.semicolon",
 ]

@@ -25,8 +25,11 @@
   `[string] prefixes` 引擎声明面，见 `lexer/README.md`；C23 另增**数字分隔符**
   `1'000'000` / `0x1'F` / `0'7` / `1.5'0`——`[[number.based]] digit_separator`
   声明面，只在 c23 档声明，见下「合并既有配置」与 `lexer/README.md`）。
-- **声明与类型**：翻译单元；说明符序列（存储类 / 类型限定符 / 函数说明符
-  `inline`）；声明符递归（多级指针 / 数组 / 函数后缀 / 括号声明符 / 参数表）；
+- **声明与类型**：翻译单元；**说明符顺序自由**（存储类 / 类型限定符 / 函数说明符
+  `inline` 任意组合；typedef 名可出现在存储类/限定符**之后**——`extern size_t n;` /
+  `const T *p`，经宿主声明符位的「声明符优先」交替 `@TypedefDeclarators` 系列实现，
+  循环 #44）；**指针限定符**（`int * const q;`——C99 §6.7.6 `* type-qualifier-list_opt`）；
+  声明符递归（多级指针 / 数组 / 函数后缀 / 括号声明符 / 参数表）；
   `struct`/`union`（带标签与匿名）/`enum`；typedef 名作类型；
   位域；初始化器（含**指示符** `.field=` / `[i]=`）；**变参尾段 `...`**。
 - **语句**：compound / 表达式 / 空 / `if`(含 `else`) / `switch`(含 `case`/`default`) /

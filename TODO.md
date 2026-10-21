@@ -16,6 +16,13 @@
       的坏输入诊断面）。判据：块内每条坏语句各报一条**位置正确**的诊断。
       链：`docs/gaps/gap-parser-linter-approximation.md`
 
+### 1.3 真实语料驱动语法缺口（阶段 5）
+
+- [ ] **未命名抽象指针形参**：`void f(void *, size_t);` / `int g(const char *);` 这类只有
+      `*`、无名字的抽象声明符目前整条不可解析（ParamDecl 的声明符位只收具体声明符）；
+      真实 C 头文件常见（zlib 原型声明命中，循环 #43 探针）。判据：最小复现转正 +
+      真实语料对应诊断清零。链：`docs/gaps/gap-c-real-corpus.md`（G3）
+
 ### 1.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
 - [ ] **#3 注释归属的 token 跨度判据**：注释落在**括号内首元素前**时被上提到括号外（`int f(\n// c\nint a)`
       → 注释落在 `f` 与 `(int a)` 之间）。成因 = `_lift_gap_comments` 项间窗口上界用"迭代**末行**"，

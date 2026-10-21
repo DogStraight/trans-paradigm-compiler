@@ -28,78 +28,75 @@
 3. `include_dirs` 指向上两者。C 包声明 `include.on_missing = "error"` ⇒ **缺 include 是硬错误**
    （`tpc lint` 直接退出），不能靠"无异常"口径绕过。
 
-**实测结果**（`ProjectChecker(rules_dir="grammar/c", include_dirs=[语料, stubs])`，逐文件）：
+**实测结果**（语料探针 = `scan_directives → expand_tokens → parser/linter`，与管线同路；
+"#43" = 修 G1/G2 之前，"#44" = 循环 #44 修复后）：
 
-| 文件 | parser（`_parse_truncated`） | linter `phase-statement` |
+| 文件 | parser 截断（#43 → #44） | linter `phase-statement`（#43 → #44） |
 |---|---|---|
-| `cJSON.c` | **截断**（部分 AST） | **124** |
-| `zutil.c` | 截断 | 86 |
-| `crc32.c` | 截断 | 45 |
-| `adler32.c` | 截断 | 43 |
-| `gzread.c` | 截断 | 40 |
-| `compress.c` | 截断 | 36 |
-| `uncompr.c` | 截断 | 35 |
+| `cJSON.c` | 截断 → 截断 | 124 → **56** |
+| `zutil.c` | 截断 → 截断 | 86 → **27** |
+| `crc32.c` | 截断 → 截断 | 45 → **14** |
+| `adler32.c` | 截断 → 截断 | 43 → **13** |
+| `gzread.c` | 截断 → 截断 | 40 → **10** |
+| `compress.c` | 截断 → 截断 | 36 → **12** |
+| `uncompr.c` | 截断 → 截断 | 35 → **11** |
 
-⚠ **这批诊断是合法代码上的误报**（oracle：gcc 16.1.0 编译同语料无错），**不是** verilog 先例
+修复后仍有截断/误报——由 **G3/G4 未收口**解释（见「根因」逐条归因），不是 G1/G2 的残留。
+
+⚠ 这批诊断是合法代码上的误报（oracle：gcc 16.1.0 编译同语料无错），**不是** verilog 先例
 那种"已裁决的真诊断基线"。⇒ 直接按当前计数固化基线（门禁方案 B）会把误报制度化，只应作过渡。
 
 > ⚠ **#43 报告更正**：`ProjectChecker` 结果里的 `parse_ok` 字段**不反映解析截断**（部分 AST 也算
 > True）。判"解析是否完整"要用 `parser._parse_truncated`（或 linter 诊断）；上表按更正后的口径。
 
-> 口径注：上表数字来自本轮**临时探针**（语料在 `%TEMP%`，未入库），复现形态 =
-> `scan_directives → expand_tokens → parser/linter`（与管线同路）；入库后以
-> `eval_diag_baseline_c.py --json` 为唯一口径。行数用 `wc -l` 可复核。
+> 口径注：数字来自临时探针（语料在 `%TEMP%`，未入库），复现形态 =
+> `scan_directives → expand_tokens → parser/linter`；入库后以 `eval_diag_baseline_c.py --json`
+> 为唯一口径。行数用 `wc -l` 可复核。
 
-## 根因（语法面，非 linter 单侧）
+## 根因（语法面）与收口状态
 
-最小复现（全部 **parser 截断 + linter 报错**；linter 只是同一规则表的另一消费者）：
+| # | 最小复现（`typedef int T;` 前置） | 失败位点 | 状态 |
+|---|---|---|---|
+| G1 | `extern T *p;` / `static T v;` / `const T *p` 在声明 / 成员 / 形参 / 函数定义 / for 初值 / `sizeof` 类型名位 | 说明符序列（typedef 名在存储类/限定符之后） | ✅ **#44 已收口** |
+| G2 | `int * const q;` / `const char * const s` | Pointer 缺类型限定符列表（C99 §6.7.6） | ✅ **#44 已收口** |
+| G3 | `void f(void *, size_t);` | ParamDecl 无法表达"只有 `*`、无名"的**抽象声明符** | ❌ **未收口**（zlib 原型声明命中） |
+| G4 | `(cJSON*)` / `(Bytef *)` | `CastTypeName` 刻意不含 `@TypedefName`（强制转换的 typedef 歧义位，需符号表） | ❌ **未收口**：属 ROADMAP 切片 1b；cJSON 剩余 39 条 `if` 类截断的主因 |
 
-| # | 最小复现（`typedef int T;` 前置） | 失败位点 |
-|---|---|---|
-| 1 | `extern T *p;` / `static T v;` | Declaration 说明符序列 |
-| 2 | `struct S { const T *p; };` | StructMember 的 MemberSpec |
-| 3 | `void f(const T *p);` / `int g(const T * const p);` | ParamDecl 的 ParamSpec |
-| 4 | `int k(void) { const T *p; }` | 块内 Declaration（同上 #1） |
-| 5 | `sizeof(const T *)` | TypeName（`const` 先、typedef 名后） |
-| 6 | `extern T f(void);` | Declaration（typedef 名后接 id 声明符） |
-
-**成因**：C 说明符序列里「typedef 名」只挂在**首个说明符位**（`TypeSpecifier` 的一个分支）；
+**G1 成因**：C 说明符序列里「typedef 名」只挂在**首个说明符位**（`TypeSpecifier` 的一个分支）；
 `SpecRest`（其余说明符）**刻意不含 `@TypedefName`**——它是贪婪重复，含进去会把声明符名吃掉
-（`int x;` 的 `x` 被当类型名；`grammar/c/01_declarations.toml` 有原注）。于是「存储类/限定符在前、
-typedef 名在后」（`extern T *p;` / `const T *p`）整条无产生式可匹配。
+（`int x;` 的 `x` 被当类型名）。于是「存储类/限定符在前、typedef 名在后」整条无产生式可匹配。
+**#44 修复** = 宿主声明符位「**声明符优先**」交替：先按既有 `@DeclaratorList`/`@Declarator` 读
+（既有形态逐字不变），失败再读「一个 `@TypedefName` + 声明符」（`TypedefDeclarators` /
+`TypedefDeclarator` / `TypedefInitDeclarator` 三个包装规则，节点绑定仿被包装规则的消费面）；
+不需要符号表、不改既有 FIRST/候选注册，`_Atomic(int) x;` 这类"限定符本身就是类型"因第一支
+已成功而不受第二支影响。**G2 修复** = `@Pointer` 加 `@TypeQualifier*`。
+判据：`tests/languages/c/test_c_declaration_spec_order.py`（24 例：6 宿主 + 指针限定符 +
+普通声明回归 + 符号收集）。
 
-真实语料命中：zlib（`ZEXTERN` 展开为 `extern` + `Bytef *`）、cJSON 55 处
-`const cJSON * const item`（参数位）。⇒ **只修 linter 不够**，必须动语法面；且同样形态在
-6 个宿主规则里重复（Declaration / FuncDef / StructMember / ParamDecl / TypeName / CastTypeName 邻近位）。
+## 语法面方案（已定：循环 #44 采用 B）
 
-## 语法面方案（**需要作者拍板**：引擎↔插件边界）
-
-- **A（推荐）引擎侧 `pre_scan` 驱动的 typedef 名 token 重定型**：
-  语言包在 `[pre_scan.decl.typedef]` 已有 `type_name`/`trial_as` 声明，新增同族键
-  `retype = "keyword.typedef_name"`；parser 在匹配前把「pre_scan 判为 typedef 名的 id」**临时**
-  重定型，语法里 `@TypedefName` 的首选形态即该 token、`SpecRest` 也可安全收它（只有真
-  typedef 名会匹配，`int x;` 不受影响）。与 linter 既有 `substitute_type` 试解析是同一思路，
-  **一处机制修全部 6 个宿主**；语义上补上"parser 消费 pre_scan 提示"的缺口。
-  ⚠ 属**引擎新机制**（token 型改写 / 与插件声明面的新契约键）⇒ 需作者批准并落 ADR；
-  风险 = pre_scan 不精确（平坦/首见/无顺序）导致的误重定型，需在语料上量测误伤面。
-- **B（备选）纯语言包：在每个宿主规则里做"声明符优先"的交替**：
-  如 Declaration `(@DeclaratorList|(@TypedefName,@DeclaratorList))?` 让解析器先按声明符读、
-  失败再按类型读。无需引擎改动，但要在 6 个宿主 + 渲染/AST 绑定里铺开，且要实测
-  parser 的候选回溯行为（`_Atomic(int) x;` 这类"限定符本身就是类型"的形态是已知陷阱：
-  强制"限定符后必须有类型"会把它误读）。影响面大、AST/渲染漂移风险高。
+- **B（已实施，纯语言包）**：如上「声明符优先」交替 + 指针限定符；`tests/languages/c` 全量
+  零回归（1078 passed），真实语料误报按上表下降。
+- **A（否，留档）**：引擎 `pre_scan` 驱动的 typedef 名 token 重定型（新增契约键 `retype`，
+  与语言包既有 `type_name`/`trial_as` 同族）。否因：① **只解 G1**（G2/G3/G4 照旧）；
+  ② 与将来切片 1b 的符号感知机制重复投入；③ 引擎契约面新增 + 全语言回归面。
+  **复议触发** = 出现 ≥2 处"符号敏感位置"都需要语法层判断，或切片 1b 的符号机制落地后可顺手覆盖。
 - **C（否）**：仅修 linter 侧分类不改语法——parser 仍截断，真实语料门禁会把"部分 AST"
   当现状固化；否。
 
 ## 门禁时序方案（A / B / C）
 
-- **A（推荐）先修语法/误报再上门禁**：`#44` 修上面根因到"语料解析完整 + 零误报（或仅剩
-  显式登记的已知边界）"，`#45` 再落 baseline 门禁。理由：门禁价值 = 防增长；基线全是误报时
-  增量判据被噪声淹没，且"合法代码被报"被写成现状。
+- **A（推荐）先修语法/误报再上门禁**：G1/G2 已收口（#44）；**G3/G4 收口后**才能让 7 文件
+  `_parse_truncated=False` 并落 baseline 门禁（G4/切片 1b 是最大前置）。理由：门禁价值 =
+  防增长；基线全是误报时增量判据被噪声淹没，且"合法代码被报"被写成现状。
 - **B（过渡，按需）**：以当前计数为基线、只卡增长。可立刻防回归，但要求档内显式声明
   "基线里 N 条是待清偿误报"，并逐轮降基线；**不得当结论口径**。
 - **C（否）**：只用当前零误报的合成语料（`ring_buffer.*`）——不满足"真实"要求；否。
 
-## 判据草案（#45 实现轮用；可执行形态）
+## 判据草案（门禁实现轮用；可执行形态）
+
+**前置**：G3（未命名抽象指针形参）+ G4（typedef 强转，切片 1b）→ 7 文件解析完整后，下列
+sanity 才可达；在此之前只能按门禁方案 B 过渡或等前置。
 
 1. **语料入库**：`tests/e2e/samples/real_c_ref/`——cJSON 2 文件 + zlib 6 文件与所需头；
    `CREDITS.md` 按 verilog 先例记 **来源仓库 + 版本/commit + 许可**（zlib license、MIT）；
@@ -114,22 +111,23 @@ typedef 名在后」（`extern T *p;` / `const T *p`）整条无产生式可匹�
    is False`，**不是**结果 dict 的 `parse_ok` 字段——后者不反映截断，见上「报告更正」；
    verilog 侧同型教训见 `tests/e2e/test_real_corpus.py`）。
 5. **确定性**：同语料两次 `collect()` 键值相同（防集合序/哈希序漂移）；单次目标 ≤ 30s
-   （本轮 7 文件实测 ~2s/文件，含 include 展开）。
-6. **测量面**：门禁只卡诊断计数；"parse 率 / 真实语料零误报"作为 #44 的过程判据，不进门禁。
+   （探针实测 ~2s/文件，含 include 展开）。
+6. **测量面**：门禁只卡诊断计数；"parse 率 / 零误报"作为前置过程判据，不进门禁。
 
 ## 预算与止损
 
-- 调查轮探针上限（本轮自定）：≤8 条命令 / ≤3 候选工程；**实际**：下载 cJSON+zlib、
-  7 文件实测、2 类最小复现（超出 1 次，如实记录）。
-- **止损点**：若 #44 修完两类 FP 后仍有 >20 条/文件且无法归类 ⇒ 语料收窄为"可零误报子集"
-  并在本档登记未收口类别，**不硬上基线**（避免方案 B 的误报固化）；不得以"基线非空"冒充达标。
+- #43 调查轮：自定 ≤8 条命令，实际 7 文件 + 2 类最小复现（超出 1 次，已记录）。
+- #44 实现轮：≤10 条探针命令（实际 ~8：原型 3 + 实现后 5）；实测面 = 既有 C 包全量
+  （1078 例）+ 新判据 24 例 + 真实语料计数。
+- **止损点**：G3+G4 收口后若仍有 >20 条/文件且无法归类 ⇒ 语料收窄为"可零误报子集"并在本档
+  登记未收口类别，**不硬上基线**（避免门禁方案 B 的误报固化）；不得以"基线非空"冒充达标。
 
-## 决策点（#44 开工前定）
+## 决策点
 
-- **语法面方案**：A（引擎 `pre_scan` 驱动的 typedef 名 token 重定型，推荐）还是 B（纯语言包
-  6 宿主交替）。A 命中「引擎↔插件边界」升级判据 ⇒ **需作者拍板**；B 可按细节级自决但影响面大。
-- 语料选型：cJSON + zlib 子集是否入库（许可 OK、体积 ~250KB ≪ verilog 580KB；建议入库）。
-- 口径：是否走门禁方案 B 过渡（建议否，按 A 分两轮）。
+- **下一轮 #45**：G3（未命名抽象指针形参）实现级自决（语言包形态改动，不碰引擎）。
+- **G4 / 切片 1b**（typedef 名强转需符号表）：属 ROADMAP 已登记方向，时机由作者排期；
+  它是真实语料门禁（退出判据 5）的**最大前置**。
+- 语料入库时机：G3/G4 后（否则 sanity「解析完整」不可达）。
 - 细节级自决（无需作者）：stub 内容、文件分组、预算数字、采集器去重方式。
 
 ## 关联条目

@@ -110,6 +110,9 @@ CASES: list[tuple[str, str, str]] = [
     # 带体 / 不透明声明 / 匿名体三种合法形态一并试解析
     ("增量", "c23 枚举固定底层类型（enum e : int，§6.7.2.2）",
      "enum e11 : int { A11 };\nenum e12 : unsigned char;\nenum : int { B11 };\n"),
+    # 声明说明符顺序自由 + 指针限定符（循环 #44；C99 §6.7 核心面，真实语料驱动）
+    ("声明", "说明符顺序（存储类/限定符 + typedef 名）+ 指针限定符",
+     "typedef int T;\nextern T * const p13;\nint f13(const T * const q13);\n"),
 ]
 
 

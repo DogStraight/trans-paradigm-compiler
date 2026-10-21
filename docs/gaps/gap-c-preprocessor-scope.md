@@ -5,7 +5,7 @@
   **接缝重扫**（㉔）、**跨行调用**（㉕）、**include 顺序**（并入 ⑱）；A2 交付完成。范围基线 = 作者 2026-10-17 裁定（只做 **C 标准宏**、文本级；卫生宏=语法结构、
   过程宏=能力位，均不在此范围）。
 - 关联：`ROADMAP.md`「C 语言包」阶段 4；`preprocessor/README.md`（跨语言文本能力原型）
-- 接受面证据：`tools/c_acceptance.py`（当前 **47 条 / 接受 47 / 空洞 0**）——**口径注**：两条预处理
+- 接受面证据：`tools/c_acceptance.py`（当前 **48 条 / 接受 48 / 空洞 0**）——**口径注**：两条预处理
   用例按"**被消费且无异常**"接受（指令行被替换为整行 marker 注释），**不代表 `#include` / `#define`
   已真实实现**；拆步信号以本节 ⑭ 为准
 
@@ -192,6 +192,6 @@ hideset 按 **Prosser 交集**口径（名字 token ∩ 实参/闭括号；替�
 
 - 路线：`ROADMAP.md`「C 语言包」阶段 4（预处理器；能力面缺口仍在，工具计数口径见 ⑭）
 - 机制：`preprocessor/README.md`（宏形态声明 / 三机制 / 位置桥）、`grammar/verilog/base/_macro.toml`（声明面先例）
-- 接受面：`tools/c_acceptance.py`（**47 条 / 接受 47 / 空洞 0**；两条预处理用例按"被消费且无异常"接受，**不代表已真实实现**——口径见 ⑭）
+- 接受面：`tools/c_acceptance.py`（**48 条 / 接受 48 / 空洞 0**；两条预处理用例按"被消费且无异常"接受，**不代表已真实实现**——口径见 ⑭）
 - 门禁：`tests/engine/preprocessor/`（预处理器面）、`tests/languages/c/`（C 包）
 - 相邻档：`docs/gaps/gap-c-semantic-base.md`（C 语义基座）、`docs/gaps/gap-language-pack-scope.md`（C 包接受域/档位）

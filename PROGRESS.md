@@ -30,9 +30,9 @@
 
 ## 退出判据（5 条，全过 = 主线 1 完成）
 
-- [x] 1. `tools/c_acceptance.py` 空洞 **0 / 47** —— ✅ **实质达成**（A2 ②③：`#include` 真实处理
+- [x] 1. `tools/c_acceptance.py` 空洞 **0 / 48** —— ✅ **实质达成**（A2 ②③：`#include` 真实处理
       （`path_forms` 解析 + 内容进流 + 缺文件/循环/深度**受控诊断**）+ 渲染不内联 + 两条 CLI 路径同类诊断；
-      `c_acceptance` 47/0、`test_c_include_e2e.py` 10 条、A/B verilog 0/144）。链：gap ⑱⑲
+      `c_acceptance` 48/0、`test_c_include_e2e.py` 10 条、A/B verilog 0/144）。链：gap ⑱⑲
 - [x] 2. `void f(void) { x = (myint)y; }`（带 typedef）闭环，且符号面**校验不过即报错、不静默**
       —— ✅ 循环 #7（`success=True`、遮蔽例 `E002`）+ 循环 #9（**raw 段有确定结构** `CastExpr`）
 - [ ] 3. 作用域 / 链接 / 标签 / 函数原型的负样本各被拒
@@ -40,13 +40,14 @@
       —— 🟡 语法缺口已清零（#33/#35/#37/#38/#41/#42 + 档位门控 #40；conformance 已无 xfail）；
       **余**：其余构造的双向断言面（逐构造补 accept/reject 各一条）
 - [ ] 5. 真实 C 语料误报基线进门禁
-      —— 🟡 #43 方案已落 `docs/gaps/gap-c-real-corpus.md`（语料 cJSON+zlib + stubs 前置；
-      7 文件实测 35–124 条/文件、均为合法代码误报 + 两类 FP 最小复现）；待 #44 修 FP → #45 门禁
+      —— 🟡 #43 方案落 `docs/gaps/gap-c-real-corpus.md`；#44 已收口 G1 说明符顺序自由 +
+      G2 指针限定符（真实语料误报 cJSON 124→56、zutil 86→27）；余 G3（#45）与 G4
+      （typedef 强转 = 切片 1b，最大前置）——G3/G4 后语料才可解析完整、门禁才有意义
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：**待作者拍板语法面方案**（见 `gap-c-real-corpus.md`「语法面方案」）后，实现轮 #44 = 「typedef 名可出现在存储类/限定符之后」（A 引擎 `pre_scan` token 重定型 / B 语言包 6 宿主交替）；判据 = 6 个最小复现转正 + 7 文件解析完整（`_parse_truncated=False`）+ lint 归零或仅剩登记边界。
-- **待验证假设**：A 方案一处机制覆盖全部宿主（Declaration/StructMember/ParamSpec/TypeName/FuncDef）；`pre_scan` 不精确导致的误重定型在语料上可量测（误伤面 = 误报增量）。
+- **意图**：实现轮 #45 = G3 未命名抽象指针形参（`void f(void *, size_t);`）：ParamDecl 声明符位支持"只有 `*` 无名字"的抽象声明符；判据 = 最小复现转正 + zlib 对应诊断清零（见 `gap-c-real-corpus.md`「根因」G3）。
+- **待验证假设**：抽象声明符只需"`*` 链 + 可选限定符"（`void *` / `const char *` / `char **`），不需完整抽象声明符文法（函数指针无名字的形态等按真实语料触发再扩）；与具体声明符的消歧靠"声明符优先"交替同款。
 - **台账**：能力面审查矩阵 #1 行已收口（ADR-0023）；#7 行含 #38 数字形态证据；审查轮（刻度 7→9 后）一次性出结论。
 
 ## 估算依据（对照锚，可复核）

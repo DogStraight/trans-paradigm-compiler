@@ -506,7 +506,7 @@ _MUTATIONS: list[dict[str, str]] = [
     },
     {
         "why": "**深度守卫**（`decl_depth <= use_depth`）是关掉「块内 typedef 出块后使用」这类作用域"
-               "反例的那一层：去掉它 ⇒ `void f(void){ typedef int t; }\\nx = (t)y;` 变成 eligible，"
+               "反例的那一层：去掉它 ⇒ `void f(void){ typedef int t; }\nx = (t)y;` 变成 eligible，"
                "真错被静默（审计 A 类）⇒ 判据必红",
         "file": "linter/lookahead.py",
         "old": "            if position_ok and scope_ok:\n",
@@ -1159,6 +1159,24 @@ _MUTATIONS: list[dict[str, str]] = [
         "old": '        if _tag_kind(symbol) != "enum" or _has_body(symbol) or _has_complete_type(symbol):\n',
         "new": '        if _tag_kind(symbol) != "enum" or _has_body(symbol):  # 变异：去掉固定底层类型豁免\n',
         "test": "tests/languages/c/test_c_type_semantics_checks.py",
+    },
+    {
+        "why": "说明符顺序自由（存储类/限定符 + typedef 名）靠宿主声明符位的『声明符优先』"
+               "交替：去掉交替第二支 ⇒ `extern T *p;` / `const T *p` 整条解析截断"
+               "（真实 C 语料 zlib/cJSON 命中；循环 #44 补）",
+        "file": "grammar/c/01_declarations.toml",
+        "old": '    "(@DeclaratorList|@TypedefDeclarators)?",\n',
+        "new": '    "@DeclaratorList?",  # 变异：去掉 typedef 名后的声明符交替\n',
+        "test": "tests/languages/c/test_c_declaration_spec_order.py",
+    },
+    {
+        "why": "指针限定符（C99 §6.7.6 `* type-qualifier-list_opt`）：去掉 `@TypeQualifier*`"
+               " ⇒ `int * const q;` / `const S * const p` 不可解析（cJSON 55 处命中；"
+               "循环 #44 补）",
+        "file": "grammar/c/01_declarations.toml",
+        "old": '    "symbol.base.multiple",\n    "@TypeQualifier*",\n    "@Pointer?",\n',
+        "new": '    "symbol.base.multiple",\n    "@Pointer?",  # 变异：去掉指针限定符\n',
+        "test": "tests/languages/c/test_c_declaration_spec_order.py",
     },
 ]
 
