@@ -144,10 +144,16 @@ class LinterScanner:
         时输出 Level 1/Level 2 决策过程到 stderr 定位。"""
         self._rules_dir = rules_dir
         ext_list = ext_dirs or []
+        # 档位跟随（ADR-0023 的"登记 + 跟随"）：`load_all(enabled=None)` 会把该包档位
+        # 重置成包内清单 ⇒ 先按 `load_language(enabled=…)` 登记过的档位显式传入，
+        # 否则"引擎级切档"只对 parse 生效、linter 路径静默回到默认档（档位泄漏）。
+        # 非语言包目录（临时目录/低层契约）`tier_state` 返回空元组，行为与原先一致。
+        _, active_tier = ConfigRegistry.tier_state(rules_dir)
         ConfigRegistry.load_all(
             rules_dir,
             ext_dirs=ext_list,
             plugins_dir=os.path.join(rules_dir, "plugins"),
+            enabled=list(active_tier),
         )
         from core.define import GrammarRulesRegister
 

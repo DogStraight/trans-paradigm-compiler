@@ -315,6 +315,10 @@ ConfigRegistry.resolve("grammar/c")                              # 跟随该包"
 - **登记 + 跟随**：显式档位在 `load_language` / `load_all` 时登记为该包"当前档位"
   （`_active_enabled`）；`resolve(pack)`（`Lexer` 等隐式消费方走它）无需额外参数即按该档
   解析；未曾 load 过的包回退到包内清单。
+- ⚠ **隐式消费方不得用 `load_all(enabled=None)` 重置档位**：该调用的 `None` = 包内清单
+  （见上条），会把显式登记的档位覆盖掉 ⇒ 同一次进程里"parse 按新档、linter 回默认档"。
+  `LinterScanner` 因此按 `tier_state(rules_dir)` 取当前档位并**显式**传入（循环 #41 修；
+  判据 `tests/engine/core/test_tier_gated_grammar.py::TestImplicitConsumersFollowTier`）。
 - **档位来源优先级**：`enabled` 显式参数 > 该包登记过的档位（仅 resolve 侧）> 包内
   `[plugins] enabled`。
 - **fail-fast**：`enabled` 非字符串列表 / 含空串 / 含非字符串 → `ConfigError`；清单里的

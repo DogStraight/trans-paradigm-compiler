@@ -18,6 +18,7 @@ import os
 from core.config_registry import ConfigRegistry
 from core.define import GrammarRulesRegister
 from core.plugin_loader import _loaded_components
+from linter.scanner import LinterScanner
 from parser import setup_grammar
 
 _PACK = "grammar/c"
@@ -64,6 +65,27 @@ class TestResidentComponentsUnaffected:
         rules = _rules_at([])
         for name in ("TranslationUnit", "StructBody", "AttributeSlot"):
             assert name in rules, f"核心规则 {name} 不该受门控影响"
+
+
+class TestImplicitConsumersFollowTier:
+    """**隐式消费方也跟随登记档位**（`load_language(enabled=…)` 之后无需再传参数）。
+
+    缺陷态（循环 #41 实测）：`LinterScanner.__init__` 的 `load_all(enabled=None)` 会把该包
+    档位重置成**包内清单**（c23 全档）⇒ 引擎级切档只对 parse 生效，linter 静默回到默认档：
+    c11 档里 `_BitInt(8) a;`（C23 类型词，下档是标识符 ⇒ 整条声明解析失败）会被当合法代码
+    零诊断放行。修法 = 构造时按 `tier_state` 把当前档位**显式**传给 `load_all`。
+    """
+
+    def test_linter_follows_recorded_tier_without_extra_param(self):
+        src = "_BitInt(8) a;\n"
+        ConfigRegistry.load_language(_PACK, plugins_dir=_PLUGINS, enabled=["c11"])
+        assert LinterScanner(rules_dir=_PACK, register=GrammarRulesRegister()).scan(src), (
+            "c11 档：linter 零诊断（档位泄漏成 c23，静默接受 C23 类型词）"
+        )
+        ConfigRegistry.load_language(_PACK, plugins_dir=_PLUGINS, enabled=_ALL)
+        assert LinterScanner(rules_dir=_PACK, register=GrammarRulesRegister()).scan(src) == [], (
+            "c23 档：合法标准代码被误诊（应为零诊断）"
+        )
 
 
 class TestTierStateLookup:
