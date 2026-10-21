@@ -60,6 +60,13 @@ _INCREMENT_MATRIX = [
     ("static_assert 两参（c23）", _C23_SRC, "StaticAssertC23MsgDecl", "c23"),
     # C23 §6.7.10：消息可省 ⇒ 单参形态也从 c23 档起（两参/单参是同一条规则的可选组）
     ("static_assert 单参（c23）", "static_assert(1);\n", "StaticAssertC23NoMsgDecl", "c23"),
+    # C23 的下划线拼写单参（§6.7.10 两种拼写同语法）：c23 插件新增同形规则，
+    # 与 c11 的两参 `StaticAssertDecl` **同首 token** 并存（试解析区分）
+    ("_Static_assert 单参（下划线拼写，c23）", "_Static_assert(1);\n",
+     "StaticAssertC23UnderscoreNoMsgDecl", "c23"),
+    ("_Static_assert 单参 块作用域（下划线拼写，c23）",
+     "void f(void) {\n    _Static_assert(1);\n}\n",
+     "StaticAssertC23UnderscoreNoMsgDecl", "c23"),
     ("nullptr（c23）", "int *p = nullptr;\n", "NullptrLiteral", "c23"),
     ("true（c23）", "int b = true;\n", "BoolLiteral", "c23"),
     ("bool（c23）", "bool f;\n", "BoolType", "c23"),
@@ -86,6 +93,9 @@ _INCREMENT_MATRIX = [
      'struct s { int a; static_assert(1, "x"); };\n', "StaticAssertC23MsgDecl", "c23"),
     ("static_assert struct 成员 单参（c23）",
      'struct s { int a; static_assert(1); };\n', "StaticAssertC23NoMsgDecl", "c23"),
+    ("_Static_assert struct 成员 单参（下划线拼写，c23）",
+     'struct s { int a; _Static_assert(1); };\n',
+     "StaticAssertC23UnderscoreNoMsgDecl", "c23"),
     ("alignas（c23）", "alignas(16) char buf[64];\n", "AlignasC23Spec", "c23"),
     ("alignof（c23）", "int a = alignof(int);\n", "AlignofC23Expr", "c23"),
     ("thread_local（c23）", "thread_local int t;\n", "ThreadLocalC23Spec", "c23"),

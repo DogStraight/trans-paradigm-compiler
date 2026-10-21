@@ -30,11 +30,10 @@
 #   · 块作用域：分派器注入核心 `Stmt` 交替（同 c11 的 `_Static_assert`）；
 #   · struct/union 成员表：分派器注入核心空槽位 `@StructMemberExtra`。
 #
-# ⚠ **已知缺口（本轮实测，已登记）**：C23 里 `_Static_assert(1);`（下划线拼写、单参）
-#   同样合法，但本插件**不能**为它写规则——`enabled` 只门控**声明面**（token/词法），
-#   插件规则文件**无条件加载**（`setup_grammar` → `load_all_components`），故 c23 插件
-#   里引用 `keyword._Static_assert` 的规则会在 c11/c17 档也生效，把"C11 该拒"的形态
-#   放进来。登记：`docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」。
+# ⚠ **下划线拼写的单参形态不在本文件**：C23 §6.7.10 的消息可省对两种拼写都成立，
+#   故 `_Static_assert(constant-expression);` 由 `22_static_assert_no_msg.toml` 另立一条
+#   规则（拼写不同 ⇒ token 类型不同 ⇒ 渲染器要保留拼写）。本文件只负责 `static_assert`
+#   拼写的两参/单参两分支。档位门控（ADR-0023）保证 c23 规则不漏进 c11/c17 档。
 #
 # ⚠ **旧注释作废（2026-09-26 实测）**：本条曾写"块作用域不可用（需在核心 `Stmt` 选择器加
 #   分支 → 属『改』核心，与 C23 其余语法增量同批待办）"——**不成立**：现役

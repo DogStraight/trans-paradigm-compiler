@@ -1113,6 +1113,26 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "    if False:  # 变异：把空槽位当可匹配\n",
         "test": "tests/languages/c/test_c_standard_tiers.py",
     },
+    {
+        "why": "C23 下划线拼写单参规则若丢**成员表位**注入 ⇒ 合法 C23 代码"
+               "`struct s { int a; _Static_assert(1); };` 整条解析失败（§6.7.10 消息可省对"
+               "两种拼写都成立；循环 #41 补）",
+        "file": "grammar/c/plugins/c23/22_static_assert_no_msg.toml",
+        "old": 'targets = ["@Stmt", "@StructMemberExtra"]\n',
+        "new": 'targets = ["@Stmt"]  # 变异：丢成员位槽\n',
+        "test": "tests/languages/c/test_c_standard_conformance.py",
+    },
+    {
+        "why": "c23 单参下划线拼写规则**没在插件清单里登记**（`[grammar] files` 漏一行）⇒"
+               "生产路径根本加载不到它、合法 `_Static_assert(1);` 不再进 AST（循环 #41 补；"
+               "判据选 conformance = 走生产路径。⚠ c23 插件测试的 helper 传 "
+               "`ext_dirs=[plugins]`，那是『显式扩展目录』通道（ADR-0023 边界：不受门控），"
+               "会把插件 TOML 无条件上膛 ⇒ 对本条变异不敏感，不能当判据面）",
+        "file": "grammar/c/plugins/c23/tpc.toml",
+        "old": '    "22_static_assert_no_msg.toml",\n',
+        "new": "",
+        "test": "tests/languages/c/test_c_standard_conformance.py",
+    },
 ]
 
 

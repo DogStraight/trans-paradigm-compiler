@@ -3,8 +3,10 @@
 # 与 c11/c17 的分工：`requires = ["c17"]` 让包含关系在**加载期可执行**（缺前置响亮失败）。
 #
 # **本插件落地了哪些**：`static_assert`（C23 关键字化；**文件 + 块 + struct/union 成员表
-#   三处作用域**；两参形态 + C23 新增的**单参形态**）+ `nullptr` / `true` / `false`
-#   （表达式原子）+ `bool` / `typeof` / `typeof_unqual`（类型说明符，注入核心 `SimpleType`
+#   三处作用域**；两参形态 + C23 新增的**单参形态**）+ **下划线拼写 `_Static_assert` 的单参
+#   形态**（§6.7.10 两种拼写同语法；`22_static_assert_no_msg.toml`，循环 #41）+
+#   `nullptr` / `true` / `false`（表达式原子）+ `bool` / `typeof` / `typeof_unqual`
+#   （类型说明符，注入核心 `SimpleType`
 #   交替）+ `constexpr`（存储类，注入 `StorageClass`）+ `alignas` / `alignof` /
 #   `thread_local`（c11 三个关键字的 C23 拼写）+ `[[属性]]` + `_BitInt` /
 #   `_Decimal32/64/128` + 字面量面（`u8` 字符前缀、二进制常量 `0b…`、**数字分隔符**
@@ -23,11 +25,12 @@
 #   production 的交替，`parser/grammar_inject.py`），fail-fast；缺的只是插件没写那几行
 #   声明。上面各项即按此落地（各文件头注写明注入点与"为什么选那个最窄的注入点"）。
 #
-# ⚠ **仍未落地的标准项 2 条**（真实缺口，清单与判据见
-#   `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」）：`_Static_assert(constant-expression)`
-#   （单参、下划线拼写）与 `enum` 固定底层类型 `enum e : int`——两者**同因**受阻：
-#   `enabled` 只门控**声明面**，插件规则文件无条件加载 ⇒ c23 规则会漏进 c11/c17 档
-#   （ADR 0021 记"暂缓、慢慢补充"，作者 2026-09-28 定调）。
+# ⚠ **仍未落地的标准项 1 条**（真实缺口，清单与判据见
+#   `docs/gaps/gap-language-pack-scope.md`「C 标准等效缺口」）：`enum` 固定底层类型
+#   `enum e : int`——缺的是核心 `EnumSpecifier` 的"标签后 `: 类型说明符`"位设计（冒号位
+#   只由核心类型词组成，需避免把形态漏进下档）；`enabled` 只门控声明面的旧限制已由
+#   ADR-0023（可选件 grammar 随档加载）解除。
+#   （`_Static_assert(constant-expression)` 单参下划线拼写已于循环 #41 落地。）
 #
 # 词法面：C23 新增关键字**全部声明**（词法完整）；没有规则的用起来就是语法错误
 #   （响亮失败，不会静默当标识符）——与 c11 插件同一策略。
@@ -57,4 +60,5 @@ files = [
     "19_bitint.toml",
     "20_decimal.toml",
     "21_attributes.toml",
+    "22_static_assert_no_msg.toml",
 ]

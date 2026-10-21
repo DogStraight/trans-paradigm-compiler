@@ -83,6 +83,10 @@ CASES: list[tuple[str, str, str]] = [
     ("增量", "c23 小写拼写（static_assert 块作用域 / alignas / alignof / thread_local）",
      'void f(void) {\n    static_assert(1, "x");\n}\n'
      "alignas(16) char buf2[64];\nint a2 = alignof(int);\nthread_local int tls;\n"),
+    # C23 §6.7.10 消息可省对**两种拼写**都成立（循环 #41）：下划线拼写单参在
+    # 文件 / 块两处作用域一并试解析（成员表位在 conformance 测试里）
+    ("增量", "c23 单参静态断言下划线拼写（_Static_assert(1)，§6.7.10）",
+     "_Static_assert(1);\nvoid f8(void) {\n    _Static_assert(1);\n}\n"),
     ("增量", "c23 类型词（_BitInt(N) / _Decimal32·64·128）",
      "_BitInt(8) a3;\n_Decimal32 d1;\n_Decimal64 d2;\n_Decimal128 d3;\n"),
     ("增量", "c23 属性说明符（[[nodiscard]] / 带前缀 / 多实参 / 尾随逗号 / 属性声明）",

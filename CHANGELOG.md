@@ -7,6 +7,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C23 单参下划线拼写 `_Static_assert(1)`（标准等效缺口 2 → 1）**（2026-10-21，循环 #41，
+  C 标准面 + 引擎档位面）：C23 §6.7.10 的消息可省对**两种拼写**都成立，但 c11 的
+  `_Static_assert` 规则固定两参 ⇒ 合法标准代码被拒（oracle：gcc 16.1.0 `-std=c23
+  -pedantic-errors` 接受；C11/C17 应拒）。修法：
+  · **C 包**：c23 插件新增 `22_static_assert_no_msg.toml`（`keyword._Static_assert
+    ( @Expression ) ;`，注入 `@Stmt` + `@StructMemberExtra` ⇒ 文件 / 块 / struct·union
+    成员表三处作用域；渲染保留拼写）。与 c11 两参 `StaticAssertDecl` **同首 token 并存**，
+    靠试解析区分（两参在 `,` 处让新规则失败、单参在 `)` 处让 c11 规则失败）；ADR-0023
+    档位门控保证 c23 规则只在 c23 档加载 ⇒ c11/c17 的"两参必选"拒绝面不变。
+  · **引擎**（同批修，缺陷由本轮判据暴露；前置提交 `ade7390`）：`LinterScanner` 构造时
+    `load_all(enabled=None)` 把登记档位重置成包内 `[plugins] enabled` ⇒ 引擎级切档只对
+    parse 生效、linter 静默回默认档（c11 档的 C23 形态被 c23 规则放行）。修法 = 构造时按
+    `tier_state(rules_dir)` 显式传入当前档位（非语言包目录退化为空元组，行为同旧）。
+  **行为变化**：c23 档 `_Static_assert(1);` 在文件 / 块 / struct·union 成员表三处接受、
+  linter 零诊断、渲染 token 逐项相同 + 幂等；c11/c17 仍拒（空 AST + linter 诊断）。
+  **测试口径修正**：`test_c_standard_conformance.py` 的 helper 去掉 `ext_dirs=[plugins]`——
+  该参数按 ADR-0023「边界」不受门控，等于在测试里无条件上膛 c23 规则（旧捷径；生产
+  CLI 的 `ext_dirs` 为空），去掉后判据与生产同路。
+  验证：conformance 新增 `TestC23UnderscoreNoMsg`（3 作用域 + 两参不被抢）+ 成员位 1 行 +
+  拒绝面 c17 1 条；c23 插件 `_CASES` 4 行；档位矩阵 31 → 34 构造；`c_acceptance`
+  45 → 46 条 / 空洞 0；缺口清单 2 → 1 条（余 `enum e : int`）；全量 **4299 passed /
+  7 skipped / 1 xfailed**；`tests/policy` 524 passed；lint hit_code 33 / fp 0 / valid 7；
+  A/B `--mode cli --products` verilog **0/144**；pyright strict 0；`check_doc_refs` PASS
+  （D1–D4 = 0）；门禁变异 **108 → 110**（丢成员位注入 / 丢插件清单登记，
+  `--only 109/110` 实测变红）。文档：`grammar/c/README.md`、c23 `tpc.toml` 与
+  `10_static_assert_alias.toml` 头注、gap「C 标准等效缺口」/「运行时档位」、
+  `core/config_lifecycle.md` §7、`docs/MODEL_INDEX.md`、TODO/ROADMAP/PROGRESS。
+
 - **C23 数字分隔符：引擎 `[[number.based]] digit_separator` 声明面**（2026-10-21，循环 #38，
   引擎词法面 + C 标准面）：`1'000'000` 此前被切成 `1` + 字符常量 ⇒ 合法 C23 代码整条解析失败
   （oracle：gcc 16.1.0 `-std=c23 -pedantic-errors` 接受）。修法：

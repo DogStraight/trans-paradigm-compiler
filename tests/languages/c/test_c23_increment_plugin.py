@@ -69,6 +69,16 @@ _CASES = [
      "StaticAssertC23NoMsgDecl"),
     ("static_assert 单参在 if body", "void f(int a) {\n    if (a)\n        static_assert(1);\n}\n",
      "StaticAssertC23NoMsgDecl"),
+    # C23 §6.7.10 的单参形态对**下划线拼写**同样成立（循环 #41）：c23 插件新增同形规则，
+    # 与 c11 的两参 `StaticAssertDecl` 同首 token 并存（试解析区分，见 22_static_assert_no_msg.toml）
+    ("_Static_assert 单参（下划线拼写）", "_Static_assert(1);\n",
+     "StaticAssertC23UnderscoreNoMsgDecl"),
+    ("_Static_assert 单参块作用域", "void f(void) {\n    _Static_assert(1);\n}\n",
+     "StaticAssertC23UnderscoreNoMsgDecl"),
+    ("_Static_assert 单参结构成员", "struct s {\n    _Static_assert(1);\n};\n",
+     "StaticAssertC23UnderscoreNoMsgDecl"),
+    ("_Static_assert 单参在 if body", "void f(int a) {\n    if (a)\n        _Static_assert(1);\n}\n",
+     "StaticAssertC23UnderscoreNoMsgDecl"),
     ("alignas 常量表达式", "alignas(16) char buf[64];\n", "AlignasC23Spec"),
     ("alignas 说明符序列其余位", "int alignas(8) x;\n", "AlignasC23Spec"),
     ("alignas 类型名形态", "alignas(double) char c;\n", "AlignasC23TypeSpec"),
@@ -447,7 +457,7 @@ class TestC23InjectionPoints:
         **inline 分派器 + 两条同首 token 分支**（而不是一条可选组规则）。
 
         判据五条（缺陷态各自会红）：
-          ① 规则清单 = 分派器 + 两条分支（多一条/少一条都红）；
+          ① 规则清单 = 分派器 + 两条分支 + 下划线拼写单参一条（多一条/少一条都红）；
           ② 分派器 `inline` 且不产生节点（AST 里只有分支节点）；
           ③ 两参分支 `message` 绑到 literal.string token（丢了就是渲染静默丢消息）；
           ④ 单参分支没有 `message` 属性；
@@ -457,10 +467,14 @@ class TestC23InjectionPoints:
         rules = env["rules"]
         assert "StaticAssertC23Decl" in rules, "缺分派器"
         assert rules["StaticAssertC23Decl"].inline is True
+        # 分派器两条分支（`static_assert` 拼写）+ 分派器之外的第三条规则（`_Static_assert`
+        # 单参、C23 §6.7.10 对下划线拼写同样成立，循环 #41）——它自立一条规则：拼写不同
+        # ⇒ token 类型不同（`keyword._Static_assert`），也就要自己的渲染器（保留拼写）。
         assert sorted(n for n in rules if n.startswith("StaticAssertC23")) == [
             "StaticAssertC23Decl",
             "StaticAssertC23MsgDecl",
             "StaticAssertC23NoMsgDecl",
+            "StaticAssertC23UnderscoreNoMsgDecl",
         ]
 
         def node_of(src: str, name: str):
@@ -494,6 +508,7 @@ class TestC23InjectionPoints:
                 "@TypeQualifier.production[0]",
                 "@AttributeSlot.production[0]",
             ),
+            "22_static_assert_no_msg.toml": ("@Stmt", "@StructMemberExtra"),
         }
         for fname, targets in want.items():
             path = ROOT_DIR / "grammar" / "c" / "plugins" / "c23" / fname

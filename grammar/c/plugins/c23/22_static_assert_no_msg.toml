@@ -1,0 +1,53 @@
+# ============================================================================
+# c23 插件 — 下划线拼写的**单参**静态断言 `_Static_assert ( 常量表达式 ) ;`
+#             （C23 §6.7.10：消息可省，两种拼写同语法）
+# ============================================================================
+# C23 的改动是**正交**的两维：① 关键字化 `static_assert`（c23 `10_static_assert_alias.toml`
+#   已落两条分支）；② **消息可省**——对两种拼写都成立。故 `_Static_assert(1);` 也是
+#   合法 C23 代码，且它**不是** `static_assert` 的拼写别名能覆盖的：
+#   c11 的 `StaticAssertDecl`（两参、下划线拼写）在本档仍加载，形态里带死 `, literal.string`。
+#
+# 为什么不改 c11 那条规则：**规则文件按插件加载、不分档位编辑**（ADR-0023 只门控"哪些
+#   可选件的规则文件加载"，不是"同一条规则按档变形态"）。给 c11 规则加可选消息组会让
+#   `_Static_assert(1);` 在 c11/c17 档也过——正是缺口 #1 的原始成因（gating 之前 c23
+#   规则漏进下档）。故按包内约定「同构造异拼写 / 异形态 = 各自一条同形规则」（见
+#   `16_alignas_alias.toml` 头注）在 c23 侧**新写一条**同形规则，靠档位门控（ADR-0023）
+#   保证它只在 c23 档加载 ⇒ c11/c17 的"两参必选"拒绝面不变。
+#
+# ⚠ 与 c11 的 `StaticAssertDecl` **同首 token**（`keyword._Static_assert`）：c23 档下两条
+#   候选并存，靠试解析区分——两参形态在 `,` 处让本条失败、单参形态在 `)` 处让 c11 那条
+#   失败。同款先例 = `grammar/verilog/04_statements/50_func_task.toml` 的
+#   `FuncDeclANSI|FuncDeclOld`；判据 = `tests/languages/c/test_c_standard_tiers.py`
+#   的两参/单参逐档矩阵 + `test_c_standard_conformance.py` 的三作用域接受面。
+#
+# 作用域三条通路与 c11 的 `_Static_assert` 完全一致（缺一档就有一档合法代码进不来）：
+#   · 文件作用域：`is_statement = true` → 引擎全局语句发现直接认；
+#   · 块作用域：注入核心 `Stmt` 交替（`targets = ["@Stmt"]`）；
+#   · struct/union 成员表：注入容器级**空槽位** `@StructMemberExtra`（同 c11；**不要**
+#     注入 `@StructMember` 自身，理由见 c11 `10_static_assert.toml` 头注）。
+
+[StaticAssertC23UnderscoreNoMsgDecl]
+is_statement = true
+
+[StaticAssertC23UnderscoreNoMsgDecl.inject]
+targets = ["@Stmt", "@StructMemberExtra"]
+
+[StaticAssertC23UnderscoreNoMsgDecl.parser]
+production = [
+    "keyword._Static_assert",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+
+[StaticAssertC23UnderscoreNoMsgDecl.parser.node]
+cond = "$3"
+
+# 渲染：拼写与 c11 那条相同（`_Static_assert`），只是省掉消息——token 级逐字还原。
+[StaticAssertC23UnderscoreNoMsgDecl.renderer.layout]
+line = [
+    "_Static_assert(",
+    { ref = "cond" },
+    ");",
+]

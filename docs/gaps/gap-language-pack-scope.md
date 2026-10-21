@@ -46,8 +46,8 @@
 
 - **判据（每族都要有）**：正样本解析通过（进 AST）+ 负样本被拒（linter/parser 报错），
   两向都要断言——只有正样本会漏掉"语法过宽"。
-- **盘点工具**：`python tools/c_acceptance.py`（45 条构造逐条试解析，报"进 AST / 空 AST /
-  词法抛错"）——当前 **45 条 / 接受 45 / 空洞 0**（**口径注**：两条预处理用例按"**被消费且无异常**"
+- **盘点工具**：`python tools/c_acceptance.py`（46 条构造逐条试解析，报"进 AST / 空 AST /
+  词法抛错"）——当前 **46 条 / 接受 46 / 空洞 0**（**口径注**：两条预处理用例按"**被消费且无异常**"
   接受——指令行被替换为整行 marker 注释，**不代表 `#include` / `#define` 已真实实现**，见
   `docs/gaps/gap-c-preprocessor-scope.md` ⑭）。空洞是无声的：不属任何语句入口 FIRST 集的
   构造会被整体跳过而不报错，只跑测试套件看不出还差哪一族。
@@ -67,9 +67,9 @@
 
 > 阶段 5 缺的是**按标准分档的断言面**（ROADMAP「C 语言包」）。第一批先把**静态断言族**
 > 做成接受/拒绝双向断言，并用 oracle 把「合法但被拒」的标准项逐条照出来——本节是
-> 缺口全表（当前余 **2 条样本**，成员位 / 字面量族 / 数字分隔符已转正）；判据在
-> `tests/languages/c/test_c_standard_conformance.py`（`xfail(strict=True)`：**修好一条就红一条**，
-> 提醒移出清单并转正）。
+> 缺口全表（当前余 **1 条样本**，成员位 / 字面量族 / 数字分隔符 / 下划线拼写单参已转正）；
+> 判据在 `tests/languages/c/test_c_standard_conformance.py`（`xfail(strict=True)`：
+> **修好一条就红一条**，提醒移出清单并转正）。
 
 **oracle**：`gcc 16.1.0`（MinGW-W64），逐样本
 `gcc -std=c11|c17|c23 -pedantic-errors -fsyntax-only case.c`。下表「gcc」列 = 该样本首个
@@ -77,30 +77,24 @@
 
 | # | 构造（合法标准代码） | 标准归属 | gcc | tpc 现状 | 成因 / 修法 |
 |---|---|---|---|---|---|
-| 1 | `_Static_assert(1);`（下划线拼写、单参） | C23 §6.7.10（消息可省，与 `static_assert` 同语法） | c23 OK | 拒绝 | c23 插件不能为它写规则：`enabled` 只门控**声明面**，插件规则文件无条件加载 ⇒ c23 里引用 `keyword._Static_assert` 的规则会在 c11/c17 档生效，把 C11 该拒的形态放进来。修法 = 规则按档位门控（`enabled` 语义扩展；ADR 0021 记"暂缓"，作者 2026-09-28 定调慢慢补充） |
-| 2 | `enum e : int { A };` | C23 §6.7.2.2（enum-type-specifier） | c23 OK | 拒绝 | `EnumSpecifier` 缺"标签后 `: 类型说明符`"位；**不能**按 `@StructMemberExtra` 先例做成"core 空槽位 + c23 注入"——该槽的形态只有 `:` + 核心类型词（无新关键字），注入会漏进基线/c11 档（同 #1 的档位门控限制；依据 = `test_c_standard_tiers.py::TestKeywordFreeIncrementsAreNotTierGated` 实测插件规则在**基线档**仍生效）。修法 = 同一个 `enabled` 语义扩展 |
+| 1 | `enum e : int { A };` | C23 §6.7.2.2（enum-type-specifier） | c23 OK | 拒绝 | `EnumSpecifier` 缺"标签后 `: 类型说明符`"位；**不能**按 `@StructMemberExtra` 先例做成"core 空槽位 + c23 注入"——该槽的形态只有 `:` + 核心类型词（无新关键字），注入会漏进基线/c11 档（依据 = ADR-0023 之前的实测；门控后注入面本身可行，但该位与 `enum` 体/枚举项的结构耦合，需按核心规则形态设计，见 ROADMAP「注入机制」） |
 
-**已收口**：① C23 单参 `static_assert(1)`（循环 #33）；② **字面量前缀族 + 二进制常量**
-（循环 #37，原表 u8 字符串 / u8 字符 / 二进制三行）——修法 = 引擎 `[string] prefixes`
-声明面（前缀进 token 正文，按档位由插件 `token_ext` 增删：L 在核心、u/U/u8 字符串在 c11、
-u8 字符在 c23）+ c23 数字形态按名合并给 `c_prefix` 加 `0b` 分支；
-③ **静态断言的 struct/union
-成员表位**（循环 #35，原表 #1/#2）——修法 = 容器级**空槽位**
-（`StructBody = { (@StructMember|@StructMemberExtra)* }`，增量注入 `@StructMemberExtra`），
-**不碰 `StructMember` 自身**：注入它会让 FIRST 混入 `keyword._Static_assert`，顶层同类语句
-被误分类成 `StructMember` 报 `phase-statement` 假红（干净对照见
-`policy/collaboration.md`「因果句必须带对照」的循环 #33 先例）。C23 两形态同时改成
-Verilog `FuncDecl` 同款的 **inline 分派器 + 两分支**（两参/单参各自节点名）。
-接受面继承档位矩阵（构造数按 `pytest --collect-only -q` 实测），拒绝面与下档三态
-（generic / rejected）在 `test_c_standard_conformance.py::TestRejectSide /
-TestBelowTierState / TestStaticAssertMemberPosition`；`gcc` 对照样本见 `_GAPS` 每条注释。
-④ **C23 数字分隔符**（循环 #38，原表 #2）——修法 = 引擎 `[[number.based]] digit_separator`
-声明面（数字自环态旁挂分隔态，两侧必须有数字），c23 插件按名合并给 `c_dec` / `c_prefix`
-补键（八进制序列由 `c_dec` 的 `digits = "any"` 覆盖，不另声明），基线/c11 不声明 ⇒
-仍切两 token（档位 = 声明面组合）。判据 = `test_c_lexer.py::TestDigitSeparator{,Tiers}`
-（逐档切分）+ 本文 `TestLiteralForms`（端到端接受 + 下档拒绝）；oracle = gcc 16.1.0
-`-std=c23 -pedantic-errors` 逐样本 OK，`0x'1` / `1.'5` 按宽进口径
-不断言拒绝（同 `1ff`，见 `test_number_digit_separator.py::test_wide_in_positions_not_validated`）。
+**已收口**（实现细节见 CHANGELOG 对应循环；判据在 `test_c_standard_conformance.py`）：
+① C23 单参 `static_assert(1)`（#33）；② **字面量前缀族 + 二进制常量**（#37）——引擎
+`[string] prefixes` 声明面 + `c_prefix` 按名合并 `0b`；③ **静态断言成员表位**（#35）——
+容器级空槽位 `@StructMemberExtra`（**不碰 `@StructMember`**：污染 FIRST 会把顶层同类语句
+误分类成 `StructMember` 报假红，干净对照见 `policy/collaboration.md` 循环 #33 先例），
+C23 两形态改 inline 分派器 + 两分支；④ **C23 数字分隔符**（#38）——引擎
+`[[number.based]] digit_separator` 声明面 + c23 按名合并给 `c_dec`/`c_prefix`，下档仍切两
+token（`0x'1` / `1.'5` 按宽进口径不断言拒绝）；⑤ **`_Static_assert(1)` 下划线拼写单参**
+（#41）——c23 插件新增同形规则 `22_static_assert_no_msg.toml`（注入 `@Stmt` +
+`@StructMemberExtra`），与 c11 两参 `StaticAssertDecl` 同首 token 靠试解析区分；同批修
+`LinterScanner` 档位泄漏（`load_all(enabled=None)` 重置登记档位 ⇒ 引擎级切档只对 parse
+生效、linter 静默回默认档；修法 = 按 `tier_state` 显式传档，判据
+`test_tier_gated_grammar.py::TestImplicitConsumersFollowTier`），conformance helper 去掉
+绕过门控的 `ext_dirs=[plugins]`（ADR-0023「边界」）。接受面继承档位矩阵，拒绝面与下档三态
+在 `TestRejectSide / TestBelowTierState / TestStaticAssertMemberPosition`；`gcc` 对照样本见
+`_GAPS` 每条注释。
 
 **下档三态是"接受域"口径的一部分**（"未声明关键字 ≠ 拒绝"）：同一形态在未达档位时要么
 被当普通构造照常解析（`bool f;` / `_Static_assert(1, "x");` 在基线档当 typedef 名/函数调用），
@@ -172,8 +166,10 @@ render → 与源比对，七条：
 
 - **入口**：`ConfigRegistry.load_language / load_all / resolve(..., enabled=[...])`
   （`None` = 用包内 `[plugins] enabled`）。显式档位登记为该包"当前档位"，隐式消费方
-  （`Lexer` / 数字形态）无需额外参数即可跟随（缓存键含档位）。
-- **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **31 构造 × 4 档矩阵**
+  （`Lexer` / 数字形态 / `LinterScanner`——后者循环 #41 补）无需额外参数即可跟随
+  （缓存键含档位；`LinterScanner` 构造时按 `tier_state` 显式传档，否则
+  `load_all(enabled=None)` 会把档位重置成包内清单 ⇒ linter 路径静默回默认档）。
+- **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **34 构造 × 4 档矩阵**
   （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按解析成哪个节点
   判定；复现用 `--collect-only -q`）+ 同进程连续切档 / `Lexer` 跟随 / 非法 `enabled`
   **fail-fast**；引擎侧门控判据在 `tests/engine/core/test_tier_gated_grammar.py`。
@@ -184,8 +180,8 @@ render → 与源比对，七条：
 - **修复本边界的两个实例（判断"能不能绕"的判据）**：
   · **绕得开** = 差异可收敛到**声明层**：数字分隔符（#38）走 `[[number.based]]
     digit_separator`，引擎零语言判断；
-  · **绕不开** = 形态只由**核心 token** 组成：`_Static_assert(1)` 与 `enum e : int`——
-    这正是 ADR-0023 的立项原因（两条在「C 标准等效缺口」表内，门控已解除）。
+  · **绕不开** = 形态只由**核心 token** 组成：`_Static_assert(1)`（#41 已收口：门控 +
+    c23 插件同形规则）与 `enum e : int`（仍待，见上表）——这正是 ADR-0023 的立项原因。
 ## 关联条目
 
 - ROADMAP「SystemVerilog 语言包（远期 backlog）」/「C 语言包」（预处理阶段 4 / 切片 1b）

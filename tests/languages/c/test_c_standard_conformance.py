@@ -56,6 +56,8 @@ _TIERS = {
 _REJECT_MATRIX = [
     ("_Static_assert 缺消息（C11 两参必选）", "_Static_assert(1);\n", "c11",
      "C11 §6.7.4 static_assert-declaration 两参"),
+    ("_Static_assert 缺消息（C17 同上）", "_Static_assert(1);\n", "c17",
+     "C17 沿用 C11 §6.7.4；消息可省是 C23 才有的（档位门控前这条会被 c23 规则漏进来）"),
     ("_Static_assert 消息不是字符串字面量", '_Static_assert(1, 2);\n', "c11",
      "同上：第二实参必须是 string-literal"),
     ("_Static_assert 多一个实参", '_Static_assert(1, "x", 3);\n', "c11", "同上"),
@@ -79,12 +81,11 @@ _BELOW_TIER_STATE = [
 
 # 标准等效**缺口清单**（oracle 实测 + tpc 对照；`xfail(strict=True)`：修好即变红提醒转正）。
 # 每条 = (标签, 源码, 档位, 标准依据 + gcc 结论)
-# ⚠ 成员表位（#35）、字面量前缀族 / 二进制常量（#37）、数字分隔符（#38）已转正，移出本清单；
-#   余 2 条：`_Static_assert(1)`（下划线拼写、单参；受"规则文件不按档位门控"限制）、
-#   `enum e : int` 固定底层类型（同一限制：core 的冒号位若由 c23 规则注入，会漏进下档）。
+# ⚠ 成员表位（#35）、字面量前缀族 / 二进制常量（#37）、数字分隔符（#38）、
+#   C23 单参下划线拼写 `_Static_assert(1)`（#41）已转正，移出本清单；
+#   余 1 条：`enum e : int` 固定底层类型（core 的冒号位若由 c23 规则注入会漏进下档，
+#   #40 门控后前置已解除、待实现）。
 _GAPS = [
-    ("C23 单参 _Static_assert（下划线拼写）", "_Static_assert(1);\n", "c23",
-     "C23 §6.7.10 消息可省，两种拼写同语法；gcc -std=c23 OK"),
     ("C23 enum 固定底层类型", "enum e : int { A };\n", "c23",
      "C23 §6.7.2.2 enum-type-specifier；gcc -std=c23 OK"),
 ]
@@ -97,10 +98,16 @@ def _restore_language():  # pyright: ignore[reportUnusedFunction] — autouse fi
 
 
 def _env(tier: str) -> dict:
-    """按档位加载 C 包，返回解析/渲染/lint 入口（同 `compare` 的生产路径）。"""
+    """按档位加载 C 包，返回解析/渲染/lint 入口（**生产路径**：档位只走 `enabled=`）。
+
+    ⚠ **不传 `ext_dirs=[plugins]`**（2026-10-21 循环 #41 修正）：那会把插件的规则文件
+    当"显式扩展目录"无条件注册，绕过 ADR-0023 的档位门控（`ext_dirs` 按定义不受门控，
+    见 ADR-0023「边界」）——测试里就变成"c11 档也加载 c23 规则"，判据被抬高接受域掩盖。
+    生产入口（CLI/pipeline）的 `ext_dirs` 为空，插件规则只经 `load_all_components` 按档加载。
+    """
     enabled = _TIERS[tier]
     ConfigRegistry.load_language(_PACK, plugins_dir=_PLUGINS, enabled=enabled)
-    rules = setup_grammar(_PACK, GrammarRulesRegister(), ext_dirs=[_PLUGINS])
+    rules = setup_grammar(_PACK, GrammarRulesRegister())
     stmt = [
         n
         for n, r in rules.items()
@@ -109,7 +116,7 @@ def _env(tier: str) -> dict:
     parser = Parser(
         rules_dir=_PACK, rules=rules, rule_selector=RuleSelector(rules, stmt), log_file=""
     )
-    lexer = Lexer(rules_dir=_PACK, ext_dirs=[_PLUGINS])
+    lexer = Lexer(rules_dir=_PACK)
 
     def parse(src: str):
         return parser.parse(lexer.tokenize(src))
@@ -126,7 +133,7 @@ def _env(tier: str) -> dict:
         "parse": parse,
         "render": render,
         "lint": lambda src: LinterScanner(
-            rules_dir=_PACK, register=GrammarRulesRegister(), ext_dirs=[_PLUGINS]
+            rules_dir=_PACK, register=GrammarRulesRegister()
         ).scan(src),
         "tokens": lambda text: [
             (t.type, t.content)
@@ -259,6 +266,9 @@ class TestStaticAssertMemberPosition:
          "c23", "StaticAssertC23MsgDecl"),
         ("C23 struct 成员单参", 'struct s { int a; static_assert(1); };\n',
          "c23", "StaticAssertC23NoMsgDecl"),
+        ("C23 下划线拼写 struct 成员单参",
+         "struct s { int a; _Static_assert(1); };\n",
+         "c23", "StaticAssertC23UnderscoreNoMsgDecl"),
     ]
 
     @pytest.mark.parametrize("label,src,tier,node", _CASES, ids=[c[0] for c in _CASES])
@@ -295,7 +305,51 @@ class TestStaticAssertMemberPosition:
         env = _env(tier)
         names = {n.node_name for n in iter_nodes(env["parse"](src))} if env["parse"](src) else set()
         assert "StaticAssertDecl" not in names and "StaticAssertC23NoMsgDecl" not in names, label
+        assert "StaticAssertC23UnderscoreNoMsgDecl" not in names, label
         assert env["lint"](src), f"{label}: linter 零诊断（静默接受非法形态）"
+
+
+class TestC23UnderscoreNoMsg:
+    """C23 §6.7.10 的**单参形态**对 `_Static_assert` 拼写同样成立（循环 #41）。
+
+    缺口原样（gcc 接受、tpc 拒绝）：`_Static_assert(1);`——修法 = c23 插件新增同形规则
+    `22_static_assert_no_msg.toml`，靠 ADR-0023 档位门控只在 c23 档加载（c11/c17 的
+    "两参必选"拒绝面在 `TestRejectSide`，两档各一条）。判据：
+      ① 三处作用域（文件 / 块 / if body；成员表位在 `TestStaticAssertMemberPosition`）
+         都解析成 `StaticAssertC23UnderscoreNoMsgDecl` 且 `cond` 绑定到条件表达式；
+      ② 与 c11 的 `_Static_assert(1, "x")` 规则**同首 token 并存**：两参形态不被本条抢走
+         （`StaticAssertDecl` 仍在——同首 token 试解析区分）；
+      ③ linter 零诊断 + 渲染 token 序列逐项相同 + 幂等。
+    """
+
+    _CASES = [
+        ("C23 单参（文件作用域）", "_Static_assert(1);\n"),
+        ("C23 单参（块作用域）", "void f(void) {\n    _Static_assert(1);\n}\n"),
+        ("C23 单参（if body）", "void f(int a) {\n    if (a)\n        _Static_assert(1);\n}\n"),
+    ]
+
+    @pytest.mark.parametrize("label,src", _CASES, ids=[c[0] for c in _CASES])
+    def test_accepted_in_c23(self, label, src):
+        env = _env("c23")
+        ast = env["parse"](src)
+        assert ast is not None and getattr(ast, "sub_node", None), f"{label}: 空 AST"
+        nodes = list(iter_nodes(ast))
+        assert any(n.node_name == "StaticAssertC23UnderscoreNoMsgDecl" for n in nodes), (
+            f"{label}: 缺 StaticAssertC23UnderscoreNoMsgDecl（{sorted(n.node_name for n in nodes)}）"
+        )
+        node = next(n for n in nodes if n.node_name == "StaticAssertC23UnderscoreNoMsgDecl")
+        assert getattr(node, "cond", None) is not None, f"{label}: cond 未绑定"
+        assert env["lint"](src) == [], f"{label}: linter 有诊断"
+        out = env["render"](src)
+        assert env["tokens"](out) == env["tokens"](src), f"{label}: {src!r} → {out!r}"
+        assert env["render"](out) == out, f"{label}: 不幂等"
+
+    def test_two_arg_underscore_form_not_stolen(self):
+        """同首 token 两条规则靠试解析区分：两参形态仍走 c11 的 `StaticAssertDecl`。"""
+        src = '_Static_assert(1, "x");\n'
+        names = {n.node_name for n in iter_nodes(_env("c23")["parse"](src))}
+        assert "StaticAssertDecl" in names, names
+        assert "StaticAssertC23UnderscoreNoMsgDecl" not in names, names
 
 
 class TestStandardGaps:

@@ -25,11 +25,10 @@
 
 ### 1.3 标准等效（阶段 5，循环 #33 第一批断言面已交付）
 
-- [ ] **C11/C23 语法面缺口 2 条样本**：`_Static_assert(1)` 单参（下划线拼写）、
-      `enum e : int` 固定底层类型——合法标准代码当前被拒（oracle = gcc 16.1.0
-      `-std=… -pedantic-errors`；成员位 #35、字面量族 #37、数字分隔符 #38 已转正）。
-      **前置已解除**（#40 档位门控 ADR-0023）⇒ 两条都可做了，各约 1 轮。
-      判据：`tests/languages/c/test_c_standard_conformance.py` 的 `xfail(strict=True)` 逐条转正。
+- [ ] **C11/C23 语法面缺口 1 条样本**：`enum e : int` 固定底层类型——合法标准代码当前被拒
+      （oracle = gcc 16.1.0 `-std=… -pedantic-errors`；成员位 #35、字面量族 #37、
+      数字分隔符 #38、单参下划线拼写 #41 已转正）。**前置已解除**（#40 档位门控 ADR-0023）。
+      判据：`tests/languages/c/test_c_standard_conformance.py` 的 `xfail(strict=True)` 转正。
       链：gap「C 标准等效缺口」
 
 ## 二、工具与门禁基础设施（非主线，收口时按影响做）
