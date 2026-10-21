@@ -97,7 +97,7 @@ render → 与源比对，七条：
 
 | 项 | 实测 |
 |---|---|
-| `python tools/render_coverage.py grammar/c` | **118 条规则 / 118 有渲染配置（100%）** |
+| `python tools/render_coverage.py grammar/c` | **121 条规则 / 121 有渲染配置（100%）** |
 | `samples/ring_buffer.h` ratio | **0.992553** |
 | `samples/ring_buffer.c` ratio | **0.992543** |
 | `samples/edge_comments.c` ratio | **0.982216** |

@@ -110,8 +110,13 @@ spec = "$1"
 #   `declarators` 槽位为空）。typedef 名仍只在本规则**之外**表达：① 首个说明符位
 #   （`@TypeSpecifier`）；② 存储类/限定符之后的位点由**宿主声明符位的「声明符优先」
 #   交替**接住（`@TypedefDeclarators` / `@TypedefDeclarator` / `@TypedefInitDeclarator`，
-#   见 `[Declaration.parser]` 头注；循环 #44）。`unsigned myint x;` 这类**两个类型说明符**
-#   仍不支持——那不是顺序问题，C 本身也不允许两个 type-specifier。
+#   见 `[Declaration.parser]` 头注；循环 #44）。
+#   ⚠ **过接受（已登记，不修）**：交替第二支只按 token 形态判"id 是 typedef 名"（无符号表），
+#   故 `int a b;`（漏逗号，读成「类型 a + 声明 b」）、`unsigned T x;`（两个类型说明符）、
+#   `sizeof(int T)` 会被接受且 linter 0 诊断——C 本身不允许这些形态；代价是 linter 失去
+#   "声明符间漏逗号"的检出。边界与触发条件（需符号表，属切片 1b）见
+#   `docs/gaps/gap-c-real-corpus.md`「过接受边界」；判据锁定
+#   `tests/languages/c/test_c_declaration_spec_order.py::TestKnownOverAcceptanceBoundaries`。
 [SpecRest.parser]
 production = [
     "@StorageClass|@TypeQualifier|@SimpleType|@StructSpecifier|@AnonStructSpecifier|@EnumSpecifier|@AnonEnumSpecifier|@FuncSpec",
@@ -182,10 +187,10 @@ production = [
 [TypedefDeclarator.parser.node]
 type = "$1"
 declarator = "$2"
-# 消费面兼容：函数/形参的符号收集路径是 `declarator.direct.head.content`（相对于宿主
-# 的 `declarator` 属性），包装节点必须把这个属性透出来（否则 `extern T f();` 的函数名、
-# `void g(const T *p)` 的形参名会静默不进符号表）。
-direct = "$2.direct"
+# ⚠ **不要共绑 `direct = "$2.direct"`**：包装节点会同时持有 Declarator 与 DirectDeclarator
+# 两棵**同一身份**的子树 ⇒ `iter_children` 走两遍（重复符号记录 + TAG001 假阳性，
+# 循环 #44 对抗审计实测）。消费面改由语言包声明**候选路径**：
+# `FuncDef` / `ParamDecl` 的 `name_path` 列表含 `declarator.declarator.direct.head.content`。
 
 [TypedefDeclarator.renderer.layout]
 line = [{ ref = "type" }, " ", { ref = "declarator" }]
@@ -443,7 +448,8 @@ declarator = "$2"
 # 形参名进所在作用域（函数作用域）——未署名形参 `declarator` 缺省，路径取空自动跳过。
 [ParamDecl.analyzer.c_symbol_collect]
 site = "declarator"
-name_path = "declarator.direct.head.content"
+# 候选路径同 FuncDef：普通形参 / 带前缀类型的包装规则（`TypedefDeclarator`）
+name_path = ["declarator.direct.head.content", "declarator.declarator.direct.head.content"]
 kind = "variable"
 
 

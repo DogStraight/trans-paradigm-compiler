@@ -202,6 +202,60 @@ class TestOrdinaryDeclarationsRegression:
         assert name in contents, f"{label}: 声明名 {name!r} 不在 AST（{sorted(contents)}）"
 
 
+class TestWrapperSingleTraversal:
+    """包装节点不得共绑同一子树：`TypedefDeclarator` 曾用 `direct = "$2.direct"` 透出
+    声明符子树，导致 `iter_children` 走两遍 → 重复符号记录 + TAG001 假阳性
+    （循环 #44 对抗审计实测）。修法 = 只绑 `declarator`，消费面声明候选路径
+    （`FuncDef` / `ParamDecl` 的 `name_path` 列表）。"""
+
+    def test_single_symbol_record_for_nested_declarator(self, c):
+        from collections import Counter
+
+        from analyzer.traversal import AnalysisTraversal
+
+        src = "typedef int T;\nvoid f(const T (*cb)(struct S { int x; } *q));\n"
+        at = AnalysisTraversal(c["rules"], rules_dir=_RULES)
+        at.analyze(normalize_ast(_parse(src, c)))
+        assert [str(d) for d in at.diagnostics] == [], "包装节点重复遍历触发假阳性诊断"
+        counts = Counter((s.name, s.kind) for s in at.all_symbols)
+        assert counts[("q", "variable")] == 1, counts
+        assert counts[("S", "tag")] == 1, counts
+        assert counts[("f", "function")] == 1, counts
+
+    def test_single_symbol_record_for_funcdef_param(self, c):
+        from collections import Counter
+
+        from analyzer.traversal import AnalysisTraversal
+
+        src = "typedef int T;\nextern T f(int x) { return x; }\n"
+        at = AnalysisTraversal(c["rules"], rules_dir=_RULES)
+        at.analyze(normalize_ast(_parse(src, c)))
+        counts = Counter((s.name, s.kind) for s in at.all_symbols)
+        assert counts[("x", "variable")] == 1, counts
+        assert counts[("f", "function")] == 1, counts
+
+
+class TestKnownOverAcceptanceBoundaries:
+    """已登记的**过接受**边界（宽进口径的代价；触发条件见 gap 档）。
+
+    交替第二支只按 token 形态判断「id 是 typedef 名」、没有符号表，于是
+    `int a b;`（漏逗号）会被读成「类型 a + 声明 b」；`unsigned T x;`（两个类型
+    说明符）与 `sizeof(int T)` 同理。⚠ 这确实让 linter 失去"声明符间漏逗号"的检出
+    （旧行为：parse 截断 + `expected ';'`），宽进口径下**接受并登记**，不是修复目标；
+    真实语料出现该形态的误报再升级（需符号表，属切片 1b）。"""
+
+    @pytest.mark.parametrize(
+        "src",
+        ["int a b;\n", "int x y;\n", "typedef int T;\nunsigned T x;\n",
+         "typedef int T;\nint n = sizeof(int T);\n"],
+    )
+    def test_boundary_still_accepted(self, c, c_linter, src):
+        ast = _parse(src, c)
+        assert ast is not None and getattr(ast, "sub_node", None), f"过接受边界消失：{src!r}"
+        assert getattr(c["parser"], "_parse_truncated", None) is False, src
+        assert _lint(src, c_linter) == [], f"{src!r}: 预期 0 诊断（登记边界）"
+
+
 class TestSymbolCollectionUnchanged:
     """符号收集路径不破：新形态的声明名照常进符号表（`declarators.items` 路径统一）。"""
 

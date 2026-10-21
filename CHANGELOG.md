@@ -28,12 +28,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   真实语料探针（未入库）：cJSON 124→**56**、zutil 86→**27**、crc32 45→14、adler32 43→13、
   gzread 40→10、compress 36→12、uncompr 35→11（余量由 G3 未命名抽象指针形参 /
   G4 typedef 强转=切片 1b 解释，见 `docs/gaps/gap-c-real-corpus.md`）。
-  判据：`tests/languages/c/test_c_declaration_spec_order.py`（24 例：6 宿主 + 指针限定符 +
-  普通声明回归 + 符号收集）+ 档位基线档 1 例 + `c_acceptance` 47 → **48** 条 / 空洞 0；
-  `tests/languages/c` 全量零回归；门禁变异 **113 → 115**（`--only 114/115` 实测变红）。
-  文档：`grammar/c/README.md`、`01_declarations.toml` 头注（SpecRest 说明更正）、
-  `docs/gaps/gap-c-real-corpus.md`（G1/G2 收口、G3/G4 余量+方案 A 否档）、
-  TODO（G3 立项）/ROADMAP/PROGRESS。
+  判据：`tests/languages/c/test_c_declaration_spec_order.py`（**30 例**：6 宿主 + 指针限定符 +
+  普通声明回归 + 符号收集 + 过接受边界）+ 档位基线档 1 例 +
+  `c_acceptance` 47 → **48** 条 / 空洞 0；`tests/languages/c` 全量零回归；
+  门禁变异 **113 → 115**（`--only 114/115` 实测变红）。
+  **对抗审计（提交后独立复核）3 项成立，2 修 1 登记**：
+  · A 修：包装规则曾用 `direct = "$2.direct"` 共绑同一子树 ⇒ `iter_children` 走两遍
+    （重复符号记录 + TAG001 假阳性）；改只绑 `declarator`，`FuncDef`/`ParamDecl` 的
+    `name_path` 用**候选路径列表**（语言包声明面）；
+  · B **登记未修**：声明符优先交替回滚时不回收注释簿记 ⇒ typedef 名后的注释
+    （行尾 / 独占行）可能被去重吞掉。试修（把行尾台账/锚点集纳入快照事务回滚）在
+    C 形态可保注释，但**触发 verilog 注释恢复回归**（`test_comment_restore`
+    幂等失败：端口注释位置漂移；锚点通道与既有领取/渲染协同复杂）⇒ 回退并登记
+    （修法 = 事务化注释簿记 + 原子节点领取/渲染面协同，TODO 1.2；触发 = 真实语料
+    出现该形态）。判据不锁"新形态注释保留"；行尾注释在交替中的丢失已用最小复现
+    记录；
+  · C 登记：交替第二支无符号表 ⇒ 过接受 `int a b;` / `unsigned T x;` / `sizeof(int T)`
+    （宽进口径；linter 失去"漏逗号"检出，升级触发=真实语料/切片 1b）；
+  · 另登记**既有**渲染边界：展平行内行尾注释的 LineSuffix 可能吞后续 token
+    （`struct S { int // c\nx; };` 旧语法同坏；渲染修复另立项）。
+  文档：`grammar/c/README.md`、`01_declarations.toml` 头注（SpecRest/过接受说明更正）、
+  `docs/gaps/gap-c-real-corpus.md`（G1/G2 收口、审计 A/B/C、已知边界、G3/G4 余量）、
+  TODO（G3 + 渲染边界）/ROADMAP/PROGRESS。
 
 - **C23 枚举固定底层类型 `enum e : int`（标准等效缺口 1 → 0）**（2026-10-21，循环 #42，
   C 标准面 + 语义检查面）：C23 §6.7.2.2 `enum-type-specifier: : specifier-qualifier-list`

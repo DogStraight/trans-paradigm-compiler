@@ -129,7 +129,8 @@ scope = { kind = "function" }
 
 [FuncDef.analyzer.c_symbol_collect]
 site = "declarator"
-name_path = "declarator.direct.head.content"
+# 候选路径：普通声明符 / 带前缀类型的包装规则（`TypedefDeclarator`；见 01_declarations 头注）
+name_path = ["declarator.direct.head.content", "declarator.declarator.direct.head.content"]
 kind = "function"
 # 同 `Declaration`：说明符 capture（函数位也要判"存储类/函数说明符用于对象还是函数"，
 # 见 task-36 拍板 ⑤：FuncDef 与函数声明两条都挂）。

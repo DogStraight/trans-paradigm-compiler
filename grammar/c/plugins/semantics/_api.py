@@ -193,7 +193,12 @@ def collect_declarator_site(analyzer: Any, node: Node, config: dict) -> None:
 
     TOML 声明面（语言知识在配置）：
       `item_path`       声明项容器路径（Declaration 用 `declarators.items`；省略 = 节点自身）
-      `name_path`       声明项内取名的路径（`declarator.direct.head.content`）
+      `name_path`       声明项内取名的路径；**字符串或候选路径列表**（按序试，首个命中即用）——
+                        包装规则（`TypedefDeclarator` 等）不透出 `direct` 属性，故函数/形参位
+                        需要 `declarator.direct.head.content` 与
+                        `declarator.declarator.direct.head.content` 两条候选；不能靠"并联属性"
+                        透出 `direct`：同一子树会被 `iter_children` 走两遍（重复符号记录 +
+                        TAG001 假阳性，循环 #44 对抗审计实测）。
       `typedef_marker`  整条声明子树内出现即 typedef（`keyword.typedef`）
       `function_marker` 声明项子树内出现即函数名（`FuncSuffix`）
       `kind` / `typedef_kind` / `function_kind`  三类 kind 取值
@@ -202,6 +207,9 @@ def collect_declarator_site(analyzer: Any, node: Node, config: dict) -> None:
     item_path = config.get("item_path")
     items = _walk(node, item_path) if item_path else [node]
     name_path = config.get("name_path", "")
+    name_paths = [name_path] if isinstance(name_path, str) else list(name_path or [])
+    if not name_paths:
+        name_paths = [""]
     has_typedef = bool(
         config.get("typedef_marker") and _subtree_has(node, config["typedef_marker"])
     )
@@ -211,7 +219,11 @@ def collect_declarator_site(analyzer: Any, node: Node, config: dict) -> None:
     for item in items:
         if not isinstance(item, Node):
             continue
-        names = [n for n in (_as_name(v) for v in _walk(item, name_path)) if n]
+        names: list[str] = []
+        for path in name_paths:
+            names = [n for n in (_as_name(v) for v in _walk(item, path)) if n]
+            if names:
+                break
         if not names:
             continue
         fn_kind = config.get("function_kind", KIND_FUNCTION)
