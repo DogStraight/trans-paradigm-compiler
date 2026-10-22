@@ -210,6 +210,27 @@ declarator = "$2"
 line = [{ ref = "type" }, " ", { ref = "declarator" }]
 
 
+# ── 无名字的抽象声明符（形参原型：`void f(void *, size_t);`）──
+# C99 §6.7.6：parameter-declaration 可省略 declarator（只有指针/限定符形态），真实
+# 头文件大量使用（zlib `void zmemcpy(void *, void *, z_size_t);` 等；循环 #45 收口 G3）。
+# 复用 `@Pointer`（`*` 链 + 类型限定符，见其头注）；typedef 名 + 指针（`const T *`）由
+# `@TypedefName @Pointer` 包装接住（`@Pointer` 的首 token 是 `*`，接不到 id）。
+# 仅 ParamDecl 使用：声明/成员位不允许无名抽象声明符（C 语法本就不允许）。
+
+[TypedefAbstractDeclarator.parser]
+production = [
+    "@TypedefName",
+    "@Pointer",
+]
+
+[TypedefAbstractDeclarator.parser.node]
+type = "$1"
+declarator = "$2"
+
+[TypedefAbstractDeclarator.renderer.layout]
+line = [{ ref = "type" }, " ", { ref = "declarator" }]
+
+
 
 # ── 初始化器（阶段 2b）──
 # C99 §6.7.8：`= assignment-expression` 或 `= { initializer-list }`（可递归嵌套）。
@@ -435,10 +456,14 @@ items = ["$1", "$2.items[*].sub_node[1]"]
 #   很隐蔽——`int f(int a)` 正常、`int f(unsigned int n)` 整个函数定义解析失败
 #   （实测：真实语料样本的 `ring_push` 即栽在这里，报 match_length 截断）。
 #   与 `MemberSpec`（结构体成员）同形：限定符/类型说明符打头 + 说明符序列重复项。
+# ⚠ 声明符位含**无名抽象声明符**（C99 §6.7.6）：`@Pointer`（`*` 链 + 限定符）与
+# `@TypedefAbstractDeclarator`（`const T *`）——原型声明允许省略形参名，真实 C 头文件
+# 高频形态（循环 #45 收口 G3）。具体声明符两支仍在前（逐字不变）；函数指针/数组型
+# 抽象声明符（`int (*)(void)` / `int []`）暂不收，按真实语料触发再扩。
 [ParamDecl.parser]
 production = [
     "@ParamSpec",
-    "(@Declarator|@TypedefDeclarator)?",
+    "(@Declarator|@TypedefDeclarator|@Pointer|@TypedefAbstractDeclarator)?",
 ]
 
 [ParamDecl.parser.node]

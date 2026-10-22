@@ -127,7 +127,7 @@ analyze 安全网（E002/E003）语义、raw 渲染权威（`_verbatim_text`）�
   e2e lint 期望表更新；`--json` deferred 字段有正/负例断言。
 - **S4**：全量 `pytest tests/`（当前基线 4376 passed / 7 skipped）全绿；
   `python tools/ab_pipeline_compare.py --mode cli --products` **0/144**（S2、S4 各跑）；
-  `python tools/c_acceptance.py` **48/0** 不变；C 真实语料探针（`%TEMP%` 未入库）诊断数
+  `python tools/c_acceptance.py` **49/0** 不变；C 真实语料探针（`%TEMP%` 未入库）诊断数
   不增加（当前 cJSON 56 / zutil 27 等，见 `docs/gaps/gap-c-real-corpus.md`）；
   引擎/语言包内 `grep -r "pre_scan"` = 0（docs 历史说明除外）；pyright strict 0；
   `render_coverage` 100% 不变；`tools/check_gate_efficacy.py` 变异表同步（删除/改写相关条）。

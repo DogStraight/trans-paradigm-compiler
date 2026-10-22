@@ -46,8 +46,8 @@
 
 - **判据（每族都要有）**：正样本解析通过（进 AST）+ 负样本被拒（linter/parser 报错），
   两向都要断言——只有正样本会漏掉"语法过宽"。
-- **盘点工具**：`python tools/c_acceptance.py`（48 条构造逐条试解析，报"进 AST / 空 AST /
-  词法抛错"）——当前 **48 条 / 接受 48 / 空洞 0**（**口径注**：两条预处理用例按"**被消费且无异常**"
+- **盘点工具**：`python tools/c_acceptance.py`（49 条构造逐条试解析，报"进 AST / 空 AST /
+  词法抛错"）——当前 **49 条 / 接受 49 / 空洞 0**（**口径注**：两条预处理用例按"**被消费且无异常**"
   接受——指令行被替换为整行 marker 注释，**不代表 `#include` / `#define` 已真实实现**，见
   `docs/gaps/gap-c-preprocessor-scope.md` ⑭）。空洞是无声的：不属任何语句入口 FIRST 集的
   构造会被整体跳过而不报错，只跑测试套件看不出还差哪一族。
@@ -97,7 +97,7 @@ render → 与源比对，七条：
 
 | 项 | 实测 |
 |---|---|
-| `python tools/render_coverage.py grammar/c` | **121 条规则 / 121 有渲染配置（100%）** |
+| `python tools/render_coverage.py grammar/c` | **122 条规则 / 122 有渲染配置（100%）** |
 | `samples/ring_buffer.h` ratio | **0.992553** |
 | `samples/ring_buffer.c` ratio | **0.992543** |
 | `samples/edge_comments.c` ratio | **0.982216** |

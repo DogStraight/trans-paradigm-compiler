@@ -1178,6 +1178,15 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": '    "symbol.base.multiple",\n    "@Pointer?",  # 变异：去掉指针限定符\n',
         "test": "tests/languages/c/test_c_declaration_spec_order.py",
     },
+    {
+        "why": "无名抽象指针形参（C99 §6.7.6 `void f(void *, size_t);`）靠 ParamDecl 的"
+               "`@Pointer`/`@TypedefAbstractDeclarator` 两支：去掉后真实头文件高频原型"
+               "整条不可解析（zlib 原型声明命中；循环 #45 补）",
+        "file": "grammar/c/01_declarations.toml",
+        "old": '    "(@Declarator|@TypedefDeclarator|@Pointer|@TypedefAbstractDeclarator)?",\n',
+        "new": '    "(@Declarator|@TypedefDeclarator)?",  # 变异：去掉无名抽象声明符\n',
+        "test": "tests/languages/c/test_c_abstract_declarators.py",
+    },
 ]
 
 

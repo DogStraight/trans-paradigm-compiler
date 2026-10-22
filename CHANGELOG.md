@@ -7,6 +7,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 无名抽象指针形参（真实语料 G3 收口）**（2026-10-22，循环 #45，C 语法面）：
+  C99 §6.7.6 允许 `parameter-declaration` 省略 declarator——`void f(void *, size_t);` /
+  `int g(const char *, const char *);` 这类「只有 `*` 链（可带限定符）、无名字」的原型是
+  真实头文件高频形态（zlib `void zmemcpy(void *, void *, z_size_t);` 等）。本包 ParamDecl
+  只收具体声明符 ⇒ 整条不可解析（真实语料 zlib 族剩余误报主体之一）。
+  修法：ParamDecl 声明符位增加两支**抽象**形态——`@Pointer`（`*` 链 + 限定符）与新增
+  `TypedefAbstractDeclarator`（`@TypedefName @Pointer`，接 `const T *`）；具体声明符两支
+  仍在最前（既有形态逐字不变，具名形参照常进符号表、无名形参不产生符号）。
+  括号型抽象声明符（`int (*)(void)` / `int []`）**暂不收**（完整抽象声明符文法另一档，
+  按真实语料触发再扩），判据锁定"仍被拒"。
+  真实语料探针：zlib 族误报进一步下降——zutil 27→**7**、crc32 14→**4**、adler32 13→**3**、
+  gzread 10→**0**、compress 12→**6**、uncompr 11→**5**、cJSON 56→**56**（余量全部 = G4
+  typedef 强转/切片 1b）；7 文件仍截断（G4 致）。
+  判据：`tests/languages/c/test_c_abstract_declarators.py`（16 例：5 目标形态 + 符号面 +
+  具名/普通形参回归 + 边界拒绝）+ 档位基线档 1 例；`c_acceptance` 48 → **49** 条 / 空洞 0；
+  门禁变异 **115 → 116**（`--only 116` 实测变红）；`tests/languages/c` 全量零回归。
+
+### Added
+
 - **C 声明说明符顺序自由 + 指针限定符**（2026-10-21，循环 #44，C 语法面；作者拍板走 B）：
   C 的 `declaration-specifiers` 顺序自由——typedef 名可出现在存储类/限定符之后
   （`extern size_t n;` / `const T *p`），而本包此前只允许 typedef 名在首说明符位

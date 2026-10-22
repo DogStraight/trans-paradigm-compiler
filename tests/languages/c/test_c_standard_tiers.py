@@ -232,6 +232,15 @@ class TestDefaultTierEntry:
         names = _nodes_with(pack, "typedef int T;\nextern T *p;\n")
         assert "TypedefDeclarators" in names, names
 
+    def test_baseline_tier_accepts_abstract_pointer_params(self, tmp_path):
+        """无名抽象指针形参（`void f(void *, size_t);`）是**核心 C99** 语法。
+
+        判据 = 基线档（`enabled=[]`）也解析完整：`Pointer` 抽象声明符节点出现。
+        """
+        pack = _make_pack(tmp_path, [])
+        names = _nodes_with(pack, "void f(void *, size_t);\n")
+        assert "Pointer" in names, names
+
     def test_real_pack_meta_matches_c23_tier(self):
         """真实包的启用清单等于最强档（c11+c17+c23）——避免"文档说一套、包里另一套"。"""
         with open(os.path.join(_PACK, "tpc.toml"), "rb") as f:

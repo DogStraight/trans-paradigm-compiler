@@ -113,6 +113,9 @@ CASES: list[tuple[str, str, str]] = [
     # 声明说明符顺序自由 + 指针限定符（循环 #44；C99 §6.7 核心面，真实语料驱动）
     ("声明", "说明符顺序（存储类/限定符 + typedef 名）+ 指针限定符",
      "typedef int T;\nextern T * const p13;\nint f13(const T * const q13);\n"),
+    # 无名抽象指针形参（循环 #45；C99 §6.7.6，真实头文件高频：zlib `void zmemcpy(void *, void *, z_size_t);`）
+    ("声明", "无名抽象指针形参（原型声明 void f(void *, size_t)）",
+     "void f14(void *, size_t);\nint g14(const char *, const char *);\n"),
 ]
 
 

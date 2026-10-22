@@ -30,6 +30,8 @@
   `const T *p`，经宿主声明符位的「声明符优先」交替 `@TypedefDeclarators` 系列实现，
   循环 #44）；**指针限定符**（`int * const q;`——C99 §6.7.6 `* type-qualifier-list_opt`）；
   声明符递归（多级指针 / 数组 / 函数后缀 / 括号声明符 / 参数表）；
+  **无名抽象指针形参**（`void f(void *, size_t);`——C99 §6.7.6，ParamDecl 收
+  `@Pointer` / `@TypedefAbstractDeclarator`，循环 #45 收口真实语料 G3）；
   `struct`/`union`（带标签与匿名）/`enum`；typedef 名作类型；
   位域；初始化器（含**指示符** `.field=` / `[i]=`）；**变参尾段 `...`**。
 - **语句**：compound / 表达式 / 空 / `if`(含 `else`) / `switch`(含 `case`/`default`) /
