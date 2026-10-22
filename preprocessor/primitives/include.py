@@ -183,6 +183,10 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
             out_diags=child_diags,
             out_macro_events=child_events,
             preexpand_includes=ctx.get("_preexpand_includes", True),
+            # 头内条件编译/包含守卫要看到**包含点当时**的可见宏（C 语义）。
+            # 此前子扫描从空表起 ⇒ include guard 失效、同一头被重复展开（真实
+            # 语料 zlib `z_stream_s`/`gz_header_s` TAG001 二次定义命中）。
+            predefined=dict(ctx.get("_active_defs") or {}),
         )
         if child_diags:
             # 子扫描的诊断并入宿主（否则嵌套里的循环/深度诊断随子 ctx 丢失）

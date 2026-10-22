@@ -38,6 +38,12 @@ class ExpressionChecker:
         # 原子匹配器（共享 RuleMatcher）由 scanner 后置注入：pratt 的原子回调
         # 按 is_atom 规则 production 匹配（参考 parser atomic_rules），不固化。
         self._atom_matcher = atom_matcher
+        # 注释过滤视图缓存（key=(id(tokens), len)）：注释是 trivia，但 pratt 只
+        # 跳过 space/newline 类；三元 `?:` 前/后夹注释（宏体尾注释被铺进流，
+        # 真实语料 crc32 `POLY` 命中）会让 pratt 在 comment 处失配 ⇒ 整句误报。
+        # 每次 consume 都重建视图会 O(n²)（大文件全量套件卡死），故按 token 流
+        # 缓存一次；consumed 通过原下标映射回原流。
+        self._comment_views: dict[tuple[int, int], tuple[list, list[int]]] = {}
         # pratt 解析依赖 token 分类器（is_number/is_string/...），需安装
         categories = ConfigRegistry._loaded.get("parser.token_categories", {})
         install_token_classifier(categories)
@@ -72,6 +78,53 @@ class ExpressionChecker:
         finally:
             ExpressionChecker._DEPTH["n"] -= 1
 
+    def _comment_view(self, tokens: list[Token]) -> tuple[list, list[int]] | None:
+        """含注释的 token 流 → (滤注释视图, 视图下标→原下标)；无注释 → None。"""
+        key = (id(tokens), len(tokens))
+        cached = self._comment_views.get(key)
+        if cached is not None:
+            return cached
+        if not any(t.type == "comment" for t in tokens):
+            return None
+        view: list = []
+        pos_map: list[int] = []
+        for i, tok in enumerate(tokens):
+            if tok.type == "comment":
+                continue
+            view.append(tok)
+            pos_map.append(i)
+        if len(self._comment_views) > 8:  # 会话内少量 token 流（防缓存无界）
+            self._comment_views.clear()
+        self._comment_views[key] = (view, pos_map)
+        return view, pos_map
+
+    def _comment_fallback(
+        self, tokens: list[Token], idx: int, stop_tokens: set[str] | None
+    ) -> int | None:
+        """滤注释视图重试：成功返回原流消费数，失败/无注释返回 None。"""
+        view_info = self._comment_view(tokens)
+        if view_info is None:
+            return None
+        view, pos_map = view_info
+        import bisect
+
+        start = bisect.bisect_left(pos_map, idx)
+        if start >= len(view):
+            return None
+        try:
+            _, consumed_view = parse_with_count(
+                view,
+                start,
+                operator_defs=self._op_defs,
+                atom_parser=self._atom_parser,
+                stop_tokens=stop_tokens,
+            )
+        except ValueError:
+            return None
+        if consumed_view <= 0:
+            return None
+        return pos_map[start + consumed_view - 1] + 1 - idx
+
     def _consume_inner(
         self,
         tokens: list[Token],
@@ -81,39 +134,6 @@ class ExpressionChecker:
         if idx >= len(tokens):
             return [], 0
         try:
-            # 注释是 trivia（TRIVIA_TOKEN_TYPES 含 comment），但 pratt 只跳过
-            # space/newline 类；三元 `?:` 前/后夹注释（宏体末尾带注释被铺进流，
-            # 真实语料 crc32 `POLY` 命中）会让 pratt 在 comment 处失配 ⇒
-            # 整句误报。对含注释的表达式区间做**滤注释视图**，消费数回映射。
-            suffix = tokens[idx:]
-            if any(t.type == "comment" for t in suffix):
-                view: list = []
-                pos_map: list[int] = []
-                for off, tok in enumerate(suffix):
-                    if tok.type == "comment":
-                        continue
-                    view.append(tok)
-                    pos_map.append(off)
-                if not view:
-                    return [], 1
-                _, consumed_view = parse_with_count(
-                    view,
-                    0,
-                    operator_defs=self._op_defs,
-                    atom_parser=self._atom_parser,
-                    stop_tokens=stop_tokens,
-                )
-                if consumed_view <= 0:
-                    t = tokens[idx]
-                    return [
-                        LintDiagnostic(
-                            range=token_span(t),
-                            message=f"expected expression, got '{t.type}'",
-                            severity=1,
-                            code="phase-expr",
-                        )
-                    ], 1
-                return [], pos_map[consumed_view - 1] + 1
             _, consumed = parse_with_count(
                 tokens,
                 idx,
@@ -131,8 +151,20 @@ class ExpressionChecker:
                         code="phase-expr",
                     )
                 ], 1
+            # 表达式在 comment 处停住（注释是 trivia，pratt 不跳过）⇒ 用缓存
+            # 滤注释视图再试一次；只有"成功且消费更多"才采用（不改变原本成功的
+            # 解析面，真实语料 crc32 `POLY` 尾注释进三元 `?:` 命中）。
+            if idx + consumed < len(tokens) and tokens[idx + consumed].type == "comment":
+                more = self._comment_fallback(tokens, idx, stop_tokens)
+                if more is not None and more > consumed:
+                    consumed = more
             return [], consumed
         except ValueError as exc:
+            # 注释夹在 `?:` 中间时 pratt 可能直接抛"意外 token"（不是停在
+            # comment 上）⇒ 同样用缓存滤注释视图重试；失败才保留原诊断。
+            more = self._comment_fallback(tokens, idx, stop_tokens)
+            if more is not None:
+                return [], more
             t = tokens[idx]
             return [
                 LintDiagnostic(

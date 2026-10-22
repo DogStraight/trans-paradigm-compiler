@@ -1,0 +1,6 @@
+{
+  "_note": "C 真实语料诊断计数基线（按码计条数；syntax: 前缀 = linter 诊断）。增长即需解释：先确认是修复带来的真诊断还是误报回归；确需更新时用 --update 并说明原因。目标 = 零诊断（当前 total 0）。",
+  "corpus": "tests/e2e/samples/real_c_ref（ref + stubs；归属/许可见 CREDITS.md）",
+  "total": 0,
+  "counts": {}
+}

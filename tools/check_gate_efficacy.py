@@ -1221,6 +1221,22 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        if False and inc_clean:  # 变异：关闭 include 内预展开",
         "test": "tests/engine/preprocessor/test_expand_timeline.py",
     },
+    {
+        "why": "include 子扫描继承包含点宏环境（T1 连带修复）：include guard 必须跨多次"
+               "include 可见，否则同一守卫头重复铺入、类型二次定义（真实 zlib TAG001 命中）",
+        "file": "preprocessor/primitives/include.py",
+        "old": '            predefined=dict(ctx.get("_active_defs") or {}),',
+        "new": "            predefined=None,  # 变异：不继承包含点宏环境",
+        "test": "tests/engine/preprocessor/test_expand_timeline.py",
+    },
+    {
+        "why": "linter 表达式注释回退（#52）：宏体尾注释进三元 ?: 中间时 pratt 停住/"
+               "抛错，须用滤注释视图重试；关闭回退 ⇒ crc32 形态误报（真实 C 语料门禁红）",
+        "file": "linter/checkers/expression.py",
+        "old": "        view, pos_map = view_info",
+        "new": "        return None  # 变异：关闭注释回退\n        view, pos_map = view_info",
+        "test": "tests/engine/linter/test_linter_expression_comments.py",
+    },
 ]
 
 

@@ -494,8 +494,9 @@ def _build_scan_ctx(
         # `macro_timeline` 取调用点可见形参表；展开器（`expand_tokens(events=)`）
         # 按定义时间线维护可见宏集。
         "_macro_events": [],
-        # 扫描期可见宏集（include 预展开用；按源码序更新，inactive 分支不执行）
-        "_active_defs": {},
+        # 扫描期可见宏集（include 预展开/子扫描继承用；按源码序更新，inactive
+        # 分支不执行）。predefined（含父文件传入的 include 点快照）作为起点。
+        "_active_defs": dict(predefined) if predefined else {},
         "_active_funcs": {},
         # include 内容是否在包含点用"当时可见宏集"预展开（parse_raw 模式关）
         "_preexpand_includes": True,

@@ -7,6 +7,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **真实 C 语料门禁落地（退出判据 5 收口；循环 #52，T1 收尾）**：
+  · 语料入库 `tests/e2e/samples/real_c_ref/`：cJSON 1.7.19（MIT）两文件 + zlib 1.3.2
+    （zlib license）六 C + 四头 + 14 个最小系统头 stub；`CREDITS.md` 记来源/版本/许可
+    （源文件保留完整版权头；`crc32.h` 生成大表不入库）。
+  · 采集器 `tests/e2e/eval_diag_baseline_c.py`（`collect/collect_report` + `--json/--update`，
+    口径同 verilog 先例"只许减不许增"）；基线 `diag_baseline.json`（**total=0**）；
+    门禁 `tests/policy/test_diag_baseline_c.py`（清单齐全 + 每文件 parse_ok + 增长即失败 +
+    total 自洽）。
+  · 前置修复：include 子扫描**继承包含点宏环境**（`predefined=_active_defs`）⇒ include
+    guard 跨 include 可见，zlib `z_stream_s`/`gz_header_s` TAG001 二次定义清零（语料
+    7/7 parse_ok + **0 诊断**）。
+  · 修复：linter 表达式**注释回退**——pratt 不跳注释（宏体尾注释被铺进流，crc32
+    `POLY` 进三元 `?:` 命中）；表达式在 comment 处停住/抛错时用缓存滤注释视图重试，
+    成功且消费更多才采用（不影响原本成功解析面；全量/verilog 基线 5548 不变）。
+  · 性能：cJSON 解析回溯成本仍 ~50–90s（#49 前已有，TODO 三），门禁单次 ≈90–110s。
+  · 变异：新增 include 环境继承 + linter 注释回退两条（各自实测变红），清单 122 条。
+  · 结果：判据 1–5 全过、主线 1 刻度 **9/9**；三任务路线图 T1 收口，进入 T2（pre_scan 专项）。
+
+### Added
+
 - **T1 预处理器宏展开时序收口（#51）**：定义时间线 + include 内预展开，真实语料
   **7/7 `parse_ok=True` syntax=0**（G4 #49 后唯一余量清零）。
   · A1：`_macro_events` 扩为 `{line,name,params,op,body}`；`expand_tokens(events=,

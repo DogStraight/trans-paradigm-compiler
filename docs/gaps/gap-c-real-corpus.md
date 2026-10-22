@@ -1,6 +1,7 @@
 # Gap — C 真实语料接入与误报基线（ROADMAP「C 语言包」阶段 5 剩余 / PROGRESS 退出判据 5）
 
-- 状态：**未立项**（2026-10-21 调查轮 #43 交付：现状实测 + 方案 + 判据草案；实现分 #44/#45 两轮）
+- 状态：**已收口**（#43 调查 → #44/#45/#49/#51 前置 → #52 门禁落地）：7/7 文件 parse_ok、**0 诊断**；
+  基线/采集器/policy 门禁入库；残余 = 解析回溯性能（cJSON ~50s，门禁 ~110s；TODO 三）
 - 关联：`ROADMAP.md`「C 语言包」阶段 5；`PROGRESS.md` 退出判据 4/5；`tests/e2e/eval_diag_baseline.py`（verilog 先例）
 - 参照：verilog 真实语料 `tests/e2e/samples/real/`（`CREDITS.md` + 工程分组 + 基线 JSON + `tests/policy/test_diag_baseline.py`）
 
@@ -117,6 +118,26 @@ cJSON 不变（其函数体 `(cJSON*)` 强转是 G4 主体）。G1/G2/G3 无残�
    修法（另立项，TODO 1.2）：事务化簿记 + 原子节点领取/渲染面协同（需同时处理
    `_claim_head_comments` 对原子 `ref` 布局节点的领取）。
    触发 = 真实语料出现该形态；#44 判据**不含**注释保留断言。
+
+## 门禁实施记录（#52，2026-10-23）
+
+- **语料入库**：`tests/e2e/samples/real_c_ref/`——`ref/` 12 文件（cJSON 1.7.19 两文件 +
+  zlib 1.3.2 六 C + 四头）、`stubs/` 14 个最小系统头（头注标"非 libc"）、`CREDITS.md`
+  （来源/版本/许可；源文件保留完整版权头）。`crc32.h` 是生成表产物（591KB、无人 include）不入库。
+- **采集器**：`tests/e2e/eval_diag_baseline_c.py`——`collect()`/`collect_report()` 用
+  `ProjectChecker(include_dirs=[ref, stubs])` 逐文件 check，`{code: 条数}`（syntax: 前缀）；
+  `--json`/`--update`；口径与 verilog 先例同构（只许减不许增）。
+- **基线**：`tests/e2e/samples/real_c_ref/diag_baseline.json`——`total = 0`、`counts = {}`
+  （T1 后真实语料零诊断）；增长即失败，减少放行。
+- **门禁**：`tests/policy/test_diag_baseline_c.py`——语料清单齐全 + **每文件 parse_ok**
+  （结构层截断会置 False，不是 #43 期的"部分 AST 也 True"口径）+ 增长即失败 + `total` 自洽。
+  单次采集 ≈110s（cJSON 解析回溯成本，见 TODO 三；确定性由 `dict(sorted())` 采集面无集合序暴露）。
+- **前置修复（#52 补）**：① include 子扫描继承**包含点宏环境**（`predefined=_active_defs`）
+  ⇒ include guard 跨 include 可见，zlib `z_stream_s`/`gz_header_s` TAG001 二次定义消失；
+  ② linter 表达式**注释回退**（pratt 遇宏体尾注释停在 comment/抛错时，用缓存滤注释视图
+  重试；crc32 `POLY` 宏体尾注释进三元 `?:` 命中）⇒ crc32 语法误报清零。
+  语料从 7/7 parse_ok + 3 条误报 → **7/7 + 0 诊断**；verilog 基线 5548 不变。
+- **变异**：新增 include 环境继承 + linter 注释回退两条（各自实测变红），清单 122 条。
 
 ## 门禁时序方案（A / B / C）
 

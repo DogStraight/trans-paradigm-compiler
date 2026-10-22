@@ -1,8 +1,8 @@
 # Gap — 预处理器宏展开时序（宏定义前/`#undef`/include 内顺序；T1）
 
-- 状态：**主体已实施（#51，2026-10-23）**：真实语料 **7/7 `parse_ok=True`、syntax=0**；
-  余 = 误报基线门禁落地（判据 5，下一轮）+ zutil `TAG001×2`（include-guard 跨 include
-  可见性边界，登记见文末）
+- 状态：**已收口（#51 主体 + #52 门禁）**：真实语料 **7/7 `parse_ok=True`、0 诊断**；
+  门禁已落（`tests/policy/test_diag_baseline_c.py`）；zutil `TAG001×2` 已随 include
+  宏环境继承修复（见 #52 记录）
 - 关联：`TODO.md` 1.3（T1）、`ROADMAP.md`「剩余三任务路线图」、`gap-c-real-corpus.md`
   （G4 收口后唯一余量 = 本档）、`gap-c-preprocessor-scope.md`（预处理器范围基线；本档只记
   "时序/可见性"子缺口）
@@ -84,12 +84,13 @@ undef/重定义/include 内顺序/include 后可见/不二次展开）；真实�
 lint accuracy 33/33 fp0；render 124/124；pyright 0；变异新增 2 条（关时间线/关预展开
 均实测变红）。
 
-**残余（→ 判据 5 / 下一轮）**：
-- zutil.c `TAG001×2`（`z_stream_s`/`gz_header_s` 二次带体定义）——子文件扫描不继承
-  宿主/兄弟 include 的宏（include guard 跨 include 不可见）⇒ 同一头被重复展开；属
-  include 宏环境边界，登记待门禁轮处理（基线或修 include 环境继承）。
-- 误报基线门禁：`tests/e2e/eval_diag_baseline.py` 现只覆盖 verilog；C 需基线文件 +
-  policy 入口（判据 5 收口动作）。
+**残余已处理（#52）**：
+- zutil `TAG001×2` **已修**：include 子扫描继承包含点宏环境（include guard 跨 include
+  可见）→ 语料 0 诊断；新守卫测试 `test_include_guard_visible_across_sibling_includes`。
+- 误报基线门禁 **已落**：`tests/e2e/eval_diag_baseline_c.py` + `real_c_ref` 语料 +
+  `tests/policy/test_diag_baseline_c.py`（判据 5 收口）。
+- 余（新登记，非 T1）：cJSON 解析回溯成本 ~50–60s（#49 前已有），门禁单次 ≈110s →
+  TODO 三性能项。
 
 ## 判据草案（T1 实现轮）
 

@@ -16,12 +16,6 @@
       的坏输入诊断面）。判据：块内每条坏语句各报一条**位置正确**的诊断。
       链：`docs/gaps/gap-parser-linter-approximation.md`
 
-### 1.3 真实语料误报基线门禁（T1 收尾；宏展开时序 ✅ #51）
-- [ ] **C 语料门禁落地**：T1 已修宏展开时序（定义前/`#undef`/include 内顺序），7 文件
-      `parse_ok=True` syntax=0；余 = C 基线文件（7 文件 diagnostics 计数 + 复跑命令）+
-      policy 入口；zutil `TAG001×2`（include-guard 跨 include 边界）显式登记。判据 = 判据 5 收口。
-      链：`docs/gaps/gap-preprocessor-macro-timeline.md`、`tests/e2e/eval_diag_baseline.py`
-
 ### 1.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
 - [ ] **展平行内行尾注释的 LineSuffix 落地**：行终止注释落在**展平行内**的声明符/说明符之间
       时，LineSuffix 在原子节点边界就地落地，把后续 token 吞进注释（`struct S { int // c\nx; };`
@@ -65,6 +59,10 @@
       接入时 semantic 事实型码仍被收集（或显式登记"benchmark 只对语法完整文件"口径）。
       链：`tests/e2e/eval_benchmark.py`、`docs/gaps/gap-c-preprocessor-scope.md` ㉒
 
+- [ ] **C 真实语料解析回溯成本（性能）**：cJSON.c 单文件解析 ~50–90s（#49 前已有；
+      真实语料门禁单次 ≈90–110s）。成因疑似 atom/后缀候选重复回溯（表达式含大量嵌套
+      括号/成员链时呈指数）；优化面 = atom FIRST 预过滤（已加，效果有限）/位置级 memo。
+      判据：全量语料门禁 ≤30s 且解析结果不变。链：`tests/e2e/eval_diag_baseline_c.py`
 ## 三、预算与登记（代码结构债 / 功能散点）
 
 - [ ] **T2 `pre_scan` 专项清理**（三任务路线图）：按 `docs/decisions/0024-two-phase-lint-prescan-retirement.md`

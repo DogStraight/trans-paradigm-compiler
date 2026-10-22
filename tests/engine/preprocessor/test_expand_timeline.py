@@ -94,3 +94,20 @@ def test_include_content_not_double_expanded(tmp_path: Path) -> None:
     assert "int b = 9;" in out, out
     assert "int c = 9;" in out, out
     assert out.count("9") == 2, out
+
+
+def test_include_guard_visible_across_sibling_includes(tmp_path: Path) -> None:
+    """include guard 跨多次 include 可见（子扫描继承包含点宏环境）。
+
+    同一守卫头被宿主 include 两次 ⇒ 第二次应整体跳过（`#ifndef` 为假），
+    内容只出现一次；不继承时第二次会重复铺入（真实语料 zlib 二次定义命中）。
+    """
+    (tmp_path / "h.h").write_text(
+        "#ifndef H_H\n#define H_H\nint guarded;\n#endif\n", encoding="utf-8"
+    )
+    out = _expand(
+        '#include "h.h"\n#include "h.h"\nint use = guarded;\n',
+        path=str(tmp_path / "d.c"),
+        search=[str(tmp_path)],
+    )
+    assert out.count("int guarded;") == 1, out
