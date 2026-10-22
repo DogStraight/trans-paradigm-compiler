@@ -370,6 +370,7 @@ def scan_directives(
     seq_box: list[int] | None = None,
     out_diags: list[dict] | None = None,
     out_macro_events: list[dict] | None = None,
+    preexpand_includes: bool = True,
 ) -> tuple[
     dict[str, str],
     dict[str, list[str]],
@@ -409,6 +410,7 @@ def scan_directives(
         _include_stack,
         seq_box,
     )
+    ctx["_preexpand_includes"] = bool(preexpand_includes)
 
     # ── 预合并延续行（反斜杠折行）──
     # 账本：每条输出行携带其**原始行号**（行与行号成对入列表）——clean 行数
@@ -488,9 +490,15 @@ def _build_scan_ctx(
         "_directive_placeholders": {},
         # include 问题诊断（按语言包 `on_missing` 策略：error 时记此，warn 时打印）
         "_include_diags": [],
-        # 宏定义/取消事件（原始源行号 + 形参表；解析见 macro_timeline.py）：
-        # 展开用**最终宏表**，检查侧靠事件取**调用点时点**的可见形参表。
+        # 宏定义/取消事件（原始源行号 + 形参表 + 宏体/op）：两用面——
+        # `macro_timeline` 取调用点可见形参表；展开器（`expand_tokens(events=)`）
+        # 按定义时间线维护可见宏集。
         "_macro_events": [],
+        # 扫描期可见宏集（include 预展开用；按源码序更新，inactive 分支不执行）
+        "_active_defs": {},
+        "_active_funcs": {},
+        # include 内容是否在包含点用"当时可见宏集"预展开（parse_raw 模式关）
+        "_preexpand_includes": True,
         "_predefined": dict(predefined) if predefined else {},
         "_undefine": set(undefine) if undefine else set(),
         "directive_lines": [],
@@ -866,6 +874,10 @@ def expand_tokens(
     include_line_flags: list[bool] | None = None,
     out_include_regions: list[dict] | None = None,
     out_invocations: list[dict] | None = None,
+    events: list[dict] | None = None,
+    clean_to_raw: list[int | None] | None = None,
+    base_macros: dict[str, str] | None = None,
+    base_funcs: dict[str, list[str]] | None = None,
 ) -> tuple[str, list[dict], list[dict], list[int]]:
     """在源码文本中展开宏调用（纯文本层），并注册统一锚 / 宏区间表。
 
@@ -884,6 +896,14 @@ def expand_tokens(
       splice   宏体铺进流（+ 宏区间；末行含行注释时补换行，见 _splice_body）
       line     整行占位（行注释锚），source_text = 整行原文
       inline   行内注释锚（原位回插宏调用原文）
+
+    **定义时间线**（`events` 非空时启用）：事件 = scan 期
+    `_macro_events`（`{line: 原始行, name, op: define|undef, body, params}`）。
+    逐行按 `clean_to_raw` 求原始行，取"`line < 当前原始行` 的最后状态"重建可见宏集；
+    `clean_to_raw[i] is None`（include 拼接行）**跳过展开**——这些行已在扫描期用
+    include 包含点当时的可见宏集预展开（`_preexpand_includes`），再展开会二次替换。
+    `events=None` ⇒ 旧行为（全文件最终宏表；测试/旧调用方）。`base_macros`/
+    `base_funcs` 为时间线起点（缺省 = 最终表中**无同名事件**的项，即 predefined/初始态）。
 
     Returns: (expanded_source, restoration_stack, macro_regions, line_map)
         line_map — **展开后行号（1-based）→ 源（clean）行号**：诊断回源用。
@@ -914,7 +934,16 @@ def expand_tokens(
     if prefix is None:
         # 调用前缀从语言包 call 形态推导（kind 分派；不读第二份配置）
         prefix = _load_call_prefix(rules_dir)
-    _MACRO_RE = _build_macro_re(prefix, macro_defs.keys())
+    # 时间线模式下，宏名集合 = 最终表 ∪ 事件里出现过的名字（`#undef` 后最终表
+    # 已无该名，但定义前/定义段的文本仍需按"当时可见"匹配 → 名字必须进正则）
+    _names = set(macro_defs.keys())
+    if events:
+        _names.update(
+            str(e.get("name") or "")
+            for e in events
+            if e.get("op") != "undef" and e.get("name")
+        )
+    _MACRO_RE = _build_macro_re(prefix, _names)
     func_macros = func_macros or {}
     # 实参形态与后随字面量后缀都由语言包声明（引擎不硬编码 `(` / `,` / `'d`）
     call_args = load_macro_call_args(rules_dir=rules_dir)
@@ -955,7 +984,57 @@ def expand_tokens(
         lines,
     )
 
+    # ── 定义时间线（可选；events=None = 旧行为）──
+    timeline = events is not None
+    timeline_events: list[dict] = []
+    tl_idx = 0
+    active_defs: dict[str, str] = {}
+    active_funcs: dict[str, list[str]] = {}
+    if timeline:
+        timeline_events = sorted(
+            events, key=lambda e: int(e.get("line") or 0)
+        )
+        ev_names = {str(e.get("name") or "") for e in timeline_events}
+        base_d = base_macros if base_macros is not None else macro_defs
+        base_f = base_funcs if base_funcs is not None else func_macros
+        active_defs = {
+            str(n): str(b) for n, b in base_d.items() if str(n) not in ev_names
+        }
+        active_funcs = {
+            str(n): list(p) for n, p in base_f.items() if str(n) not in ev_names
+        }
+
     for line_no, line in enumerate(lines, 1):
+        if timeline:
+            raw = (
+                clean_to_raw[line_no - 1]
+                if clean_to_raw is not None and 1 <= line_no <= len(clean_to_raw)
+                else line_no
+            )
+            if raw is None:
+                # include 内容行：扫描期已按包含点可见宏集预展开（见上）
+                continue
+            while (
+                tl_idx < len(timeline_events)
+                and int(timeline_events[tl_idx].get("line") or 0) < int(raw)
+            ):
+                ev = timeline_events[tl_idx]
+                tl_idx += 1
+                name = str(ev.get("name") or "")
+                if not name:
+                    continue
+                if ev.get("op") == "undef":
+                    active_defs.pop(name, None)
+                    active_funcs.pop(name, None)
+                    continue
+                active_defs[name] = str(ev.get("body") or "")
+                params = ev.get("params")
+                if isinstance(params, list):
+                    active_funcs[name] = [str(x) for x in params]
+                else:
+                    active_funcs.pop(name, None)
+            ctx.macro_defs = active_defs
+            ctx.func_macros = active_funcs
         macro_matches = _collect_macro_matches(
             ctx, line, line_masks[line_no - 1], line_no
         )

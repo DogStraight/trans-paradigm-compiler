@@ -466,6 +466,29 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
     self._skip_tokens(context, tuple(self.skip_types))
 
 
+def _skip_leading_inline_comments(self, context: ParseContext) -> None:
+    """句首**同行**注释（`/* c */ decl`）→ 记 line 锚并跳过。
+
+    `_drain_comments` 只收"注释 + newline"（独占行/行尾）；语句前同行注释会留在
+    流首，语句候选集按首个实质 token 选，comment 无候选 ⇒ 整句截断。宏展开
+    （如 `#define const /* note */`）会把注释铺到语句前，真实语料 zlib 命中。
+    """
+    while context.has_more_tokens():
+        self._skip_tokens(context, tuple(self.skip_types))
+        tok = context.peek_token()
+        if tok is None or tok.type != COMMENT_TOKEN_TYPE:
+            return
+        from ._production import _comment_anchor
+
+        anchor = _comment_anchor(context)
+        text, line = tok.content, tok.line
+        context.advance_token()
+        self._record_anchor(
+            {"text": text, "line": line, "anchor": anchor, "line_only": False},
+            "line",
+        )
+
+
 def _drain_comments(self, context: ParseContext, block_node: Node) -> None:
     """反复"跳空白 + 收集行尾注释"，直到一轮下来 token 指针没有前进。
 
@@ -514,6 +537,7 @@ def parse_block_body(
 
     while context.has_more_tokens():
         _drain_comments(self, context, block_node)
+        _skip_leading_inline_comments(self, context)
 
         if not context.has_more_tokens():
             break

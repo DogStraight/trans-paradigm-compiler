@@ -60,12 +60,22 @@ def handle_define(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         ctx.setdefault("_func_params", {})[def_name] = params
     else:
         ctx["macro_defs"][def_name] = rest.strip()
-    # 定义事件（原始源行号；`params=None` = 非函数宏）——供调用点事实的**顺序
-    # 语义**修正（见 `preprocessor/macro_timeline.py`）。
+    # 定义事件（原始源行号；`params=None` = 非函数宏）——两用：调用点事实的
+    # **顺序语义**修正（`macro_timeline.py`，读 line/name/params），以及展开器
+    # 的**定义时间线**（`expand_tokens(events=...)`，读 line/op/body/params）。
+    body = ctx["macro_defs"][def_name]
+    ctx.setdefault("_active_defs", {})[def_name] = body
+    active_funcs = ctx.setdefault("_active_funcs", {})
+    if params is not None:
+        active_funcs[def_name] = list(params)
+    else:
+        active_funcs.pop(def_name, None)
     ctx.setdefault("_macro_events", []).append(
         {
             "line": int(ctx.get("_cur_raw_line") or ctx.get("_cur_line_no") or 0),
             "name": def_name,
             "params": list(params) if params is not None else None,
+            "op": "define",
+            "body": body,
         }
     )

@@ -1,6 +1,8 @@
 # Gap — 预处理器宏展开时序（宏定义前/`#undef`/include 内顺序；T1）
 
-- 状态：**未闭环**（调查完成；A1/A2 分片 + 判据草案见下，实现待下一轮）
+- 状态：**主体已实施（#51，2026-10-23）**：真实语料 **7/7 `parse_ok=True`、syntax=0**；
+  余 = 误报基线门禁落地（判据 5，下一轮）+ zutil `TAG001×2`（include-guard 跨 include
+  可见性边界，登记见文末）
 - 关联：`TODO.md` 1.3（T1）、`ROADMAP.md`「剩余三任务路线图」、`gap-c-real-corpus.md`
   （G4 收口后唯一余量 = 本档）、`gap-c-preprocessor-scope.md`（预处理器范围基线；本档只记
   "时序/可见性"子缺口）
@@ -51,6 +53,43 @@
 - **C（否/备）**：全流式预处理器（scan 时同步展开）——最正统，但改动
   `宏区间/行映射/渲染 splice/恢复锚` 全部契约，超本轮预算；A 已覆盖实测的顺序语义面。
 - **D（否）**：语料子集/豁免 —— 5/7 真实文件都含该形态，不诚实；且判据 5 需要完整语料。
+
+## 实施记录（#51，2026-10-23）
+
+**A1 事件时间线**：`_macro_events` 事件扩为
+`{line, name, params, op: define|undef, body}`（define/undef handler 产出）；
+`expand_tokens(events=, clean_to_raw=, base_macros=, base_funcs=)` 逐行取
+"`event.line < 当前原始行` 的最后状态"重建可见宏集（`#undef` 失效、重定义换体），
+宏名正则 = 最终表 ∪ 事件名（`#undef` 后名字仍需匹配历史段）。`events=None` 保留
+旧调用面（测试/直接调用）。
+
+**A2 include 预展开**：include handler 在包含点用「扫描期 active 表 + 子文件自身
+事件」调 `expand_tokens` 预展开子内容并拼入 clean；宿主展开器按
+`clean_to_raw[i] is None`（include 拼接行）跳过，避免二次展开。`parse_raw` 模式
+经 `preexpand_includes=False` 关闭。子文件事件用子文件行映射（不并入宿主坐标）。
+
+**连带修复（真实语料暴露，均缺一不可）**：
+1. 语句前**同行**注释（宏体尾注释被铺进流）无候选 ⇒ 顶层/块语句截断：
+   `parser/block_parser.py::_skip_leading_inline_comments` 记 line 锚并跳过；
+2. 函数指针 typedef 名未注册（`typedef void *(*alloc_func)(void);` 的括号声明符路径
+   `direct.head.inner.direct.head`）⇒ `(alloc_func)0` 不强转：`[Rule.parser] register`
+   的 `name_paths` 补括号声明符一层/两层（Declaration/ParamDecl）；
+3. 三元 `?:` 前夹注释（宏体尾注释）⇒ linter pratt 失配误报：
+   `linter/checkers/expression.py` 对含注释的表达式区间用**滤注释视图**解析并把
+   消费数回映射（引擎解析器本就有注释锚，仅 linter 补）。
+
+**验证**：新增 `tests/engine/preprocessor/test_expand_timeline.py` 6 例（定义前/
+undef/重定义/include 内顺序/include 后可见/不二次展开）；真实语料 7/7
+`parse_ok=True` syntax=0（zutil 余 `TAG001×2` 见下）；C/e2e/policy 全绿；A/B 0/144；
+lint accuracy 33/33 fp0；render 124/124；pyright 0；变异新增 2 条（关时间线/关预展开
+均实测变红）。
+
+**残余（→ 判据 5 / 下一轮）**：
+- zutil.c `TAG001×2`（`z_stream_s`/`gz_header_s` 二次带体定义）——子文件扫描不继承
+  宿主/兄弟 include 的宏（include guard 跨 include 不可见）⇒ 同一头被重复展开；属
+  include 宏环境边界，登记待门禁轮处理（基线或修 include 环境继承）。
+- 误报基线门禁：`tests/e2e/eval_diag_baseline.py` 现只覆盖 verilog；C 需基线文件 +
+  policy 入口（判据 5 收口动作）。
 
 ## 判据草案（T1 实现轮）
 

@@ -163,6 +163,7 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         from .._expand import scan_directives
 
         child_diags: list[dict] = []
+        child_events: list[dict] = []
         (
             inc_macros,
             inc_funcs,
@@ -170,7 +171,7 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
             inc_placeholders,
             inc_dirs_raw,
             inc_clean,
-            _,  # 被包含文件的行映射不并入宿主（拼接行不可映射，见下）
+            inc_clean_to_raw,  # 子文件内部行映射（预展开取事件时点用；不并入宿主）
         ) = scan_directives(
             inc_source,
             ctx["rules_dir"],
@@ -180,16 +181,19 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
             # marker 序号与宿主**共用**（嵌套各从 0 起会撞号 ⇒ restore 错位）
             seq_box=ctx["_seq_box"],
             out_diags=child_diags,
+            out_macro_events=child_events,
+            preexpand_includes=ctx.get("_preexpand_includes", True),
         )
         if child_diags:
             # 子扫描的诊断并入宿主（否则嵌套里的循环/深度诊断随子 ctx 丢失）
             ctx.setdefault("_include_diags", []).extend(child_diags)
         ctx["macro_defs"].update(inc_macros)
         ctx.setdefault("_func_params", {}).update(inc_funcs)
-        # 定义事件快照：被包含文件里的定义行属**另一坐标系**（子扫描事件不向上
-        # 传播），故按"include 行处、子文件最终状态"并入宿主时间线——本行之后
-        # 的宿主调用点即可见（与 C 的 include 语义一致）。`params=None` = 非函数宏。
         include_line = int(ctx.get("_cur_raw_line") or ctx.get("_cur_line_no") or 0)
+        # 定义事件快照：被包含文件里的定义行属**另一坐标系**（子扫描事件不向上
+        # 传播），故按"include 行处、子文件最终状态"并入宿主时间线——本行之后的
+        # 宿主调用点即可见（与 C 的 include 语义一致）。`params=None` = 非函数宏；
+        # body/op 供展开器时间线（`expand_tokens(events=...)`）激活。
         events = ctx.setdefault("_macro_events", [])
         for name in inc_macros:
             events.append(
@@ -197,8 +201,30 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
                     "line": include_line,
                     "name": name,
                     "params": list(inc_funcs[name]) if name in inc_funcs else None,
+                    "op": "define",
+                    "body": inc_macros[name],
                 }
             )
+        # include 内容预展开（包含点可见宏 = 扫描期 active 表 + 子文件自身事件）。
+        # 展开后文本进入 clean；宿主展开器按 clean_to_raw=None 跳过这些行（不二次展开）。
+        if ctx.get("_preexpand_includes", True) and inc_clean:
+            from .._expand import expand_tokens
+
+            base_defs = dict(ctx.get("_active_defs") or {})
+            base_funcs = dict(ctx.get("_active_funcs") or {})
+            inc_clean = expand_tokens(
+                inc_clean,
+                {**base_defs, **inc_macros},
+                rules_dir=ctx["rules_dir"],
+                func_macros={**base_funcs, **inc_funcs},
+                events=child_events,
+                clean_to_raw=inc_clean_to_raw,
+                base_macros=base_defs,
+                base_funcs=base_funcs,
+            )[0]
+        # 宿主扫描期可见集：include 后可见子文件最终表（C 语义）
+        ctx.setdefault("_active_defs", {}).update(inc_macros)
+        ctx.setdefault("_active_funcs", {}).update(inc_funcs)
         ctx.setdefault("_cond_blocks", []).extend(inc_blocks)
         ctx.setdefault("_cond_placeholders", {}).update(inc_placeholders)
         ctx["directive_lines"].extend(inc_dirs_raw)

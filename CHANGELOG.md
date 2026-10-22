@@ -7,6 +7,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **T1 预处理器宏展开时序收口（#51）**：定义时间线 + include 内预展开，真实语料
+  **7/7 `parse_ok=True` syntax=0**（G4 #49 后唯一余量清零）。
+  · A1：`_macro_events` 扩为 `{line,name,params,op,body}`；`expand_tokens(events=,
+    clean_to_raw=, base_macros=, base_funcs=)` 逐行按"定义/取消事件"重建可见宏集
+    （`#undef` 失效/重定义换体）；宏名正则 = 最终表 ∪ 事件名；`events=None` 保留旧调用面。
+  · A2：include 在包含点用「扫描期 active 表 + 子文件事件」预展开子内容；宿主展开按
+    `clean_to_raw is None` 跳过（不二次展开）；`parse_raw` 经 `preexpand_includes=False` 关闭。
+  · 连带修复（真实语料暴露，缺一不可）：语句前同行注释（宏体尾注释被铺进流）致截断
+    → `block_parser._skip_leading_inline_comments`；函数指针 typedef 名未注册
+    （`direct.head.inner.direct.head` 括号声明符路径）→ `[Rule.parser] register.name_paths`
+    补一层/两层；三元 `?:` 前夹注释致 linter pratt 误报 → 表达式检查器滤注释视图。
+  · 验证：新增 `tests/engine/preprocessor/test_expand_timeline.py` 6 例；语料 7/7；
+    C/e2e/policy 全绿；A/B 0/144；lint accuracy 33/33 fp0；render 124/124；pyright 0；
+    变异新增 2 条（关时间线/关预展开均实测变红，清单 120 条）。
+  · 残余登记：zutil `TAG001×2`（include-guard 跨 include 可见性边界）+ C 误报基线门禁
+    （判据 5 收口，下一轮 #52）。
+
+### Added
+
 - **剩余三任务路线图 + T1 预处理器宏展开时序调查**（2026-10-23，循环 #50，docs-only）：
   作者把剩余工作定为 T1 宏展开时序 → T2 `pre_scan` 专项清理 → T3 C/Verilog 双包抽象对照
   按部件审查，路线落 `ROADMAP.md`「当前主线」（含顺序理由、每项判据指针、T3 部件序）。

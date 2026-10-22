@@ -16,11 +16,11 @@
       的坏输入诊断面）。判据：块内每条坏语句各报一条**位置正确**的诊断。
       链：`docs/gaps/gap-parser-linter-approximation.md`
 
-### 1.3 预处理器宏展开时序（T1；#49 G4 收口后暴露）
-- [ ] **函数宏被应用到定义前的文本**：`expand_tokens` 用末端宏表展开全文（含 include 内容），
-      zlib.h 的 `gzgetc` 宏把定义前原型误展开（5 个 zlib 文件 `parse_ok=False`）。方案 = A1 host
-      时序 + A2 include 内预展开，调查/判据/止损见 `docs/gaps/gap-preprocessor-macro-timeline.md`；
-      判据 = 7/7 `parse_ok` + 语料门禁可上 + 保真/幂等/A/B 0/144 不回归。
+### 1.3 真实语料误报基线门禁（T1 收尾；宏展开时序 ✅ #51）
+- [ ] **C 语料门禁落地**：T1 已修宏展开时序（定义前/`#undef`/include 内顺序），7 文件
+      `parse_ok=True` syntax=0；余 = C 基线文件（7 文件 diagnostics 计数 + 复跑命令）+
+      policy 入口；zutil `TAG001×2`（include-guard 跨 include 边界）显式登记。判据 = 判据 5 收口。
+      链：`docs/gaps/gap-preprocessor-macro-timeline.md`、`tests/e2e/eval_diag_baseline.py`
 
 ### 1.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
 - [ ] **展平行内行尾注释的 LineSuffix 落地**：行终止注释落在**展平行内**的声明符/说明符之间

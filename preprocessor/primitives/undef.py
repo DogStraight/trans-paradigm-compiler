@@ -21,11 +21,16 @@ def handle_undef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     func_params = ctx.get("_func_params")
     if isinstance(func_params, dict):
         func_params.pop(name, None)
-    # 取消事件（params=None = 非函数宏）——供调用点事实的顺序语义修正
+    active = ctx.setdefault("_active_defs", {})
+    active.pop(name, None)
+    ctx.setdefault("_active_funcs", {}).pop(name, None)
+    # 取消事件（params=None = 非函数宏；op=undef = 展开器时间线的失效点）
     ctx.setdefault("_macro_events", []).append(
         {
             "line": int(ctx.get("_cur_raw_line") or ctx.get("_cur_line_no") or 0),
             "name": name,
             "params": None,
+            "op": "undef",
+            "body": "",
         }
     )

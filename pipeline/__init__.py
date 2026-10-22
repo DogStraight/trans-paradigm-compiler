@@ -481,6 +481,7 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
             undefine=ctx.undefine,
             out_diags=include_diags,
             out_macro_events=ctx.macro_events,
+            preexpand_includes=not ctx.parse_raw,
         )
     except ConfigError as exc:
         ctx.result["preprocessor_errors"] = [
@@ -547,6 +548,8 @@ def _stage_expand(ctx: _PipelineContext) -> None:
             rules_dir=ctx.rules_dir,
             func_macros=ctx.func_macros,
             out_invocations=ctx.macro_invocations,
+            events=ctx.macro_events,
+            clean_to_raw=ctx.clean_line_map,
         )
         recorded = True
     if ctx.parse_raw:
@@ -566,6 +569,8 @@ def _stage_expand(ctx: _PipelineContext) -> None:
         include_line_flags=[m is None for m in ctx.clean_line_map],
         out_include_regions=ctx.include_regions,
         out_invocations=None if recorded else ctx.macro_invocations,
+        events=ctx.macro_events,
+        clean_to_raw=ctx.clean_line_map,
     )
     map_invocations_to_source(
         ctx.macro_invocations,

@@ -323,13 +323,13 @@ def test_junction_and_outer_call_same_point_two_facts(tmp_path, c_check) -> None
 
 
 def test_junction_use_before_define_boundary(tmp_path, c_check) -> None:
-    """已声明边界：接缝事实按定义时间线过滤 ⇒ 定义前的 `g(2)` 展开但无 MAC001。
+    """定义序语义（T1 后）：定义前的 `g(2)` **不展开**（C §6.10.2），无接缝调用点。
 
-    展开器仍用最终宏表（既有近似，接缝面随之扩大）；检查侧保持"调用点时点"
-    口径不误报。落地时若改顺序语义，须同步改本守卫。
+    此前展开器用最终宏表 ⇒ 定义前文本也被展开（`g(2)` → `f(2)` → 实参不足）；
+    T1 定义时间线落地后该近似消除，本守卫按新语义锁"定义前不展开、无 MAC001"。
     """
     fr = _run(tmp_path, "int x = g(2);\n#define f(a, b) a + b\n#define g f\n")
-    assert fr["parse_ok"] is False
+    assert fr["parse_ok"] is True
     assert _mac_diags(fr) == []
 
 

@@ -1205,6 +1205,22 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        return True  # 变异：门控失效（不查命名空间）",
         "test": "tests/languages/c/test_c_typedef_cast_symbols.py",
     },
+    {
+        "why": "预处理器宏展开时序（T1）：展开器按定义/取消事件逐行重建可见宏集。"
+               "关闭时间线 ⇒ 定义前文本被最终表误展开（zlib gzgetc 型真实语料截断）",
+        "file": "preprocessor/_expand.py",
+        "old": "    timeline = events is not None",
+        "new": "    timeline = False  # 变异：关闭定义时间线",
+        "test": "tests/engine/preprocessor/test_expand_timeline.py",
+    },
+    {
+        "why": "include 内容在包含点用当时可见宏集预展开（T1/A2）：关掉后头内"
+               "原型被头内后置宏二次展开（gzgetc 型），或头内文本被宿主最终表二次展开",
+        "file": "preprocessor/primitives/include.py",
+        "old": '        if ctx.get("_preexpand_includes", True) and inc_clean:',
+        "new": "        if False and inc_clean:  # 变异：关闭 include 内预展开",
+        "test": "tests/engine/preprocessor/test_expand_timeline.py",
+    },
 ]
 
 

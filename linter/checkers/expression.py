@@ -81,6 +81,39 @@ class ExpressionChecker:
         if idx >= len(tokens):
             return [], 0
         try:
+            # 注释是 trivia（TRIVIA_TOKEN_TYPES 含 comment），但 pratt 只跳过
+            # space/newline 类；三元 `?:` 前/后夹注释（宏体末尾带注释被铺进流，
+            # 真实语料 crc32 `POLY` 命中）会让 pratt 在 comment 处失配 ⇒
+            # 整句误报。对含注释的表达式区间做**滤注释视图**，消费数回映射。
+            suffix = tokens[idx:]
+            if any(t.type == "comment" for t in suffix):
+                view: list = []
+                pos_map: list[int] = []
+                for off, tok in enumerate(suffix):
+                    if tok.type == "comment":
+                        continue
+                    view.append(tok)
+                    pos_map.append(off)
+                if not view:
+                    return [], 1
+                _, consumed_view = parse_with_count(
+                    view,
+                    0,
+                    operator_defs=self._op_defs,
+                    atom_parser=self._atom_parser,
+                    stop_tokens=stop_tokens,
+                )
+                if consumed_view <= 0:
+                    t = tokens[idx]
+                    return [
+                        LintDiagnostic(
+                            range=token_span(t),
+                            message=f"expected expression, got '{t.type}'",
+                            severity=1,
+                            code="phase-expr",
+                        )
+                    ], 1
+                return [], pos_map[consumed_view - 1] + 1
             _, consumed = parse_with_count(
                 tokens,
                 idx,

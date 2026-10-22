@@ -33,14 +33,16 @@ def _events(src: str) -> list[dict]:
 def test_scan_records_define_and_undef_events() -> None:
     events = _events("#define F(a, b) a + b\n#undef F\n")
     assert events == [
-        {"line": 1, "name": "F", "params": ["a", "b"]},
-        {"line": 2, "name": "F", "params": None},
+        {"line": 1, "name": "F", "params": ["a", "b"], "op": "define", "body": "a + b"},
+        {"line": 2, "name": "F", "params": None, "op": "undef", "body": ""},
     ]
 
 
 def test_scan_records_object_like_as_non_function() -> None:
     events = _events("#define N 4\n")
-    assert events == [{"line": 1, "name": "N", "params": None}]
+    assert events == [
+        {"line": 1, "name": "N", "params": None, "op": "define", "body": "4"}
+    ]
 
 
 def test_scan_records_continuation_define_at_segment_start() -> None:
@@ -57,7 +59,9 @@ def test_scan_records_include_snapshot_at_include_line(tmp_path) -> None:
     events: list[dict] = []
     scan_directives(src, PACK, source_path=str(tmp_path / "s.c"),
                     search_dirs=[str(tmp_path)], out_macro_events=events)
-    assert events == [{"line": 1, "name": "F", "params": ["a", "b"]}]
+    assert events == [
+        {"line": 1, "name": "F", "params": ["a", "b"], "op": "define", "body": "a + b"}
+    ]
 
 
 def test_inactive_branch_define_not_recorded() -> None:

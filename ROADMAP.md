@@ -19,7 +19,7 @@
 > **执行序列（作者 2026-10-23 定）**：T1 预处理器宏展开时序 → T2 `pre_scan` 专项清理 →
 > T3 双包（C/Verilog）抽象对照按部件审查。理由：T1 解锁语料门禁（判据 5）；T2 先移除
 > linter 侧最大耦合面；T3 在架构稳定后逐部件查抽象泄露。每项独立判据/独立提交：
-> · T1 = `TODO.md` 1.3 + `docs/gaps/gap-preprocessor-macro-timeline.md`（A1 host 时序 + A2 include 内预展开；判据 7/7 `parse_ok` + 门禁）
+> · T1 = `TODO.md` 1.3 + `docs/gaps/gap-preprocessor-macro-timeline.md`（A1 host 时序 + A2 include 内预展开）——✅ #51：真实语料 **7/7 `parse_ok`**；余门禁（#52）
 > · T2 = `P2.9` + `docs/decisions/0024-two-phase-lint-prescan-retirement.md`（linter 两阶段/符号无关化、机制退役、67 条 skip 测试重建或删）
 > · T3 = `docs/gaps/gap-engine-abstraction-audit.md`（执行路线/矩阵）+ `gap-language-penetration.md`（判据②声明面缺失探针）；部件序 lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config
 >

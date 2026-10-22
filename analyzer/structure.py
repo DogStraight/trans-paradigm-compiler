@@ -394,6 +394,8 @@ class FilePipeline:
                     rules_dir=self._ctx.rules_dir,
                     func_macros=func_macros,
                     out_invocations=invocations,
+                    events=macro_events,
+                    clean_to_raw=clean_to_raw,
                 )
                 exp_to_raw = [
                     clean_to_raw[c - 1] if 1 <= c <= len(clean_to_raw) else None
