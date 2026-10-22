@@ -7,6 +7,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **G4 typedef 名强转调查/方案（「解析前符号判定」专项立项材料）**（2026-10-22，循环 #48，
+  **docs-only**，未动生产代码）：真实语料门禁唯一前置。实测（check 路径）：
+  · 最小矩阵 8 条中 5 条 `parse_ok=False`（函数内指针强转初值/return/if/for/文件域声明），
+    另 3 条靠语句级 raw 已承载；**7/7 真实文件 parse_ok=False**，cJSON 56 条 syntax 主体即此；
+  · 三类缺口：M1 形态只认 `(id)`（`(T*)` 不命中）、站点只覆盖 id 触发未收敛语句（关键字语句
+    无内部 warning）、符号门依赖 pre_scan 且多行 typedef 只捕成 tag_struct（cJSON）；
+  · monkeypatch 原型：放宽形态+去符号门可修最小用例与 cJSON 风格函数，但关键字语句/文件域
+    仍缺站点；pipeline 展开路径 raw 不同源（check 路径同源可用）。
+  方案：**B 推荐** = parser 内符号表 + 规则符号门控（单遍；复用既有 `_ScopeStack`/`[Rule.parser]
+  scope` 帧/`scope_lookup_fn` 预留钩子；新增 `[Rule.parser] register`、`requires_symbol`、
+  `[parser] symbol_namespaces`）——AST 正确、check/pipeline 同解、无需扩大 raw；
+  A = 扩展 raw/两阶段（过渡备选）；C/D 否。判据草案（8 条最小矩阵 + 反例 `(a)*b`/遮蔽/
+  后置使用 + 7 文件 parse_ok + 双路径 + A/B 0/144 + 变异）与止损见新档。
+  决策点 = **引擎契约扩展属框架级，待作者拍板**；批准后可与 pre_scan 退役（ADR-0024）同批。
+  文档：`docs/gaps/gap-c-typedef-cast.md`（新档，gaps README 登记）；`gap-c-real-corpus.md`
+  G4 行、`ROADMAP.md` 阶段 5、`PROGRESS.md` 判据 5 与下一轮入口同步。
+
+### Added
+
 - **退出判据 3 收口 + 刻度块 7 收口**（2026-10-22，循环 #47，test-only）：新增
   `tests/languages/c/test_c_exit_criteria_negative.py`——四族代表负样本各被拒 + 正样本不误报：
   ① 作用域 = raw 安全网 **E002**（遮蔽例 `typedef int t; void f(){ int t; x=(t)y; }` ⇒ 管线失败 +

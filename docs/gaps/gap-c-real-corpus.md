@@ -61,7 +61,7 @@ cJSON 不变（其函数体 `(cJSON*)` 强转是 G4 主体）。G1/G2/G3 无残�
 | G1 | `extern T *p;` / `static T v;` / `const T *p` 在声明 / 成员 / 形参 / 函数定义 / for 初值 / `sizeof` 类型名位 | 说明符序列（typedef 名在存储类/限定符之后） | ✅ **#44 已收口** |
 | G2 | `int * const q;` / `const char * const s` | Pointer 缺类型限定符列表（C99 §6.7.6） | ✅ **#44 已收口** |
 | G3 | `void f(void *, size_t);` | ParamDecl 无法表达"只有 `*`、无名"的**抽象声明符** | ✅ **#45 已收口**（`@Pointer` / `@TypedefAbstractDeclarator` 两支；语料原型诊断清零） |
-| G4 | `(cJSON*)` / `(Bytef *)` | `CastTypeName` 刻意不含 `@TypedefName`（强制转换的 typedef 歧义位，需符号表） | ❌ **未收口**：属 ROADMAP 切片 1b；cJSON 剩余 39 条 `if` 类截断的主因 |
+| G4 | `(cJSON*)` / `(Bytef *)` | `CastTypeName` 刻意不含 `@TypedefName`（强转的 typedef 歧义位，需解析前符号判定） | ❌ **未收口**：cJSON 剩余主体；调查/方案见 `gap-c-typedef-cast.md`（推荐 parser 内符号表，待拍板） |
 
 **G1 成因**：C 说明符序列里「typedef 名」只挂在**首个说明符位**（`TypeSpecifier` 的一个分支）；
 `SpecRest`（其余说明符）**刻意不含 `@TypedefName`**——它是贪婪重复，含进去会把声明符名吃掉
