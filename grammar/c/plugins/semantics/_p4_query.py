@@ -18,7 +18,7 @@
   4. **tag 排除**：标签（`struct/union/enum` 的 tag）属**另一个命名空间**，不参与
      "是不是类型名"的判定（`struct t{}; (t)y;` 必须拒绝），故在筛选可见记录时排除。
 
-判定只用 `phase == "analyze"` 的记录（`pre_scan` 期是粗收集，不作判定依据）；无任何
+判定只用 `phase == "analyze"` 的记录（T2b 起产物只有 analyze 一期）；无任何
 可见记录 ⇒ False（默认偏置，见 `_api.DEFAULT_TYPEDEF_BIAS`）。
 
 kind 语义由 **C 包声明**（本模块顶部的两组常量；第二步的通用原语会从包配置传入，
@@ -35,7 +35,7 @@ from typing import Any, Sequence
 TYPE_NAME_KINDS: tuple[str, ...] = ("typedef",)
 #: 另一个命名空间的 kind（标签）：参与判定会把 `struct t{}; (t)y;` 误判为转换
 OTHER_NAMESPACE_KINDS: tuple[str, ...] = ("tag",)
-#: 可作判定依据的期别（`pre_scan` 是粗收集，只作提示）
+#: 可作判定依据的期别（T2b 起只产 analyze）
 DECIDABLE_PHASES: tuple[str, ...] = ("analyze",)
 
 

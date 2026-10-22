@@ -65,10 +65,10 @@
       判据：全量语料门禁 ≤30s 且解析结果不变。链：`tests/e2e/eval_diag_baseline_c.py`
 ## 三、预算与登记（代码结构债 / 功能散点）
 
-- [ ] **T2 `pre_scan` 专项清理**（三任务路线图；ADR-0024 已复裁）：T2a ✅ 复合字面量 typedef
-      直接建树（pre_scan 零承重）；T2b = 删 pre_scan 本体/配置/两期产物 + 符号提示接线；
-      T2c = 删 raw 管线（含 67 条 skip 资格测试）——先证后删（raw 生产路径无消费者）。
-      判据 = ADR 各切片判据 + 受影响套件/全量/A/B/语料门禁。链：`ROADMAP.md` P2.9
+- [ ] **T2 `pre_scan` 专项清理**（三任务路线图；ADR-0024）：T2a ✅ 复合字面量 typedef；
+      T2b ✅ 主体 #54（pre_scan 机制/配置/linter M1/C 两期产物已删；全量冻结树待补跑）；
+      T2c = 删 raw 管线（M2/parser raw/P4/E002·E003 + 剩余 skip）——先证后删；
+      T2d = 文档收口（gap/README pre_scan 历史叙述）。链：`ROADMAP.md` P2.9、ADR-0024
 - [ ] **T3 双包抽象对照按部件审查**（三任务路线图，多轮）：C/Verilog 逐部件查抽象泄露，部件序
       lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config；每部件
       用判据②声明面缺失探针 + ③弱信号 + 第二语言复用实验，输出 leak 清单（修复立项/登记接受）

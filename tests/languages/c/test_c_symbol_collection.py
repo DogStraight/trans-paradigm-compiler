@@ -10,8 +10,7 @@
 ⑤ 分期可区分（同名两期记录并存）；⑥ 产物只增不改（无新诊断 + postpass 只写 context）。
 
 **读取入口**（测试/消费方）：`AnalysisTraversal(rules, rules_dir="grammar/c")` →
-`analyze(ast)` → `_api.two_phase_product(at, src, "grammar/c")`（两期合并）或
-`_api.product_from(at)`（analyze 期）。
+`analyze(ast)` → `_api.product_from(at)`（analyze 期）。
 """
 
 import os
@@ -46,10 +45,10 @@ def _analyze(c, src: str):
     return at
 
 
-def _two_phase(c, src: str):
-    """(traversal, 两期合并记录)。"""
+def _product_records(c, src: str):
+    """(traversal, analyze 期记录)。"""
     at = _analyze(c, src)
-    return at, _api.two_phase_product(at, src, _RULES)["records"]
+    return at, _api.product_from(at)["records"]
 
 
 def _only(records, phase: str) -> list[dict]:
@@ -61,8 +60,8 @@ class TestSymbolProduct:
 
     def test_positive_typedef_and_variable(self, c):
         """① 正：`typedef int myint; myint v;` ⇒ myint=typedef、v=variable。"""
-        _, recs = _two_phase(c, "typedef int myint;\nmyint v;\n")
-        analyze = {(r["name"], r["kind"]): r for r in _only(recs, _api.PHASE_ANALYZE)}
+        _, recs = _product_records(c, "typedef int myint;\nmyint v;\n")
+        analyze = {(r["name"], r["kind"]): r for r in _only(recs, "analyze")}
         assert ("myint", "typedef") in analyze, analyze
         assert ("v", "variable") in analyze, analyze
         assert analyze[("myint", "typedef")]["scope"] == "<global>"
@@ -72,8 +71,8 @@ class TestSymbolProduct:
 
     def test_negative_same_text_is_not_typedef(self, c):
         """② 负：同文本换符号表（`int myint;`）⇒ variable，**不得**判 typedef。"""
-        _, recs = _two_phase(c, "int myint;\nmyint *b;\n")
-        analyze = [r for r in _only(recs, _api.PHASE_ANALYZE) if r["name"] == "myint"]
+        _, recs = _product_records(c, "int myint;\nmyint *b;\n")
+        analyze = [r for r in _only(recs, "analyze") if r["name"] == "myint"]
         assert [r["kind"] for r in analyze] == ["variable"], analyze
         assert _api.is_typedef("myint", recs) is False
         # 默认偏置：从未声明的名字同样不是 typedef（显式口径，见 DEFAULT_TYPEDEF_BIAS）
@@ -82,26 +81,26 @@ class TestSymbolProduct:
 
     def test_declaration_order_gates_use(self, c):
         """③ 声明顺序：使用在 typedef 声明之前 ⇒ 该位置不是 typedef 名。"""
-        _, recs = _two_phase(c, "myint v;\ntypedef int myint;\n")
+        _, recs = _product_records(c, "myint v;\ntypedef int myint;\n")
         assert _api.is_typedef("myint", recs, at_line=1) is False, "第 1 行使用时尚未声明"
         assert _api.is_typedef("myint", recs, at_line=2) is True, "第 2 行声明后成立"
-        analyze = {r["name"]: r for r in _only(recs, _api.PHASE_ANALYZE)}
+        analyze = {r["name"]: r for r in _only(recs, "analyze")}
         assert analyze["myint"]["decl_order"] > analyze["v"]["decl_order"], analyze
 
     def test_block_scope_expires(self, c):
         """④a 作用域：块内 typedef 出块失效（记录落在块作用域路径上）。"""
-        _, recs = _two_phase(c, "void f(void) {\n    typedef int t;\n}\nt v;\n")
-        t_recs = [r for r in _only(recs, _api.PHASE_ANALYZE) if r["name"] == "t"]
+        _, recs = _product_records(c, "void f(void) {\n    typedef int t;\n}\nt v;\n")
+        t_recs = [r for r in _only(recs, "analyze") if r["name"] == "t"]
         assert [r["scope"] for r in t_recs] == ["<global>/FuncDef/CompoundStmt"], t_recs
         assert _api.is_typedef("t", recs, scope="<global>") is False, "文件作用域无 t"
         assert _api.is_typedef("t", recs, scope="<global>/FuncDef/CompoundStmt") is True
 
     def test_inner_scope_shadows_outer(self, c):
         """④b 作用域：内层 typedef 遮蔽外层 ⇒ 两条记录、作用域路径不同。"""
-        _, recs = _two_phase(
+        _, recs = _product_records(
             c, "typedef int t;\nvoid f(void) {\n    typedef char t;\n    t inner;\n}\n"
         )
-        t_recs = [r for r in _only(recs, _api.PHASE_ANALYZE) if r["name"] == "t"]
+        t_recs = [r for r in _only(recs, "analyze") if r["name"] == "t"]
         assert {r["scope"] for r in t_recs} == {
             "<global>",
             "<global>/FuncDef/CompoundStmt",
@@ -110,28 +109,15 @@ class TestSymbolProduct:
         assert _api.is_typedef("t", recs, scope="<global>") is True
         assert _api.is_typedef("t", recs, scope="<global>/FuncDef/CompoundStmt") is True
 
-    def test_phases_are_distinguishable(self, c):
-        """⑤ 分期：同名在 `pre_scan` 与 `analyze` 两期各有记录，且可区分。"""
-        _, recs = _two_phase(c, "typedef int myint;\n")
-        assert _api.phases_for("myint", recs) == {
-            _api.PHASE_PRE_SCAN,
-            _api.PHASE_ANALYZE,
-        }, _api.records_for("myint", recs)
-        pre = _only(_api.records_for("myint", recs), _api.PHASE_PRE_SCAN)
-        analyze = _only(_api.records_for("myint", recs), _api.PHASE_ANALYZE)
-        assert pre[0]["scope"] == _api.SCOPE_FILE_UNKNOWN and pre[0]["decl_order"] is None
-        assert analyze[0]["scope"] == "<global>" and isinstance(analyze[0]["decl_order"], int)
-        # pre_scan 只作提示：判定只看 analyze 期（`is_typedef` 内已过滤）
-
     def test_kinds_cover_tag_enumerator_function_param(self, c):
         """① 补充：kind 覆盖标签 / 枚举常量 / 函数 / 形参（首片要求的名字族）。"""
-        _, recs = _two_phase(
+        _, recs = _product_records(
             c,
             "struct p { int x; };\nenum e { A, B };\nvoid g(int arg) {\n    int local;\n}\n",
         )
         kinds = {
             (r["name"], r["kind"], r["scope"])
-            for r in _only(recs, _api.PHASE_ANALYZE)
+            for r in _only(recs, "analyze")
         }
         assert ("p", "tag", "<global>") in kinds, kinds
         assert ("e", "tag", "<global>") in kinds, kinds
@@ -152,5 +138,5 @@ class TestSymbolProduct:
 
     def test_collection_adds_no_diagnostics(self, c):
         """⑥ 只增不改：收集不新增诊断（重名静默跳过，不报 E001）。"""
-        at, _ = _two_phase(c, "typedef int myint;\nint x;\nint x;\nmyint v;\n")
+        at, _ = _product_records(c, "typedef int myint;\nint x;\nint x;\nmyint v;\n")
         assert [(d.code, d.level) for d in at.diagnostics] == [], at.diagnostics

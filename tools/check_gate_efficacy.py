@@ -151,14 +151,6 @@ _MUTATIONS: list[dict[str, str]] = [
         "test": "tests/languages/c4/test_c4_linter.py",
     },
     {
-        "why": "括号定界容器体的位点发现被摘掉（P3c 前置切片）→ production 层语句位"
-               "（C 函数体 / 块内语句位）不再产生未收敛位点 ⇒ raw 承载将无位点可消费",
-        "file": "linter/discovery.py",
-        "old": "                self._scan_container_sites(tokens, i, e, candidates[0], context, depth)\n",
-        "new": "",
-        "test": "tests/engine/linter/test_linter_raw_eligibility.py",
-    },
-    {
         "why": "lexer 最长匹配要求「每层中间前缀自身也声明过」→ 中间形态未声明的符号永远"
                "匹配不到：C 的 `...` 被降级成三个 `.`，变参原型整条解析失败 + linter 误报"
                "（yaml/verilog 曾各塞一个『仅为 probe 链』的 `..` 占位声明绕开它）",
@@ -485,42 +477,6 @@ _MUTATIONS: list[dict[str, str]] = [
         "old": "[StructSpecifier.analyzer.c_symbol_collect]\nsite = \"named\"\nname_attr = \"tag\"\n",
         "new": "[StructSpecifier.analyzer.c_symbol_collect]\nsite = \"named\"\nname_attr = \"tag_typo\"\n",
         "test": "tests/languages/c/test_c_symbol_collection.py",
-    },
-    {
-        "why": "预扫描的 `fallback` 开关（默认 true）必须被真正消费：写成无条件建兜底正则 ⇒ "
-               "声明 `fallback = false` 的包（C）重新带上 `int: typedef` 这类**非声明名**杂质，"
-               "按 `phase` 对比/据名判定的消费方被污染（新判据必红）",
-        "file": "lexer/pre_scan.py",
-        "old": "    fallback = re.compile(rf\"\\b({all_kws})\\s+(\\w+)\") if (use_fallback and all_kws) else None\n",
-        "new": "    fallback = re.compile(rf\"\\b({all_kws})\\s+(\\w+)\") if all_kws else None\n",
-        "test": "tests/engine/lexer/test_pre_scan_fallback.py",
-    },
-    {
-        "why": "raw 资格判定（P3b-M1）的**替换式试解析**是「该句唯一问题是符号歧义」的唯一证据："
-               "去掉它（`eligible` 恒真）⇒ 语句级 raw 又会吞掉同句无关真错（上一轮被独立审计证伪的"
-               "那一类）⇒ 反例集判据必红",
-        "file": "linter/lookahead.py",
-        "old": "            eligible = eligible or bool(ev[\"trial_ok\"])\n",
-        "new": "            eligible = True  # 变异：去掉替换式试解析\n",
-        "test": "tests/engine/linter/test_linter_raw_eligibility.py",
-    },
-    {
-        "why": "**深度守卫**（`decl_depth <= use_depth`）是关掉「块内 typedef 出块后使用」这类作用域"
-               "反例的那一层：去掉它 ⇒ `void f(void){ typedef int t; }\nx = (t)y;` 变成 eligible，"
-               "真错被静默（审计 A 类）⇒ 判据必红",
-        "file": "linter/lookahead.py",
-        "old": "            if position_ok and scope_ok:\n",
-        "new": "            if position_ok:  # 变异：去掉深度守卫\n",
-        "test": "tests/engine/linter/test_linter_raw_eligibility.py",
-    },
-    {
-        "why": "资格判定只认**包声明的 typedef 命名空间**（`type_name` kind）：去掉 kind 过滤 ⇒ tag 名"
-               "（`struct t{}` 后的 `(t)y`）也被标成符号相关（标记级判据必红；静默由 `trial_as` "
-               "必要性这道第二层护栏独立顶住）",
-        "file": "linter/lookahead.py",
-        "old": "                if rec.get(\"kind\") not in self._type_name_kinds:\n",
-        "new": "                if False:  # 变异：不按 kind 过滤\n",
-        "test": "tests/engine/linter/test_linter_raw_eligibility.py",
     },
     {
         "why": "raw 兜底接入点被禁（`parse_call` 里的 `_try_raw_at_statement_start`）⇒ production 层"

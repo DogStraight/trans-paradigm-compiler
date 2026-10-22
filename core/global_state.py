@@ -142,7 +142,6 @@ CONTENT_ADDRESSED: dict[str, str] = {
     "preprocessor.macro_shape._CALL_PARSE_CACHE": "键 = 宏形态 call_shape 生产式字符串（纯函数缓存）",
     "lexer.comment_syntax._CACHE": "键 = rules_dir（注释形态：行注释起始/成对定界符）",
     "analyzer.checks._HANDLER_CACHE": "键 = 插件目录（handler 模块跨次复用）",
-    "lexer.pre_scan._CACHE": "键 = rules_dir",
     "core.config_registry._PLUGIN_TPC_INDEX": "键 = plugins_dir（组件 tpc.toml 路径索引，纯字符串）",
 }
 

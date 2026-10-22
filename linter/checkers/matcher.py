@@ -172,7 +172,6 @@ class RuleMatcher:
         finally:
             self._probe_eof = old
 
-    @contextmanager
     def memo_suspended(self):
         """暂停 packrat 记忆化：进入时**快照并清空**三层 memo，退出时还原快照。
 

@@ -40,7 +40,7 @@ E002·E003 安全网）在 C 上也不再被生产路径使用**（raw 位点只
 - **T2a（✅ 本提交）**：C `CompoundLiteral` 类型名收 `@CastTypeName|@CastTypedefName`
   （复用 #49 门控）⇒ `(t){1}` 直接建树；P4 的"复合字面量 raw 边界"测试改为直接结构断言；
   变异：去该分支 ⇒ 用例红（清单 123 条）。
-- **T2b（下一轮，删除 pre_scan 本体）**：
+- **T2b（✅ 主体 #54）**：
   - 引擎：`lexer/pre_scan.py` 整文件、`lexer/__init__` 导出、`core/global_state.py` 的
     `lexer.pre_scan._CACHE`、`core/engine_capabilities.py` 能力族串、`analyzer/structure.py`
     的预扫描读取（若有）、两包 `tpc.toml` 的 `[lexer] pre_scan` 行、`grammar/{c,verilog}/
@@ -51,10 +51,11 @@ E002·E003 安全网）在 C 上也不再被生产路径使用**（raw 位点只
     （`eligible` 恒 false）并在 T2c 删除；
   - C 包：`grammar/c/plugins/semantics/_api.py` 的 `two_phase_product`/`pre_scan_records`/
     `merge_phases`/`phases_for`/`PHASE_PRE_SCAN`（管线无消费者，仅测试/文档引用）；
-  - 测试/文档：删 `test_pre_scan_fallback.py`、`test_c_symbol_collection.py` 分期用例、
-    linter 符号提示/资格测试（67 条已 skip 的 raw 资格面随 T2c 一并处置）、
-    `docs/gaps/gap-c-semantic-base.md` 预扫描期条目、两包 README、`MODEL_INDEX.md`、
-    变更日志/变异表同步。
+  - 测试/文档：删 `test_pre_scan_fallback.py`、`test_linter_raw_eligibility.py`、
+    `test_c_symbol_collection.py` 分期用例；linter `discovery/lookahead` 的符号提示转发与
+    M1 资格代码同轮删除（内部 warning 只留收敛证据，raw 位点不再产生）；变异表去 5 条。
+  - 遗留（T2d 收口）：`docs/gaps/gap-c-semantic-base.md`、两包 README、`linter/AGENTS.md`
+    等对 pre_scan 的历史叙述按 T2d 统一改写。
 - **T2c（删除 raw 管线，需先证后删）**：`linter/lookahead.py` M1 资格证据（`_type_name_hits`/
   `_substitution_trial`/收敛 warning 面）、`scanner._apply_narrow_downgrade`、`parser` raw
   承载（`raw_sites`/`raw_source`/`try_raw_sentence`/`build_raw_candidate`）、
@@ -64,6 +65,24 @@ E002·E003 安全网）在 C 上也不再被生产路径使用**（raw 位点只
   真实语料门禁不变 + 变异表删除对应条。
 - **T2d（文档收口）**：机制文档（linter/parser README）与 gap 档改写；`pre_scan` 全仓 grep
   归零（docs 历史说明除外）；本 ADR 删除。
+
+## T2b 实施记录（#54，2026-10-23）
+
+**已删**：`lexer/pre_scan.py` 整文件与 `lexer/__init__` 导出；两包 `[lexer] pre_scan`
+声明与 `base/_pre_scan.toml`；`core/global_state` 缓存键、`core/engine_capabilities`
+能力注释；linter `scanner` 的 `load_pre_scan_config`/`_pre_scan_symbols`/`_raw_exclude_rules`
+与 `discovery.set_symbol_hints` 转发、`lookahead` 符号字段/`set_symbol_hints`/
+`_type_name_hits`/`_depth_before`/`_substitution_trial`（内部 warning 只留收敛证据，
+raw 位点不再产生）；C `_api` 的 `two_phase_product`/`pre_scan_records`/`merge_phases`/
+`phases_for`/`PHASE_PRE_SCAN`。
+
+**判据产物**（PRE 为 #53 后状态）：`tests/languages/c` + `tests/engine/linter|pipeline`
+**1617 passed / 21 skipped**；`tests/e2e` 129/7；C 真实语料 **7/7 parse_ok、0 诊断**；
+verilog 真实语料基线 **无增长**；A/B **0/144**；pyright **0**；`check_doc_refs` PASS；
+生产代码 `grep pre_scan|PHASE_PRE_SCAN|two_phase_product` **0**。变异表 123→**118**。
+
+**遗留**：全量 `pytest tests` 冻结树待下一轮补跑（本提交按 partial 记）；T2c（raw 管线
+大删：M2 摘诊断/parser raw 承载/P4 理解提升/E002·E003 + 剩余 skip 测试）未开始。
 
 ## 权衡
 

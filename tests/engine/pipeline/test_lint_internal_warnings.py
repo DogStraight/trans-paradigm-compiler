@@ -249,7 +249,8 @@ class TestCounterExamplesStillBlocking:
         # 安全性质 = **真错仍被拒**（管线失败，不得静默通过）——不再冻结诊断面；
         # 若 linter 仍报，必须是阻断级（内部 warning 资格不得放行）。
         assert all(d.blocking for d in diags)
-        assert all(w["eligible"] is False for w in scanner.internal_warnings())
+        # M1 资格面已随 pre_scan 退役（T2b）：内部 warning 不再带 eligible 字段，
+        # raw 暂缓建树无从触发 ⇒ 真错只能以阻断诊断呈现。
 
         res = _run(src)
         assert res.get("success") is False

@@ -7,6 +7,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **T2b：删除 lexer 预扫描（pre_scan）机制（#54，ADR-0024）**：
+  · 删 `lexer/pre_scan.py` 与导出、两包 `[lexer] pre_scan` 配置与 `base/_pre_scan.toml`、
+    `core/global_state` 缓存键与 `core/engine_capabilities` 能力注释。
+  · 删 linter 接线：`scanner` 的 `load_pre_scan_config`/`_pre_scan_symbols`/`_raw_exclude_rules`、
+    `discovery.set_symbol_hints`、`lookahead` 的符号字段与 `set_symbol_hints`/`_type_name_hits`/
+    `_depth_before`/`_substitution_trial`（M1 资格面整体退役；内部 warning 只留收敛证据，
+    raw 位点不再产生）。
+  · 删 C 两期产物 `two_phase_product`/`pre_scan_records`/`merge_phases`/`phases_for`/
+    `PHASE_PRE_SCAN`；`test_c_symbol_collection` 改 analyze-only；删
+    `test_pre_scan_fallback.py`、`test_linter_raw_eligibility.py`；变异表 123→118。
+  · 验证（**partial**：全量冻结树待下一轮）：C+linter+pipeline 1617 passed/21 skipped；
+    e2e 129/7；C 真实语料 7/7 零诊断；verilog 基线无增长；A/B 0/144；pyright 0；
+    `check_doc_refs` PASS；生产代码 pre_scan grep 0。
+  · 余：T2c 删 raw 管线（M2/parser raw/P4/E002·E003 + 剩余 skip）；T2d 文档收口。
+
+### Added
+
 - **T2a：typedef 名复合字面量直接建树（#53，ADR-0024 复裁）**：
   · `CompoundLiteral` 类型名收 `@CastTypeName|@CastTypedefName`（复用 #49 门控）⇒
     `(t){1}` / `(S){ .a = 1 }` 解析期直接建 `CompoundLiteral`，不再走 raw 兜底；

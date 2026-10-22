@@ -12,12 +12,10 @@
      "scope_kind": str|None, # global / function / block
      "decl_order": int|None, # analyze 期 = 收集序（≈ 源序，供"先声明后使用"判定）
      "decl_line": int|None,  # 声明所在源行（parser 挂的 _pos_line）
-     "phase": str}           # "analyze"（本插件）/ "pre_scan"（lexer 预扫描）
+     "phase": str}           # "analyze"（本插件；`phase` 保留为产物自述字段）
 
-**分期（作者硬要求）**：`phase` 标注"名称来自哪个时期"——
-`pre_scan`（`lexer/pre_scan.py`：文本级/平坦/首见归属，只作提示）与
-`analyze`（本插件：精确作用域 + 声明序）。同一位点两期都有记录时**两条都保留**
-（`merge_phases`/`phases_for` 供对比），形态判定一律以 `analyze` 为准。
+**符号判定**：记录由本插件（analyze 期）给出——精确作用域 + 声明序；形态判定一律以
+`analyze` 记录为准（T2b 起 lexer 预扫描/两期合并已删除）。
 
 **默认偏置（显式化）**：未声明标识符按 `DEFAULT_TYPEDEF_BIAS = "not typedef"` 处理——
 `is_typedef()` 的缺省即此值；调用点不得再各自硬编码。
@@ -25,13 +23,12 @@ Doc: grammar/c/README.md（符号收集产物：形状 / 分期语义 / 默认�
 """
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 from core.define import Node, marker_matches
 from analyzer.scope import Scope, Symbol
 
 # ── 期别 / 偏置 / 产物键（调用方只读这些常量，勿在别处硬编码） ──
-PHASE_PRE_SCAN = "pre_scan"
 PHASE_ANALYZE = "analyze"
 #: 预扫描期作用域未知（平坦收集）——固定标记而非 None，便于按 scope 过滤时区分"未知"与"缺值"
 SCOPE_FILE_UNKNOWN = "<file>"
@@ -470,66 +467,12 @@ def declaration_view(analyzer: Any) -> list[dict[str, Any]]:
     return view
 
 
-def two_phase_product(analyzer: Any, source: str, rules_dir: str, context: Any = None) -> dict:
-    """两期合并产物：`records` = `pre_scan` + `analyze`（逐条带 `phase`），元信息同 analyze 产物。
-
-    `source` 是**同一份源码文本**（预扫描在文本上跑，不依赖 AST）；用于分期对比：
-    同名在两期都有记录时**两条都留**（`phases_for` 可判）。
-    """
-    base = product_from(analyzer, context)
-    return {
-        **base,
-        "records": merge_phases(pre_scan_records(source, rules_dir), base["records"]),
-        "phases": [PHASE_PRE_SCAN, PHASE_ANALYZE],
-    }
-
-
 # ── 查询 API（消费方唯一入口；勿直接读 records 猜语义） ──────────────
-
-
-def pre_scan_records(source: str, rules_dir: str) -> list[dict]:
-    """`phase="pre_scan"` 记录：调语言包声明的 `[lexer] pre_scan`（只读、无副作用）。
-
-    ⚠ 预扫描是**粗收集**（平坦 / 首见归属 / 无声明序；引擎兜底正则还会带入少量
-    非声明名——见 `grammar/c/base/_pre_scan.toml` 头注）：只作提示与分期对比，
-    **不得**用于形态判定。
-    """
-    from lexer import load_pre_scan_config, pre_scan
-
-    symbols = pre_scan(source, load_pre_scan_config(rules_dir))
-    out: list[dict] = []
-    for order, (name, kind) in enumerate(symbols.items()):
-        out.append(
-            {
-                "name": name,
-                "kind": kind,
-                "scope": SCOPE_FILE_UNKNOWN,
-                "scope_kind": None,
-                "decl_order": None,  # 预扫描不给声明序（只保留首见）
-                "decl_line": None,  # 亦不给位置
-                "phase": PHASE_PRE_SCAN,
-                "_pre_scan_seen_index": order,
-            }
-        )
-    return out
-
-
-def merge_phases(*record_lists: Iterable[dict]) -> list[dict]:
-    """合并多期记录（同一位点两期都有 ⇒ 两条都留，供逐期对比）。"""
-    merged: list[dict] = []
-    for records in record_lists:
-        merged.extend(records)
-    return merged
 
 
 def records_for(name: str, records: Sequence[dict]) -> list[dict]:
     """按名取记录（可能跨期/跨作用域多条）。"""
     return [r for r in records if r.get("name") == name]
-
-
-def phases_for(name: str, records: Sequence[dict]) -> set[str]:
-    """该名出现在哪些期（如 `{"pre_scan", "analyze"}`）。"""
-    return {str(r.get("phase")) for r in records_for(name, records)}
 
 
 def is_typedef(

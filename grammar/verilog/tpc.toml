@@ -24,7 +24,6 @@ uses = [
 token_base = { file = "base/_token.toml", required = true }
 lexer_base = { file = "base/_lexer.toml", required = true }
 token_lang = { file = "token.toml", required = false }
-pre_scan = { file = "base/_pre_scan.toml", section = "pre_scan", required = false }
 bracket_map = { file = "base/_token.toml", section = "bracket", required = false }
 number = { file = "base/_number.toml", section = "number", required = false }
 

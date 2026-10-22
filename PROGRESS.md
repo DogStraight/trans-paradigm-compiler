@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T2b（ADR-0024 复裁后）= 删除 `pre_scan` 机制本体：`lexer/pre_scan.py` + 导出 + 全局缓存键/能力串 + 两包 `_pre_scan.toml`/`tpc.toml` 行 + `analyzer/structure` 读取 + linter 符号提示接线（先静态化或同轮删）+ C 两期产物（`two_phase_product` 等）+ 相关测试（`test_pre_scan_fallback`、分期用例、符号提示/资格测试处置）；判据 = 受影响套件全绿、`grep pre_scan` 生产路径归零、A/B 0/144、语料门禁不变。
-- **待验证假设**：raw 位点在 T2a 后无生产消费者（M1 资格静态化即可证明）；linter 删符号提示后诊断面只受 raw/资格面影响（其测试同时删除/改写）；verilog 无 type_name ⇒ 零行为变化。
-- **台账**：T2a ✅ 复合字面量 typedef 直接建树（变异 123）；ADR-0024 已复裁：pre_scan 零承重（禁配置实验 1617 passed/1 死测试、语料 0 诊断）；T2c（raw 管线大删）待 T2b 后按"先证后删"执行。
+- **意图**：T2b 收尾 + T2c 启动——补跑全量 `pytest tests`（冻结树）；T2c = 删 raw 管线剩余面（M2 窄档摘诊断、parser raw 承载/`raw_sites`、P4 理解/提升插件、E002/E003 安全网与对应测试，含 21 条 skip）；先证后删：grep 生产路径无消费者 + 受影响套件/全量/A-B/语料门禁不变。
+- **待验证假设**：T2b 后 raw 位点已无来源（内部 warning 无 eligible 字段）⇒ parser `raw_sites` 恒空、P4 通路不可达；verilog 无 raw 声明 ⇒ 删除零行为变化；C 复合字面量/强转/真实语料解析面不受影响。
+- **台账**：T2b 主体 #54（pre_scan 机制/配置/linter M1/C 两期产物已删，受影响套件+语料+A/B 绿；全量待补）；T2a ✅ 复合字面量；T2c 判据/止损见 ADR-0024；主线 1 刻度 9/9 不变。
 
 ## 估算依据（对照锚，可复核）
 

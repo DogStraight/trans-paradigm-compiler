@@ -36,7 +36,7 @@ from core.errors import ConfigError
 #   那种情况旧包不会报错、只会默默跑出不同结果，正是版本号要拦的。
 CAPABILITIES: dict[str, str] = {
     "grammar.rules": "1",           # [grammar] files / inject（规则叠加与替换）
-    "lexer.token_ext": "1",         # [lexer] token_ext / pre_scan / bracket_map
+    "lexer.token_ext": "1",         # [lexer] token_ext / bracket_map
     "parser.pratt": "1",            # [parser] token_categories / operator_defs / skip_types
     "analyzer.primitives": "1",     # [analyzer] handlers / postpasses / 语义原语
     "preprocessor.pipeline": "1",   # [preprocessor] directives / macro_config / expand

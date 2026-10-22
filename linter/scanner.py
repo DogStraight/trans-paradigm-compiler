@@ -27,7 +27,7 @@ from core.token_protocol import (
     bracket_left,
     bracket_right,
 )
-from lexer import Lexer, load_pre_scan_config
+from lexer import Lexer
 from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
 
@@ -340,25 +340,6 @@ class LinterScanner:
         # scanner 实例扫多文件），新 token 流必须清空，避免跨文件位置串命中。
         self._matcher.reset_atom_memo()
 
-        # ── 符号提示（P2b/P3b）：把 `pre_scan` 名（含 kind/声明位置）喂给消歧表 ──
-        # 语言知识在包声明（`[lexer] pre_scan`：`[pre_scan.decl.*].type_name` /
-        # `trial_as`），引擎只做"括号内类型名形态 + 换 token 型重跑试解析"的
-        # **中性能力**（判据见 `lookahead._type_name_hits` / `_substitution_trial`）。
-        # 预扫描不精确（`lexer/pre_scan.py:1-5` 自述）⇒ 只作提示、不作语法判据。
-        pre_cfg = load_pre_scan_config(self._rules_dir)
-        # raw 互斥（P3c/M2）：包侧 `[pre_scan] raw_exclude_rules`（声明类规则名）。
-        # 走与 `lexer.bracket_map` 同一条既有读取面（`ConfigRegistry._loaded` 的合并表）
-        # ——`load_pre_scan_config` 只搬运它认识的键，该键不经引擎编译，引擎只做集合交。
-        self._discovery.set_symbol_hints(
-            self._pre_scan_symbols(lex_source, pre_cfg),
-            self._all_bracket_openers,
-            self._all_bracket_closers,
-            type_name_kinds=pre_cfg.get("type_name_kinds", frozenset()),
-            trial_as=pre_cfg.get("trial_as", {}),
-            depth_pair=self._depth_pair,
-            raw_exclude_rules=self._raw_exclude_rules(),
-        )
-
         registry = CheckerRegistry()
 
         # ── P1: 块边界配对 ──────────────────────
@@ -460,36 +441,6 @@ class LinterScanner:
                 hit["downgraded"] = True
                 hit["suppressed"] = int(hit.get("suppressed", 0)) + 1
         return kept
-
-    def _raw_exclude_rules(self) -> frozenset[str]:
-        """包侧 `[pre_scan] raw_exclude_rules`（声明类规则名；raw 互斥用）。
-
-        读法与 `lexer.bracket_map` 同一既有面（`ConfigRegistry._loaded` 的合并表）：
-        `load_pre_scan_config` 只搬运引擎认识的键，该键由语言包声明、引擎只做集合交
-        （语言知识不进代码）。未声明 ⇒ 空集（互斥不生效，行为与声明前一致）。
-        """
-        table = ConfigRegistry._loaded.get("lexer.pre_scan", {}) or {}
-        declared = table.get("raw_exclude_rules", [])
-        if not isinstance(declared, list):
-            return frozenset()
-        return frozenset(str(x) for x in declared)
-
-    def _pre_scan_symbols(self, source: str, config: dict | None = None) -> dict[str, dict]:
-        """本轮 `pre_scan` 名字（含 kind + 声明位置；**只作提示**）。
-
-        走**并行读取面** `pre_scan_with_lines`（引擎 `[lexer] pre_scan`；语言知识在
-        包声明，引擎不解释 kind 语义、不硬编码任何语言名）；未声明 `[lexer]
-        pre_scan` 的语言包 → 空表（零影响）。配置错误按 fail-fast 冒泡（不静默降级）。
-
-        消费点：未收敛位点的 ② 类型名 kind 过滤与 ③ 声明顺序判定
-        （见 `lookahead._type_name_hits` / `_record_convergence`），**不参与**诊断计算。
-        既有 `pre_scan()` 签名/行为不变（并行面，旧调用方零影响）。
-        """
-        from lexer import load_pre_scan_config
-        from lexer.pre_scan import pre_scan_with_lines
-
-        cfg = config if config is not None else load_pre_scan_config(self._rules_dir)
-        return pre_scan_with_lines(source, cfg)
 
     def internal_warnings(self) -> list[dict]:
         """本次 `scan()` 的内部 warning（拷贝；**用户不可见**）。
