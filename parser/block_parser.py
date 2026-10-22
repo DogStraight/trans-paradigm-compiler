@@ -342,12 +342,7 @@ def parse_sentence(
     if current is None:
         return None
 
-    candidates = self.rule_selector.get_candidate_rules(
-        current,
-        self.pre_symbols,
-        self.pre_hints,
-        self.scope_stack.lookup,
-    )
+    candidates = self.rule_selector.get_candidate_rules(current)
     self._log_state(lambda: f"sentence: {self._debug_token_info(context)} candidates={[r.name for r in candidates]}")
     if not candidates:
         return None

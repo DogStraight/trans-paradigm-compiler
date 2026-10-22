@@ -28,7 +28,7 @@ from core.plugin_loader import load_all_components
 load_all_components()
 
 # ── 词法 / 语法 / 配置 ──
-from lexer import Lexer, pre_scan, load_pre_scan_config
+from lexer import Lexer
 from parser import Parser, setup_grammar
 from core.define import (
     ParseError,
@@ -613,15 +613,6 @@ def _stage_lex(ctx: _PipelineContext) -> list:
     return tokens
 
 
-def _stage_prescan(ctx: _PipelineContext) -> tuple[Any, Any]:
-    """Pre-scan（符号预检测，供 parser 提示）。"""
-    pre_scan_config = load_pre_scan_config(ctx.rules_dir)
-    pre_symbols = pre_scan(ctx.source, pre_scan_config)
-    if pre_symbols:
-        ctx.log(f"[prescan] symbols: {len(pre_symbols)}")
-    return pre_scan_config, pre_symbols
-
-
 def _stage_lint(ctx: _PipelineContext) -> bool:
     """前置语法检查（**阻断类**失败时截断管线）。返回是否通过。
 
@@ -677,16 +668,14 @@ def _style_notes_summary(notes: list) -> str:
 
 
 def _stage_parse(
-    ctx: _PipelineContext, pre_scan_config: Any, pre_symbols: Any, tokens: list
+    ctx: _PipelineContext, tokens: list
 ) -> Any | None:
     """解析。返回 AST（失败返回 None）。"""
     parser = Parser(
         rules_dir=ctx.rules_dir,
-        pre_symbols=pre_symbols,
         rules=ctx.rules,
         rule_selector=ctx.rule_selector,
     )
-    parser.pre_hints = pre_scan_config.get("hints", {})
     # 歧义位点 raw 暂缓建树（P3c/M2，**内部机制**）：把"合格位点"按**最小通道**
     # 交给 parser（纯 dict 列表 + 一份源文本，不把 pipeline context 塞进 parser）。
     # 启用条件（冻结）：`eligible` ∧ 两侧**同源**——`_stage_lex` 词法化的是 `ctx.source`，
@@ -1186,15 +1175,14 @@ def run_pipeline_on_source(
     if ctx.stage == "lex":
         return _succeed(ctx)
 
-    # Pre-scan + lint
-    pre_scan_config, pre_symbols = _stage_prescan(ctx)
+    # Lint（预扫描只服务 linter 内部证据，parser 侧消费面已删 #49）
     if not _stage_lint(ctx):
         return ctx.result
     if not ctx.parse_enabled:
         return _succeed(ctx)
 
     # 解析
-    ast = _stage_parse(ctx, pre_scan_config, pre_symbols, tokens)
+    ast = _stage_parse(ctx, tokens)
     if ast is None:
         return ctx.result
     # 宏边界 raw 拼接（ADR-0017 决策 3/4）：区间 → 分层选替换单元 → 引擎标记

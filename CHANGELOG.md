@@ -7,6 +7,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **G4 typedef 名强转收口：parser 内符号表 + 规则符号门控**（2026-10-22，循环 #49，
+  方案 B，作者拍板）：
+  · **引擎**：`parser/parser_core.py::_ScopeStack` 接线 `_symbol_gate`
+    （`[Rule.parser] requires_symbol = {namespace, skip}`）与 `_register_symbols`
+    （`[Rule.parser] register = [{name_path|name_paths, kind, when_marker?}]`）；
+    `[parser] symbol_namespaces` 包声明面；`grammar_rule_fields.md` 同步登记。
+  · **C 包**：`CastTypedefName` 新规则（typedef 名/限定符 + 指针；`CastExpr` 类型名
+    两支 `@CastTypeName|@CastTypedefName`）；Declaration/ParamDecl/FuncDef 注册站点 +
+    函数/块作用域帧。`else` 前独占行注释改独立 `ElseClause` 规则（内联组挡注释致
+    cJSON 函数体截断）。
+  · **退役**：parser 侧预扫描消费面删除（`pre_symbols`/`pre_hints`/`[pre_scan]
+    rule_hints`；零消费，A/B 0/144）——ADR-0024 专项的 parser 前置切片。
+  · **结果**：G4 最小矩阵 8/8、新增 22 例；真实语料 cJSON/gzread `parse_ok=True`
+    syntax=0（余 5 zlib 文件 = 预处理宏展开时序，另案 TODO 1.3）；
+    C 套件 1238 passed；A/B verilog 0/144；lint accuracy 33/33 fp0；render_coverage
+    124/124；`c_acceptance` 49/0；变异 118 条（新增 register/门控两条，实测变红）。
+    旧 M1/raw 资格测试 67 条 skip 登记（该面退役，随 ADR-0024 专项处理）。
+
+### Added
+
 - **G4 typedef 名强转调查/方案（「解析前符号判定」专项立项材料）**（2026-10-22，循环 #48，
   **docs-only**，未动生产代码）：真实语料门禁唯一前置。实测（check 路径）：
   · 最小矩阵 8 条中 5 条 `parse_ok=False`（函数内指针强转初值/return/if/for/文件域声明），

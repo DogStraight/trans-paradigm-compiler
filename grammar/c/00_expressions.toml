@@ -373,16 +373,19 @@ rest = "$2"
 pointers = "$3"
 
 
-# CastExpr — ( type-name ) cast-expression  例：(int)x / (char *)p / (unsigned)-1
+# CastExpr — ( type-name ) cast-expression  例：(int)x / (char *)p / (unsigned)-1 / (myint)y
 # ⚠ `is_atom = true`：操作数经 `@UnaryLevelExpr` 含 `@Expression`，与 `Expression`
 #   成环——环只在原子规则里被截断（同 ParenthesizedExpr/SizeofExpr 一族）。
 # ⚠ 操作数用**一元层级**入口：`(int)x * y` 必须是 `((int)x) * y`（转换是一元优先级），
 #   若引 `@Expression`（rbp=0）会吞掉 `* y`。
+# ⚠ 类型名两支：关键字类型 = `@CastTypeName`（FIRST 无歧义）；typedef 名 = 
+#   `@CastTypedefName`（**解析期符号门控**：变量在括号内时该规则不可用 ⇒ `(a)*b`
+#   仍按乘法读）。见 docs/gaps/gap-c-typedef-cast.md。
 [CastExpr.parser]
 is_atom = true
 production = [
     "bracket.l_parentheses",
-    "@CastTypeName",
+    "@CastTypeName|@CastTypedefName",
     "bracket.r_parentheses",
     "@UnaryLevelExpr",
 ]
@@ -500,6 +503,40 @@ line = [
 [CastTypeName.renderer.layout]
 line = [
     { ref = "first" },
+    { opt = { group = [
+    " ",
+    { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },
+] } },
+    { ref = "pointers" },
+]
+
+# ── CastTypedefName — typedef 名起头的类型名（强转的符号相关支）──
+# 只在 `[Rule.parser] requires_symbol` 通过时可用：首 token（跳过限定符）是标识符，
+# 且其 `_ScopeStack` kind ∈ `parser.symbol_namespaces.type_name`（C = typedef）。
+# 命名空间语义由包声明，引擎不解释。
+
+[CastTypedefName.parser]
+production = [
+    "@TypeQualifier*",
+    "@TypedefName",
+    "@SpecRest*",
+    "(symbol.base.multiple)*",
+]
+requires_symbol = { namespace = "type_name", skip = ["keyword.const", "keyword.volatile", "keyword.restrict"] }
+
+[CastTypedefName.parser.node]
+quals = "$1"
+typedef_name = "$2"
+rest = "$3"
+pointers = "$4"
+
+[CastTypedefName.renderer.layout]
+line = [
+    { opt = { group = [
+    { intent = "compact", items = "quals", sep = " ", first_soft = false, nest = 0 },
+    " ",
+] } },
+    { ref = "typedef_name" },
     { opt = { group = [
     " ",
     { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },

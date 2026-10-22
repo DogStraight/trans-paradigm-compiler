@@ -92,9 +92,15 @@ class TestScope:
     """作用域：raw 安全网 E002（遮蔽 / 声明序，作用域精确）。"""
 
     def test_shadowed_typedef_use_rejected(self):
+        """遮蔽例两阶段都拒：#49 前 = raw 安全网 E002；#49 后 = 解析期符号判定直接拒绝。
+
+        两种拒绝都成立——测试只锁"不得静默接受"，错误形态随消歧层级演进。
+        """
         res = _run_pipeline("typedef int t;\nvoid f(void){ int t; x = (t)y; }\n")
         assert res.get("success") is False, "遮蔽例应被拒（不得静默接受）"
-        assert "E002" in str(res.get("error")), res.get("error")
+        err = str(res.get("error") or "")
+        assert err, res
+        assert "E002" in err or "parse truncated" in err, err
 
     def test_non_shadowed_cast_accepted(self):
         """正样本：无遮蔽的 typedef 强转语句闭环（不误报）。"""

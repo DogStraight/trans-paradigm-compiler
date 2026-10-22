@@ -1,6 +1,8 @@
 # ADR-0024: 退役 lexer 预扫描——raw 资格符号无关化，符号判定后移 analyze
 
 - Status: deferred（暂缓；**刻度主线完成后作专项整治，集中力量处理**）
+  · #49 已删除 **parser 侧**的预扫描消费面（`pre_symbols`/`pre_hints`/`rule_hints`，
+    零消费、A/B 0/144）；linter 侧唯一承重面（raw 资格）随本专项处理。
 - Date: 2026-10-22（#45 调查轮：作者要求评估 `pre_scan` 存废 → 先出两阶段 lint 设计；
   同日作者拍板"这可能需要专项整治，之后再处理：lexer 做预扫描是耦合设计，先不管此处，
   先把刻度推进完成之后再集中力量去掉这个机制"）
@@ -18,7 +20,7 @@
 
 | 消费点 | 位置 | 承重？ | 实测 |
 |---|---|---|---|
-| parser 候选重排（`pre_symbols`+`pre_hints`→`rule_selector`） | `pipeline/__init__.py:616-622,679-689`；`parser/parser_core.py:460-512`；`parser/rule_selector.py:144-170`；配置 = verilog `[pre_scan.decl.*].rule_hints` | 否 | 删 verilog `rule_hints` ⇒ A/B **0/144**、verilog 套件全绿、无测试引用；C 包未声明 |
+| parser 候选重排（`pre_symbols`+`pre_hints`→`rule_selector`）**已删 #49** | （历史接线，现状已无消费面）arser/parser_core.py:460-512`；`parser/rule_selector.py:144-170`；配置 = verilog `[pre_scan.decl.*].rule_hints` | 否 | 删 verilog `rule_hints` ⇒ A/B **0/144**、verilog 套件全绿、无测试引用；C 包未声明 |
 | linter raw 资格（唯一承重） | `linter/scanner.py:343-357,465-495`；`linter/lookahead.py:434-506,1036-1147`（①替换试解析 ②kind 过滤 ③先后/深度 ④raw 互斥）→ `symbol_dependent/eligible` → M2 摘诊断 `scanner.py:420-450` + parser raw 承载 | **是** | 禁用符号 → 合法 `x=(myint)y;` 由 0 诊断变 1 误报、parse 截断；`tests/languages/c` 9 红（raw 理解面）、linter 定向套件 33 红 |
 | C 产物"两期"（`PHASE_PRE_SCAN`/`two_phase_product`/`pre_scan_records`） | `grammar/c/plugins/semantics/_api.py:473-533` | 否 | 管线无消费者（`build_product` 只出 analyze 一期；仅测试+文档引用） |
 | `raw_exclude_rules`（raw 互斥规则名） | `linter/scanner.py:465-474` 借 `lexer.pre_scan` 配置段读取 | 半（语义非符号） | 可迁 linter 自有配置面 |
@@ -61,7 +63,7 @@ E002：作用域/声明序/深度精确；`_raw_understand`：E003 一致性；`
   `pre_symbols`/`pre_hints` 接线；
 - 语言包：`grammar/c/base/_pre_scan.toml`、`grammar/verilog/base/_pre_scan.toml`、两包 `tpc.toml`
   的 `[lexer] pre_scan` 行；
-- 消费面：`parser/parser_core.py` 的 `pre_symbols/pre_hints`、`parser/rule_selector.py` 的 hint
+- 消费面（#49 前）：`parser/parser_core.py` 的 `pre_symbols/pre_hints`、`parser/rule_selector.py` 的 hint
   重排、`analyzer/structure.py:317-329`、`grammar/c/plugins/semantics/_api.py` 的
   `two_phase_product`/`pre_scan_records`/`merge_phases`/`phases_for`/`PHASE_PRE_SCAN`；
 - `raw_exclude_rules` 迁 linter 自有声明面（`[linter] raw_exclude_rules`，语义不变）；

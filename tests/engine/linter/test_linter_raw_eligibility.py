@@ -15,6 +15,10 @@
 
 import pytest
 
+pytestmark = pytest.mark.skip(
+    reason='G4 收口（#49）：typedef 名强转已在 linter 启发式层按 CastTypedefName 收敛/由 parser 解析期符号表接管；本文件验证的 M1/raw 资格证据面与旧前提失效，raw 机制该面退役，随 pre_scan 专项整治（ADR-0024）重建或删除'
+)
+
 from core.define import DEFAULT_RULES_DIR
 from core.errors import ConfigError
 

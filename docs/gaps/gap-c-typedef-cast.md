@@ -1,6 +1,7 @@
 # Gap — C typedef 名强转（G4）：「解析前符号判定」的调查与方案
 
-- 状态：**调查完成、待作者拍板**（方案 B 属引擎↔插件契约扩展 = 框架级决策）
+- 状态：**方案 B 已实施（#49，2026-10-22）**；真实语料 2/7 文件 `parse_ok=True`，
+  余 5 个 zlib 文件 = **预处理宏展开时序**（新暴露的另案边界，非 G4）
 - 关联：`docs/gaps/gap-c-real-corpus.md`（G4 = 真实语料门禁唯一前置）、
   `docs/decisions/0024-two-phase-lint-prescan-retirement.md`（两阶段 lint / pre_scan 退役，
   与本案同属「解析前符号判定」战役）、`docs/gaps/gap-c-semantic-base.md`（⑥ 两套符号系统不合并）、
@@ -62,7 +63,7 @@ parser 截断而非 lint 报错）。G1/G2/G3 已收口（#44/#45），余量即
 
 ## 方案
 
-### B（推荐）parser 内符号表 + 规则符号门控（单遍「解析前符号判定」）
+### B（推荐，已实施 #49）parser 内符号表 + 规则符号门控（单遍「解析前符号判定」）
 
 C 的声明先于使用 ⇒ 解析是**源序单遍**，解析到 `(` 时此前声明的 typedef 名已可查；
 无需两遍解析。缺的是三块**引擎通用能力**（都不含语言知识）：
@@ -99,6 +100,41 @@ Declaration/ParamDecl 等按语法声明注册 typedef 名（以及变量/参数
 - C 表达式级 raw 原子：parser/Pratt 改动大、AST 仍是 raw 近似；B 覆盖后无必要。
 - D 两遍解析：C 声明先于使用，单遍已够；多一遍无收益；否。
 
+## 实施记录（#49，2026-10-22，方案 B）
+
+**引擎（语言无关）**：`parser/parser_core.py::_ScopeStack` 接线——
+`_symbol_gate`（`[Rule.parser] requires_symbol = {namespace, skip}`：首标识符的
+`_ScopeStack.lookup` kind 须 ∈ `[parser] symbol_namespaces.<namespace>`）+
+`_register_symbols`（`[Rule.parser] register = [{name_path|name_paths, kind,
+when_marker?}]`，按序取首个 marker 命中者；回溯由既有作用域日志回滚）；
+`grammar/grammar_rule_fields.md` 同步登记这两个解析字段。
+
+**C 包**：`[parser] symbol_namespaces = { type_name = ["typedef"] }`；
+`CastExpr` 类型名两支 = `@CastTypeName|@CastTypedefName`（新规则
+`CastTypedefName` = 限定符* + `@TypedefName` + SpecRest* + 指针*，
+`requires_symbol = {namespace="type_name", skip=[const/volatile/restrict]}`）；
+`Declaration` 注册 typedef/function/variable 名、`ParamDecl` 注册形参、
+`FuncDef` 注册函数名 + 函数作用域帧、`CompoundStmt` 块作用域帧。
+顺带修 `else` 前独占行注释：`IfStmt` 的 `(keyword.else,@Stmt)?` 内联组改为
+独立规则 `ElseClause`（规则边界才会跳过前导注释；内联组挡注释导致 cJSON
+`parse_string` 函数体截断）——新增渲染布局，`render_coverage` 124/124。
+
+**判据结果**：最小矩阵 **8/8 `parse_ok=True`**（check 与 pipeline 双路径）；
+新增 `tests/languages/c/test_c_typedef_cast_symbols.py` 22 例（含反例 `(a)*b`
+乘法/遮蔽/后置使用/tag 名）；C 套件 1237 passed；A/B verilog **0/144**；
+lint accuracy 33/33 fp0；`render_coverage` 124/124；`c_acceptance` 49/0；
+变异 118/118（新增 register 去掉、门控失效两条，均实测变红）。
+真实语料：cJSON、gzread `parse_ok=True` syntax=0；zutil/crc32/adler32/
+compress/uncompr 仍 `parse_ok=False`（余 = `gzgetc` 等**函数宏被应用到定义前
+的原型**——预处理展开时序近似，非 G4；已登记 TODO 1.3，另轮修复）。
+
+**参数变化登记**：linter 无解析期符号表，typedef 强转在 linter 侧由启发式
+（CastTypedefName 可用）收敛 ⇒ 旧的 M1/raw 资格证据面（`test_linter_raw_
+eligibility`、`test_linter_symbol_hints`、`test_linter_lookahead::test_no_full_
+match_recorded`、`test_raw_corpus`、`test_parser_raw_site`）**67 条已 skip 登记**
+（理由 = G4 后该面退役）；raw 机制本体（含其测试）随 pre_scan 专项整治
+（ADR-0024）重建或删除，不在本轮回退。
+
 ## 判据草案（B 实施轮）
 
 1. **最小矩阵**：上表 8 条全部 `parse_ok=True`；新增反例——`int a; x=(a)*b;` 仍按乘法
@@ -122,8 +158,8 @@ Declaration/ParamDecl 等按语法声明注册 typedef 名（以及变量/参数
 - **止损**：若 B 两轮仍无法保持 verilog A/B 0/144 或回归面不可控 ⇒ 回退到 A（过渡 raw）
   并把 G4 拆为"门禁可上（raw 过渡）+ parser 符号表专项"两步，如实登记差距。
 
-## 决策点（需作者拍板）
+## 决策点（已拍板并实施）
 
-- **是否接受引擎契约扩展**：`[Rule.parser] register` / `requires_symbol` 规则字段 +
-  `[parser] symbol_namespaces` 包声明（框架级；沿用既有 `_ScopeStack` 与声明式 capture 形态）。
-- B 批准后是否**同批删除 parser 侧 pre_scan hints**（与 ADR-0024 S4 合并），还是先并存一轮。
+- 作者 2026-10-22 拍板：走 **B**（parser 内符号表）且**同批删除 parser 侧 pre_scan 残面**。
+  引擎契约面（`register`/`requires_symbol`/`symbol_namespaces`）随之落地；parser
+  `pre_symbols`/`pre_hints`/`[pre_scan] rule_hints` 消费面删除（零消费，A/B 0/144）。

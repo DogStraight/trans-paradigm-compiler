@@ -169,6 +169,39 @@ exclude = ["symbol.base.dot"]   # 负向前瞻：匹配后若后跟 . 即失败�
 - **不需要手写**: 逗号列表、分号、右括号等后继全部由 FOLLOW 推导；`exclude`
   只用于"显式拒绝某 token"的消歧场景
 
+#### 解析期符号（`register` / `requires_symbol` + `[parser] symbol_namespaces`）
+
+"解析前符号判定"的语言声明面（C 的 typedef 名强转 `(T)x` 即靠它；判据
+`docs/gaps/gap-c-typedef-cast.md`）。引擎只做通用作用域栈/集合判定，不知道 typedef 语义：
+
+```toml
+[parser]
+symbol_namespaces = { type_name = ["typedef"] }   # 包声明：namespace → 认可 kind 集合
+
+[Declaration.parser]
+# 规则匹配成功后按路径取声明名注册进解析期 `_ScopeStack`（按序取首个 marker 命中者）
+register = [
+  { name_path = "declarators.items[*].declarator.direct.head.content", kind = "typedef", when_marker = "keyword.typedef" },
+  { name_path = "declarators.items[*].declarator.direct.head.content", kind = "variable" },
+]
+
+[CastTypedefName.parser]
+production = ["@TypeQualifier*", "@TypedefName", "@SpecRest*", "(symbol.base.multiple)*"]
+# 规则级门控：首标识符在 `_ScopeStack` 的 kind 须 ∈ type_name 集合；限定符可经 skip 跳过
+requires_symbol = { namespace = "type_name", skip = ["keyword.const", "keyword.volatile", "keyword.restrict"] }
+```
+
+- **`register`**（`[Rule.parser]`，dict 或 list）— 声明式符号注册：`name_path`/`name_paths`
+  （路径语法同 node 绑定，含 `items[*]`）、`kind`、可选 `when_marker`（子树标记命中才生效）。
+  注册进当前作用域帧（`[Rule.parser] scope = {kind=…}` 声明的帧，如函数/块）；回溯由
+  `_ScopeStack` 撤销日志精确回滚。
+- **`requires_symbol`**（`[Rule.parser]`，str 或 dict）— 规则级符号门控：跳过 trivia 与
+  `skip` 后若首 token 是标识符，则要求其 kind ∈ `symbol_namespaces[namespace]`；首 token
+  是关键字类型名时**不门控**。包未声明 namespace ⇒ 门控空转（其它语言零影响）。
+- **消费方**: parser（`_symbol_gate` / `_register_symbols`）；linter 无解析期符号表，门控
+  规则按启发式可用（诊断面），权威判定在 parser。
+- **不适用**: 前向引用（C 声明先于使用）；跨作用域不得泄漏（帧回滚兜底）。
+
 #### FOLLOW 传播范围（嵌套元素内部已递归；仍有的旁路）
 
 - **递归到嵌套元素内部**：推导不只是扫规则顶层的 production 元素列表，而是按

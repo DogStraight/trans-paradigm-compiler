@@ -20,7 +20,7 @@ from core.define import (
 )
 from core.config_registry import declare_cfg
 from core.errors import ConfigError
-from ._constants import ROOT_RULE_NAME
+from ._constants import COMMENT_TOKEN_TYPE, IDENTIFIER_TOKEN_TYPE, ROOT_RULE_NAME
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # parser.operator_defs
@@ -252,6 +252,29 @@ class _ScopeStack:
         ]
 
 
+def _load_symbol_namespaces() -> dict[str, list[str]]:
+    """从配置注册表收集包声明的符号命名空间（`parser.symbol_namespaces.<ns>`）。
+
+    未 load_all/语言包未声明 ⇒ 空表（`requires_symbol` 门控空转）；跨语言切换时
+    配置注册表的 `_loaded` 会整体替换，故不残留上一门语言的命名空间。
+    """
+    from core.config_registry import ConfigRegistry
+
+    prefix = "parser.symbol_namespaces."
+    out: dict[str, list[str]] = {}
+    try:
+        loaded = ConfigRegistry._loaded
+    except AttributeError:  # 极端早调用（模块未就绪）⇒ 空表
+        return out
+    for key, value in dict(loaded or {}).items():
+        if not key.startswith(prefix):
+            continue
+        ns = key[len(prefix):]
+        if isinstance(value, list):
+            out[ns] = [str(x) for x in value]
+    return out
+
+
 def _atom_parser_impl(self, _tokens, idx, context):
     """atom_parser 的实际实现（独立函数避免每次 try_pratt_rule 创建闭包）"""
     del _tokens  # atom_parser 回调协议签名参数 (tokens, idx)，本实现只用 idx/context
@@ -457,7 +480,6 @@ class Parser:
         rules_dir: str | None = None,
         verbose: bool = False,
         log_file: str | None = None,
-        pre_symbols: dict[str, str] | None = None,
         rules: dict[str, GrammarRule] | None = None,
         rule_selector: "RuleSelector | None" = None,
         silent: bool = False,
@@ -469,11 +491,10 @@ class Parser:
             verbose: 调试日志开关。True 时输出所有级别日志，False 时只输出 WARN/ERROR。
             log_file: 日志文件路径。None 时读 FileManager.debug_log_file，
                         空字符串或 "/dev/null" 类似值表示不写日志。
-            pre_symbols: Lexer 预扫描符号表 { name: kind }，用于辅助规则选择。
             rules: 预加载的语法规则表。传入时跳过内部 GrammarRulesRegister 加载。
             rule_selector: 预构建的 RuleSelector。传入时跳过内部创建。
         """
-        self._init_flags(verbose, silent, pre_symbols)
+        self._init_flags(verbose, silent)
         self._load_brackets()
         self._init_rules(rules)
         self._init_logging(log_file)
@@ -493,9 +514,7 @@ class Parser:
         self._init_follows()
         self._init_anchors()
 
-    def _init_flags(
-        self, verbose: bool, silent: bool, pre_symbols: dict[str, str] | None
-    ) -> None:
+    def _init_flags(self, verbose: bool, silent: bool) -> None:
         """开关与容器字段。"""
         self.verbose = verbose
         # silent：探测性解析（宏体形态分类/提取等）全静默——不输出 WARN/失败报告，
@@ -507,11 +526,12 @@ class Parser:
         self._last_failure_report: dict | None = None
         # 解析是否提前停止（输入未耗尽但无规则可继续）
         self._parse_truncated = False
-        # 预扫描符号表（可选）
-        self.pre_symbols = pre_symbols or {}
-        self.pre_hints: dict[str, list[str]] = {}
-        # 解析时作用域栈（可选，配合 peek scope 使用）
+        # 解析时作用域栈（符号提前注册；C 的 typedef 消歧等 `requires_symbol` 门控用）
         self.scope_stack = _ScopeStack()
+        # 包声明的符号命名空间：`parser.symbol_namespaces.<ns>` → kind 列表
+        # （tpc.toml 的 `[parser] symbol_namespaces = { ns = [...] }` 经配置注册表
+        #   展平成 `<prefix>.<ns>` 键——按前缀收集；未声明 ⇒ 空表 ⇒ 门控空转）
+        self.symbol_namespaces: dict[str, list[str]] = _load_symbol_namespaces()
         # 歧义位点 raw 暂缓建树（P3c/M2，内部机制）：位点表与源文本由 pipeline 注入
         # （最小通道：纯 dict 列表 + 一段文本，不把 pipeline context 塞进 parser）。
         # 默认空表 ⇒ 机制关闭（零影响）。
@@ -520,6 +540,99 @@ class Parser:
         self._raw_sites_consumed: list[dict] = []
         # 试建期标志（候选子树试建期间抑制 raw 钩子自身，防递归自噬）
         self._raw_trial_active: bool = False
+
+    # ── 解析期符号（声明式注册 + 规则门控；语言知识在 TOML）──
+
+    def _symbol_gate(self, rule: GrammarRule, context: ParseContext) -> bool:
+        """规则级符号门控：`[RuleName.parser] requires_symbol` 不通过 ⇒ 规则不可用。
+
+        配置（语言包声明，引擎只做通用查询）：
+          `requires_symbol = "namespace"` 或 `{ namespace = "…", skip = ["token.type", …] }`
+        语义：跳过 trivia 与 `skip` 声明的 token 后，若下一 token 是标识符，则要求
+        `_ScopeStack.lookup(name)` 的 kind ∈ `parser.symbol_namespaces[namespace]`；
+        非标识符首 token（关键字类型等）不门控（走无歧义路径）。namespace 未声明
+        ⇒ 直接放行（其它语言/未声明包零影响）。
+        """
+        cfg = getattr(rule, "parser", {}).get("requires_symbol")
+        if not cfg:
+            return True
+        if isinstance(cfg, str):
+            namespace, skip = cfg, ()
+        elif isinstance(cfg, dict):
+            namespace = str(cfg.get("namespace", ""))
+            skip = tuple(str(s) for s in (cfg.get("skip") or ()))
+        else:
+            return True
+        kinds = set(self.symbol_namespaces.get(namespace) or ())
+        if not kinds:
+            return True
+        tokens = context.tokens
+        i = context.token_pointer
+        n = len(tokens)
+        skip_types = set(self.skip_types) | set(skip) | {COMMENT_TOKEN_TYPE}
+        while i < n and tokens[i].type in skip_types:
+            i += 1
+        if i >= n:
+            return False
+        tok = tokens[i]
+        if tok.type != IDENTIFIER_TOKEN_TYPE:
+            return True
+        kind = self.scope_stack.lookup(str(tok.content))
+        return kind in kinds
+
+    def _register_symbols(
+        self, rule: GrammarRule, node: Node, context: ParseContext
+    ) -> None:
+        """规则成功后的声明式符号注册（`[RuleName.parser] register`）。
+
+        条目形态（按序取**首个 marker 命中者**）：`{ name_path | name_paths,
+        kind, when_marker 可选 }`；路径/取值与 node 绑定同族
+        （`parser/attribute_binder.get_attr_by_path`）。注册进当前 `_ScopeStack`
+        作用域（帧由 `[Rule.parser] scope` 声明；失败回溯由作用域日志回滚）。
+        """
+        del context  # 只看规则节点；作用域帧由 rule_frame 维护
+        cfg = getattr(rule, "parser", {}).get("register")
+        if not cfg:
+            return
+        entries = cfg if isinstance(cfg, list) else [cfg]
+        from .attribute_binder import get_attr_by_path
+        from core.define import marker_matches
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            marker = entry.get("when_marker")
+            if marker and not marker_matches(node, str(marker)):
+                continue
+            kind = entry.get("kind")
+            if not isinstance(kind, str) or not kind:
+                continue
+            paths: list[str] = []
+            raw_paths = entry.get("name_paths")
+            if isinstance(raw_paths, list):
+                paths.extend(str(x) for x in raw_paths)
+            single = entry.get("name_path")
+            if isinstance(single, str) and single:
+                paths.append(single)
+            for path in paths:
+                vals = get_attr_by_path(node, path)
+                items = vals if isinstance(vals, list) else [vals]
+                for val in items:
+                    name = self._leaf_name(val)
+                    if name:
+                        self.scope_stack.register(name, kind)
+            return
+
+    @staticmethod
+    def _leaf_name(value: Any) -> str:
+        """符号名叶子 → 文本：str 直取；Node 取 `content`/`name`/`value`。"""
+        if isinstance(value, str):
+            return value
+        for attr in ("content", "name", "value"):
+            val = getattr(value, attr, None)
+            if isinstance(val, str) and val:
+                return val
+        return ""
 
     def _load_brackets(self) -> None:
         """加载括号映射（配置驱动，命名逻辑集中在 core/utils.py）。"""

@@ -524,6 +524,11 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     )
     context.update_current_rule(rule)
 
+    # 规则级符号门控（`[Rule.parser] requires_symbol`；未声明/未配置 ⇒ 放行）
+    if not self._symbol_gate(rule, context):
+        self._record_fail_site(context, rule=rule.name, reason="symbol gate rejected")
+        return None
+
     rule_node = Node(rule.name)
     # 引擎内部元数据：记录建节点的规则名（注释通道判定用，见 try_block_rule 注）
     rule_node._rule_name = rule.name
@@ -578,6 +583,8 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     self._restore_current_node(old_node, context)
     # token 范围（半开 [start, end)）：匹配起始指针 + 结束指针，供增量定位
     rule_node._tok_span = (_start_idx, context.token_pointer)
+    # 声明式符号注册（`[Rule.parser] register`）：单遍解析的"解析前符号判定"来源
+    self._register_symbols(rule, rule_node, context)
     self._log_state(f"✓ 规则 {rule.name} 匹配成功", context=context)
     _claim_if_line_start(self, context, rule_node, _start_idx)
     return rule_node

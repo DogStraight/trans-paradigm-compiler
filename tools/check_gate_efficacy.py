@@ -1187,6 +1187,24 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": '    "(@Declarator|@TypedefDeclarator)?",  # 变异：去掉无名抽象声明符\n',
         "test": "tests/languages/c/test_c_abstract_declarators.py",
     },
+    {
+        "why": "G4 typedef 名强转靠解析期符号注册（`[Rule.parser] register`）给 "
+               "`_ScopeStack` 填 typedef 名：去掉 register 调用 ⇒ 所有 `(T)x` "
+               "强转不可解析/退回启发式（真实 C 语料 cJSON/zlib 命中；循环 #49 补）",
+        "file": "parser/parser_core.py",
+        "old": "                    if name:\n                        self.scope_stack.register(name, kind)",
+        "new": "                    if name:\n                        pass  # 变异：去掉符号注册",
+        "test": "tests/languages/c/test_c_typedef_cast_symbols.py",
+    },
+    {
+        "why": "规则级符号门控（`[Rule.parser] requires_symbol`）是 `(a)*b` 仍按"
+               "乘法的唯一保证：门控失效 ⇒ 任何括号内标识符都被当类型名，变量"
+               "乘法被误读成强转（解析期符号判定语义错误；循环 #49 补）",
+        "file": "parser/parser_core.py",
+        "old": "        kinds = set(self.symbol_namespaces.get(namespace) or ())\n        if not kinds:\n            return True",
+        "new": "        return True  # 变异：门控失效（不查命名空间）",
+        "test": "tests/languages/c/test_c_typedef_cast_symbols.py",
+    },
 ]
 
 

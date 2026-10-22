@@ -56,7 +56,11 @@ class TestIf:
     def test_if_else_with_blocks(self, c):
         stmt = _body("if (a) { x; } else { y; }", c)[0]
         assert _unwrap(stmt.then).node_name == "CompoundStmt"
-        assert _unwrap(stmt.else_branch).node_name == "CompoundStmt"
+        # else 分支自 #49 起是独立 `ElseClause` 规则节点（规则边界才会跳过
+        # 前导注释；内联组会挡掉 `} /* c */ else`，见 gap-c-typedef-cast）
+        branch = _unwrap(stmt.else_branch)
+        assert branch.node_name == "ElseClause"
+        assert _unwrap(branch.else_stmt).node_name == "CompoundStmt"
 
     def test_condition_is_expression(self, c):
         stmt = _body("if (a && b) x;", c)[0]

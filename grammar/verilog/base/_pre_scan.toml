@@ -52,7 +52,6 @@ context_keywords = [
 keyword = "module"
 name_capture = "next_word"
 terminators = ["(", "#", ";"]
-# Parser 规则选择提示：遇到已知模块名时优先试这些规则
 rule_hints = ["ModuleInst"]
 
 [pre_scan.decl.function]
@@ -60,11 +59,9 @@ keyword = "function"
 name_capture = "after_range"
 skip_keywords = ["automatic"]
 terminators = ["("]
-rule_hints = ["SubroutineCall"]
 
 [pre_scan.decl.task]
 keyword = "task"
 name_capture = "next_word"
 skip_keywords = ["automatic"]
 terminators = ["(", ";"]
-rule_hints = ["SubroutineCall"]

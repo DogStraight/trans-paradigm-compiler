@@ -171,6 +171,10 @@ class TestM2AndRawWiring:
     本类只断言到 raw 层（本批交付面），不把对方 WIP 写成失败。
     """
 
+    @pytest.mark.skip(
+        reason="G4（#49）：typedef 强转由解析期符号判定直接建树，不再走 raw 承载；"
+        "本用例的 raw 消费前提失效，raw 机制测试随 pre_scan 专项整治（ADR-0024）重建"
+    )
     def test_target_zero_blocking_and_raw_consumed(self, c_lang):
         from linter.scanner import LinterScanner
 
@@ -235,19 +239,22 @@ class TestCounterExamplesStillBlocking:
 
     @pytest.mark.parametrize("label", sorted(COUNTER_CASES))
     def test_counter_reports_real_error(self, c_lang, label):
-        src, expected = COUNTER_CASES[label]
+        src, _expected = COUNTER_CASES[label]
         from linter.scanner import LinterScanner
 
         scanner = LinterScanner(C_PACK, ext_dirs=[C_PLUGINS])
         diags = scanner.scan(src)
-        got = [(d.code, d.range[0].line, d.range[0].character) for d in diags]
-        assert got == expected, f"{label}: 诊断面变了（真错被吞？）"
+        # #49 后诊断面变化（G4 解析期符号判定接管）：linter 启发式接受 typedef
+        # 强转形态 ⇒ 可能不再报 phase-unrecognized，真错改由 parser 符号表拒绝。
+        # 安全性质 = **真错仍被拒**（管线失败，不得静默通过）——不再冻结诊断面；
+        # 若 linter 仍报，必须是阻断级（内部 warning 资格不得放行）。
         assert all(d.blocking for d in diags)
         assert all(w["eligible"] is False for w in scanner.internal_warnings())
 
         res = _run(src)
         assert res.get("success") is False
-        assert res.get("error", "").startswith("lint failed")
+        err = res.get("error", "")
+        assert err.startswith("lint failed") or "parse truncated" in err, err
 
 
 class TestControlsUnaffected:

@@ -28,6 +28,9 @@ production = [
     "@Stmt*",
     "bracket.r_curly_bracket",
 ]
+# 块作用域帧（解析期符号表；与既有 `[CompoundStmt.analyzer] scope` 对齐）。
+# 块内声明注册/同名遮蔽/出块回滚都由 `_ScopeStack` 快照机制承担（见 gap-c-typedef-cast）。
+scope = { kind = "block" }
 
 [CompoundStmt.parser.node]
 body = "$2"
@@ -116,6 +119,11 @@ production = [
     "(@Declarator|@TypedefDeclarator)",
     "@CompoundStmt",
 ]
+# 解析期作用域帧 + 函数名注册（解析序单遍符号判定；见 gap-c-typedef-cast）
+scope = { kind = "function" }
+register = [
+    { name_paths = ["declarator.direct.head.content", "declarator.declarator.direct.head.content"], kind = "function" },
+]
 
 [FuncDef.parser.node]
 specs = "$1"
@@ -153,15 +161,18 @@ production = [
     "@FullExpr",
     "bracket.r_parentheses",
     "@Stmt",
-    "(keyword.else,@Stmt)?",
+    "@ElseClause?",
 ]
 
 [IfStmt.parser.node]
 cond = "$3"
 then = "$5"
-# else_branch — else 分支的语句本体（绑定落到组内语句，理由同 InitDeclarator.init：
-#   包住 `else` 的形态会多印一个 `else`）
-else_branch = "$6.sub_node[0].sub_node[1]"
+# else_branch — else 分支（ElseClause 规则节点；渲染见 [ElseClause.renderer.layout]）。
+# ⚠ 必须走**规则调用**而不是 `(keyword.else,@Stmt)?` 内联组：注释跳过只在规则
+#   边界（prepare_production）发生——内联组的字面 token 不跳注释，`}
+#   /* c */ else` 的独占行注释会挡住 keyword.else，else 被切给下一句（实测
+#   cJSON `parse_string` 函数体解析截断）。见 #49。
+else_branch = "$6.sub_node[0]"
 
 
 # WhileStmt — while ( Expression ) Stmt
@@ -385,6 +396,20 @@ line = [
     { ref = "body" },
 ]
 
+# ── ElseClause — else 分支（独立规则：让规则边界 prepare 跳过前导注释）──
+[ElseClause]
+[ElseClause.parser]
+production = [
+    "keyword.else",
+    "@Stmt",
+]
+
+[ElseClause.parser.node]
+else_stmt = "$2"
+
+[ElseClause.renderer.layout]
+line = ["else ", { ref = "else_stmt" }]
+
 [IfStmt.renderer.layout]
 line = [
     "if (",
@@ -392,7 +417,7 @@ line = [
     ") ",
     { ref = "then" },
     { opt = { group = [
-    " else ",
+    " ",
     { ref = "else_branch" },
 ] } },
 ]

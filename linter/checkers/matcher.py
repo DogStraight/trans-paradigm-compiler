@@ -492,7 +492,6 @@ class RuleMatcher:
         info = self._tree.get(name)
         if info is None:
             return i
-
         # 表达式根（pratt 标识 / 原子选择器推导）→ 交 ExpressionChecker
         is_atom_sel = self._atom_selector_cache.get(name, False)
         if info.get("pratt") or is_atom_sel:

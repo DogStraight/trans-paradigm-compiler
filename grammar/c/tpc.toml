@@ -39,6 +39,9 @@ pre_scan = { file = "base/_pre_scan.toml", section = "pre_scan", required = fals
 [parser]
 # 运算符表（优先级 / 结合性 / 一元位置，C99 §6.5）——Layer B 起生效
 operator_defs = { file = "base/_operator.toml", section = "operator", required = true }
+# 解析期符号命名空间（`[Rule.parser] requires_symbol` 门控用；C 的"类型名形态"= typedef 名）
+# 见 docs/gaps/gap-c-typedef-cast.md：G4 typedef 名强转靠解析序单遍符号注册 + 本门控消歧。
+symbol_namespaces = { type_name = ["typedef"] }
 token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
 rules = { file = ["0*.toml"], required = true }
 

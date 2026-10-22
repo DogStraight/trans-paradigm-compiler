@@ -7,7 +7,6 @@ from typing import Any
 from core.define import Token, GrammarRule
 from core.errors import GrammarError
 from core.token_protocol import split_token_types
-from ._constants import IDENTIFIER_TOKEN_TYPE
 
 
 def _call_firsts(
@@ -112,17 +111,6 @@ def _build_start_token_map_names(
     return name_map
 
 
-def _hint_rank(name: str, hints: list[str]) -> int:
-    """hint 匹配优先级：精确命中或通配后缀命中返回 -1，否则 0。"""
-    for hint in hints:
-        if hint.startswith("*"):
-            if name.endswith(hint[1:]):
-                return -1
-        elif name == hint:
-            return -1
-    return 0
-
-
 class RuleSelector:
     def __init__(
         self,
@@ -138,13 +126,7 @@ class RuleSelector:
             grammar_rules, statement_rule_names
         )
 
-    def select_candidates(
-        self,
-        token: Token,
-        pre_symbols: dict[str, str] | None = None,
-        pre_hints: dict[str, list[str]] | None = None,
-        scope_lookup_fn=None,
-    ) -> list[GrammarRule]:
+    def select_candidates(self, token: Token) -> list[GrammarRule]:
         if token is None:
             return []
         rule_names = self.start_token_map.get(token.type, [])
@@ -155,17 +137,6 @@ class RuleSelector:
         order = {name: i for i, name in enumerate(self.statement_rule_names)}
         rule_names.sort(key=lambda n: order.get(n, _ORDER_NOT_FOUND))
 
-        # 预符号提示：如果 token 是 id 且已知符号名，优先匹配相关规则
-        if pre_symbols and pre_hints and token.type == IDENTIFIER_TOKEN_TYPE:
-            kind = pre_symbols.get(token.content)
-            if kind and kind in pre_hints:
-                rule_names.sort(key=lambda n: _hint_rank(n, pre_hints[kind]))
-
-        # 运行时作用域查询：如果 scope 中已知此符号种类，也作为 hint
-        if scope_lookup_fn is not None and token.type == IDENTIFIER_TOKEN_TYPE:
-            scope_kind = scope_lookup_fn(token.content)
-            if scope_kind and pre_hints and scope_kind in pre_hints:
-                rule_names.sort(key=lambda n: _hint_rank(n, pre_hints[scope_kind]))
 
         # 名称 → 对象
         result = []

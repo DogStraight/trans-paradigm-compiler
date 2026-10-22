@@ -43,6 +43,16 @@ production = [
     "(@DeclaratorList|@TypedefDeclarators)?",
     "symbol.base.semicolon",
 ]
+# 解析期符号注册（单遍「解析前符号判定」的来源；见 gap-c-typedef-cast）：
+# 每声明按其类别注册声明名进 `_ScopeStack`（作用域帧 = 规则声明的 scope）：
+#   ① typedef 名 → type_name 命名空间（`requires_symbol` 门控 CastTypedefName）
+#   ② 函数名 → function；③ 其余 → variable（块内同名遮蔽 typedef 用）
+# 条目按序取**首个 marker 命中者**；多声明符逐名注册。路径兼容两种声明符包装。
+register = [
+    { name_path = "declarators.items[*].declarator.direct.head.content", kind = "typedef", when_marker = "keyword.typedef" },
+    { name_path = "declarators.items[*].declarator.direct.head.content", kind = "function", when_marker = "FuncSuffix" },
+    { name_path = "declarators.items[*].declarator.direct.head.content", kind = "variable" },
+]
 
 [Declaration.parser.node]
 specs = "$1"
@@ -464,6 +474,11 @@ items = ["$1", "$2.items[*].sub_node[1]"]
 production = [
     "@ParamSpec",
     "(@Declarator|@TypedefDeclarator|@Pointer|@TypedefAbstractDeclarator)?",
+]
+# 形参名注册进当前作用域（函数帧，见 `[FuncDef.parser] scope`）：同名遮蔽 typedef 时
+# `(T)` 不得按强转读（解析期符号判定，见 gap-c-typedef-cast）。
+register = [
+    { name_paths = ["declarator.direct.head.content", "declarator.declarator.direct.head.content"], kind = "variable" },
 ]
 
 [ParamDecl.parser.node]

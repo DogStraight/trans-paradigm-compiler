@@ -36,11 +36,15 @@
   位域；初始化器（含**指示符** `.field=` / `[i]=`）；**变参尾段 `...`**。
 - **语句**：compound / 表达式 / 空 / `if`(含 `else`) / `switch`(含 `case`/`default`) /
   `while` / `do` / `for`(含 C99 声明式初值) / `goto` / 标号 / `break` / `continue` /
-  `return`；`Stmt` 选替 15 分支。
+  `return`；`else` 分支是独立 `ElseClause` 规则（规则边界才跳过 `}
+  /* c */ else` 型前导注释，循环 #49）；`Stmt` 选替 15 分支。
 - **表达式**：全部优先级与结合性（40 项运算符表）、赋值族、条件 `?:`、
   **逗号运算符**（`CommaExpr` + `FullExpr` 选择器）、一元 / 后缀、
   **链式后缀**（`a.b.c` / `f(x)[i]` / `p->a[i]` / `(*fp)(x)`）、`sizeof` 两形态、
-  **强制转换** `(T)x` 与**复合字面量** `(T){…}`（关键字起头的类型名）。
+  **强制转换** `(T)x` 与**复合字面量** `(T){…}`（关键字起头）；**typedef 名强转**
+  `(T)x` / `(T*)p` / `(const T*)p` 走 `CastTypedefName` 支 + **解析期符号门控**
+  （`[Rule.parser] register` / `requires_symbol`：声明序单遍符号表，变量在括号内时
+  该支不可用 ⇒ `(a)*b` 仍按乘法读；循环 #49 收口 G4）。
 - **标准增量插件**：`c11` / `c17` / `c23` 三档齐备（见下「标准档位」）。语法增量逐项：
   · **c11**（6 个新关键字**全部有规则**）：`_Static_assert`（**文件 / 块 / struct·union
     成员表三处作用域**；成员位走容器级空槽位 `@StructMemberExtra`）、

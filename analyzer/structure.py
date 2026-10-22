@@ -313,20 +313,16 @@ class FilePipeline:
         if any(d.blocking for d in fr.lint_diags):
             return fr
 
-        # 解析
-        from lexer import pre_scan, load_pre_scan_config
+        # 解析（解析期符号由 parser 的 `[Rule.parser] register` 单遍注册；
+        # 预扫描只服务 linter 内部证据，不再喂 parser——#49 删除预扫描残面）
         from parser import Parser
         from parser.parser_core import ParseError
 
-        pre_scan_config = load_pre_scan_config(self._ctx.rules_dir)
-        pre_symbols = pre_scan(source, pre_scan_config)
         parser = Parser(
             rules_dir=self._ctx.rules_dir,
-            pre_symbols=pre_symbols,
             rules=shared["rules"],
             rule_selector=shared["rule_selector"],
         )
-        parser.pre_hints = pre_scan_config.get("hints", {})
         parser.raw_sites = [
             {
                 "line": int(w.get("line", 0)),

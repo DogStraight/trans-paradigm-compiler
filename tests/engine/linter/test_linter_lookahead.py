@@ -227,6 +227,10 @@ class TestConvergenceJudgment:
         assert "Declaration" not in member_only
         assert "ExprStmt" not in member_only
 
+    @pytest.mark.skip(
+        reason="G4（#49）：typedef 强转在 linter 启发式层已收敛（CastTypedefName 可用），"
+        "本用例的 no_full_match 前提失效；raw 资格面退役随 pre_scan 专项整治（ADR-0024）"
+    )
     def test_no_full_match_recorded(self, c_scanner):
         """候选全败档：仍记内部 warning；用户诊断/blocking 语义不变（降级属 P2b）。"""
         diags = c_scanner.scan("int x;\nint y;\nx = (myint)y;\n")

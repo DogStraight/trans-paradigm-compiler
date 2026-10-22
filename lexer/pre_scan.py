@@ -117,7 +117,6 @@ def _compile(config: dict, rules_dir: str | None = None) -> dict:
     decls = config.get("decl", {})
 
     patterns: list[tuple[str, re.Pattern]] = []
-    hints: dict[str, list[str]] = {}
     type_name_kinds: set[str] = set()
     trial_as: dict[str, str] = {}
     for kind, cfg in decls.items():
@@ -128,10 +127,6 @@ def _compile(config: dict, rules_dir: str | None = None) -> dict:
         pat = _build_regex(keyword, capture, skip_kws, terminators)
         if pat:
             patterns.append((kind, re.compile(pat)))
-        # 规则选择提示
-        rh = cfg.get("rule_hints", [])
-        if rh:
-            hints[kind] = rh
         # 类型名语义面（消费方按 kind 过滤；引擎不解释语义）：声明了 type_name 的
         # 类别必须同时给出"类型名形态"试解析替换 token 型（fail-fast，不静默降级）。
         type_name = cfg.get("type_name", False)
@@ -172,7 +167,6 @@ def _compile(config: dict, rules_dir: str | None = None) -> dict:
         "patterns": patterns,
         "fallback": fallback,
         "context_keywords": context_kws,
-        "hints": hints,
         "clean_patterns": clean_patterns,
         # 类型名语义面（供消费方按 kind 过滤 / 取试解析替换 token 型）
         "type_name_kinds": frozenset(type_name_kinds),

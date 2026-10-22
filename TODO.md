@@ -16,6 +16,13 @@
       的坏输入诊断面）。判据：块内每条坏语句各报一条**位置正确**的诊断。
       链：`docs/gaps/gap-parser-linter-approximation.md`
 
+### 1.3 预处理器宏展开时序（#49 G4 收口后暴露）
+- [ ] **函数宏被应用到定义前的文本**：`expand_tokens` 用**末端宏表**展开全文，zlib.h 的
+      `gzgetc` 宏把定义前的原型 `extern int gzgetc(gzFile);` 误展开（zutil/crc32/adler32/
+      compress/uncompr 5 个真实文件因此 `parse_ok=False`）。修法 = 按定义时间线展开
+      （token 顺序 + `#undef` 生效点）。触发 = 真实语料门禁；判据 = 5 文件 `parse_ok=True`
+      且展开产物 token 保真/幂等不回归（现基线 2/7，见 `gap-c-typedef-cast.md`）。
+
 ### 1.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
 - [ ] **展平行内行尾注释的 LineSuffix 落地**：行终止注释落在**展平行内**的声明符/说明符之间
       时，LineSuffix 在原子节点边界就地落地，把后续 token 吞进注释（`struct S { int // c\nx; };`

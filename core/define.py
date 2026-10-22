@@ -617,6 +617,10 @@ class GrammarRule:
             # `( type-name ) cast-expression`）。取值由 parser 侧 fail-fast 校验。
             "pratt_level",
             "scope",
+            # 解析期符号面（单遍「解析前符号判定」，见 gap-c-typedef-cast）：
+            # register = 声明式符号注册表；requires_symbol = 规则级符号门控。
+            "register",
+            "requires_symbol",
         },
         "renderer": {"layout", "head", "body", "tail", "override"},
     }

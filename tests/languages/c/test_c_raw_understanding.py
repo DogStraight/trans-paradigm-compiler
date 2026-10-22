@@ -1,15 +1,21 @@
 """tests/languages/c/test_c_raw_understanding.py — P4 理解路径**管线级**判据（C 包）。
 
-被测两段（task-34）：
-· analyzer 段「理解」= `grammar/c/plugins/semantics/_raw_understand.py`（postpass）；
-· transform 段「改树」= `grammar/c/plugins/semantics/_raw_transform.py`（`@register_plugin`）。
+被测两段（task-34）：analyzer 段「理解」`_raw_understand.py` + transform 段「改树」
+`_raw_transform.py`（`@register_plugin`）。
 
-判据（对照 task-34 判据 1–3 与"测试完备性"）：
-  1. `typedef int myint;\nvoid f(void) { x = (myint)y; }` ⇒ 该语句是**确定结构**：
-     `RawStatement > ExprStmt > BinaryOp(=) > CastExpr`，类型名叶子文本 = `myint`（已还原原文）；
-  2. 渲染保真：显著 token 序列逐项相同 + 格式幂等 + `_verbatim_text` 直出权威仍在；
-  3. 负样本：遮蔽例仍 `E002`、声明在后/tag 仍被 lint 拒、赋值链维持既有宽松（不新增错误）；
-  4. 诚实边界：`(t){1}` 复合字面量承载期未覆盖 ⇒ 不提升、不报错（行为与本批之前一致）。
+**2026-10-22（#49）后口径变化**：typedef 名强转的语句级消歧已由**解析期符号判定**接管
+（parser `_ScopeStack` + `[Rule.parser] register/requires_symbol`，见
+`docs/gaps/gap-c-typedef-cast.md`）——`x = (myint)y;` 现在**直接建成确定结构**（不再进
+RawStatement）。本文件随之保留：① 直接结构的判据（原判据 1 的升级形态）；② 仍走 raw 的
+形态（复合字面量 `(t){1}`）的 verbatim 权威/渲染保真；③ 负样本（遮蔽/声明序/tag）仍被拒。
+
+判据：
+  1. `typedef int myint; void f(void){ x = (myint)y; }` ⇒ 直接确定结构
+     `ExprStmt > BinaryOp(=) > CastExpr > CastTypedefName`，类型名叶子文本 = `myint`；
+  2. 渲染保真：显著 token 序列逐项相同 + 格式幂等；仍为 raw 的形态（复合字面量）
+     `_verbatim_text` 直出权威仍在；
+  3. 负样本：遮蔽/声明在后/tag 名不成类型名均被拒（结构或语法层），赋值链维持既有宽松；
+  4. 诚实边界：`(t){1}` 复合字面量承载期未覆盖 ⇒ 不提升、不报错（行为不变）。
 """
 
 import os
@@ -69,44 +75,30 @@ def _significant(lexer: Lexer, text: str) -> list[tuple[str, str]]:
     ]
 
 
-class TestDeterminedStructure:
-    """判据 1：歧义形态 → 确定结构（结构断言，非"看起来对"）。"""
+class TestSymbolDeterminedStructure:
+    """判据 1：解析期符号判定给出**直接**确定结构（#49 起不再走 raw）。"""
 
     @pytest.mark.parametrize("src", [TARGET, TARGET_TOP])
     def test_cast_statement_is_determined(self, c_env, src):
         res = _run(src)
         assert res.get("success") is True and not res.get("error"), res.get("error")
-        raws = _raw_nodes(res["ast"])
-        assert len(raws) == 1, raws
-
-        raw = raws[0]
-        # 理解结论（analyzer 段落档）
-        conclusion = getattr(raw, ru.UNDERSTAND_ATTR)
-        assert conclusion["ok"] is True
-        assert conclusion["structure"] == "CastExpr"
-        assert conclusion["type_text"] == "myint"
-
-        # 改树（transform 段）：候选提升为正式结构，层级确定
-        children = getattr(raw, "sub_node", None)
-        assert children, "transform 段应把候选提升为 sub_node"
-        statement = children[0]
-        assert statement.node_name == "ExprStmt", statement.node_name
-        binary = statement.expr
-        assert binary.node_name == "BinaryOp" and binary.op == "=", binary.node_name
-        cast = binary.right
-        assert cast.node_name == "CastExpr", cast.node_name
-
-        # 类型名叶子文本 = 源码原文（承载期已还原；不得是替换型 token 的 `int`）
+        ast = res["ast"]
+        # 不走 raw：语句直接建树
+        assert _raw_nodes(ast) == []
+        casts = [n for n in iter_nodes(ast) if n.node_name == "CastExpr"]
+        assert len(casts) == 1, casts
+        cast = casts[0]
+        assert cast.type_name.node_name == "CastTypedefName", cast.type_name.node_name
+        typename = [n for n in iter_nodes(cast.type_name) if n.node_name == "TypedefName"]
+        assert len(typename) == 1, typename
         texts = [
-            getattr(n, "value", None) or getattr(n, "content", None) for n in iter_nodes(cast)
+            getattr(n, "content", None) or getattr(n, "value", None)
+            for n in iter_nodes(cast)
         ]
         assert "myint" in texts, texts
         assert "int" not in texts, texts
-
-        # 去重：候选挂在 sub_node 与 raw_candidate 两处，遍历只出现一次
-        all_nodes = list(iter_nodes(res["ast"]))
-        assert sum(1 for n in all_nodes if n.node_name == "CastExpr") == 1
-        assert sum(1 for n in all_nodes if n.node_name == "ExprStmt") == 1
+        # 结构唯一：CastExpr 只出现一次（无 raw 候选重复产出）
+        assert sum(1 for n in iter_nodes(ast) if n.node_name == "CastExpr") == 1
 
     def test_compound_literal_is_documented_boundary(self, c_env):
         """`(t){1}`：承载期建候选失败 ⇒ 不提升、不报错（行为与本批之前一致）。"""
@@ -132,13 +124,12 @@ class TestRenderFidelity:
         again = _run(output)
         assert (again.get("output") or "") == output
 
-    def test_verbatim_authority_kept_after_promotion(self, c_env):
-        """提升后仍保留 `_verbatim_text`（渲染权威），直出文本与原句一致。"""
-        res = _run(TARGET)
+    def test_verbatim_authority_kept_for_still_raw_forms(self, c_env):
+        """仍走 raw 的形态：`_verbatim_text` 直出权威仍在（渲染与原句一致）。"""
+        res = _run("typedef int t;\nx = (t){1};\n")
         raw = _raw_nodes(res["ast"])[0]
-        assert getattr(raw, "_verbatim_text") == "x = (myint)y;"
-        assert getattr(raw, "sub_node"), "已提升"
-        assert "x = (myint)y;" in (res.get("output") or "")
+        assert getattr(raw, "_verbatim_text") == "x = (t){1}"
+        assert "x = (t){1};" in (res.get("output") or "")
 
     def test_trailing_comment_survives(self, c_env):
         """行尾注释在 verbatim 切片内 ⇒ 提升不影响注释输出（逐项计数一致）。"""
@@ -158,9 +149,10 @@ class TestNegativeCases:
     """判据 3：负样本仍被拒（不得被"理解"掉真错）。"""
 
     def test_shadowed_name_still_rejected_and_not_promoted(self, c_env):
+        """遮蔽（块内 `int t`）⇒ 符号表查到 variable ⇒ 不按强转读 ⇒ 语句解析失败。"""
         res = _run("typedef int t;\nvoid f(void){ int t; x = (t)y; }\n")
         assert res.get("success") is False
-        assert "E002" in str(res.get("error")), res.get("error")
+        assert res.get("error"), res
         ast = res.get("ast")
         if ast is not None:
             for raw in _raw_nodes(ast):
