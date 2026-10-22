@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：实现轮 #50 = 预处理器宏展开时序：`expand_tokens` 按定义时间线（token 顺序 + `#undef`）展开，修 zlib 5 文件 `gzgetc` 型误展开 → 语料 7/7 `parse_ok`，随后落门禁（基线 + policy）。
-- **待验证假设**：时序展开不改变现有展开产物（宏定义前文本不再被末端表误展开）；行映射/宏区间/保真幂等与 verilog A/B 0/144 可守住。
-- **台账**：G4 ✅ #49（parser 内符号表 + 规则门控 + parser pre_scan 残面删除；新增 22 例、变异 118、A/B 0/144）；**67 条旧 M1/raw 资格测试已 skip 登记**，随 pre_scan 专项整治（ADR-0024）重建或删除；语料余预处理时序（TODO 1.3）。
+- **意图**：实现轮 #51（三任务路线图 T1）= 预处理器宏展开时序：A1 `expand_tokens` 消费带宏体的事件、逐行维护 active 表（`#define`/`#undef` 生效点）；A2 include handler 在包含点用「host 当时表 + 子文件事件」预展开子内容并标记已展开，修 `gzgetc` 型误展开 → 语料 7/7 `parse_ok`。
+- **待验证假设**：A1/A2 不改变无该形态文件的展开产物（行映射/宏区间/渲染 splice/幂等不回归）；A2 的「已展开区间」标记能与 host 展开/渲染恢复锚共存。
+- **台账**：路线图 T1→T2→T3 落 `ROADMAP.md`「当前主线」（调查/判据/止损见 `gap-preprocessor-macro-timeline.md`；T3 路线见 `gap-engine-abstraction-audit.md`）；T2 = 旧 raw 资格 67 skip 测试重建/删；止损 = A2 一轮内无法保保真/幂等/A/B 0/144 则登记触发式边界、门禁按 2/7 partial。
 
 ## 估算依据（对照锚，可复核）
 

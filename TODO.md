@@ -16,12 +16,11 @@
       的坏输入诊断面）。判据：块内每条坏语句各报一条**位置正确**的诊断。
       链：`docs/gaps/gap-parser-linter-approximation.md`
 
-### 1.3 预处理器宏展开时序（#49 G4 收口后暴露）
-- [ ] **函数宏被应用到定义前的文本**：`expand_tokens` 用**末端宏表**展开全文，zlib.h 的
-      `gzgetc` 宏把定义前的原型 `extern int gzgetc(gzFile);` 误展开（zutil/crc32/adler32/
-      compress/uncompr 5 个真实文件因此 `parse_ok=False`）。修法 = 按定义时间线展开
-      （token 顺序 + `#undef` 生效点）。触发 = 真实语料门禁；判据 = 5 文件 `parse_ok=True`
-      且展开产物 token 保真/幂等不回归（现基线 2/7，见 `gap-c-typedef-cast.md`）。
+### 1.3 预处理器宏展开时序（T1；#49 G4 收口后暴露）
+- [ ] **函数宏被应用到定义前的文本**：`expand_tokens` 用末端宏表展开全文（含 include 内容），
+      zlib.h 的 `gzgetc` 宏把定义前原型误展开（5 个 zlib 文件 `parse_ok=False`）。方案 = A1 host
+      时序 + A2 include 内预展开，调查/判据/止损见 `docs/gaps/gap-preprocessor-macro-timeline.md`；
+      判据 = 7/7 `parse_ok` + 语料门禁可上 + 保真/幂等/A/B 0/144 不回归。
 
 ### 1.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
 - [ ] **展平行内行尾注释的 LineSuffix 落地**：行终止注释落在**展平行内**的声明符/说明符之间
@@ -67,6 +66,16 @@
       链：`tests/e2e/eval_benchmark.py`、`docs/gaps/gap-c-preprocessor-scope.md` ㉒
 
 ## 三、预算与登记（代码结构债 / 功能散点）
+
+- [ ] **T2 `pre_scan` 专项清理**（三任务路线图）：按 `docs/decisions/0024-two-phase-lint-prescan-retirement.md`
+      切片 S2/S3/S4 执行——linter 两阶段/符号无关化、删唯一承重消费面（C raw 资格）与机制本体；
+      67 条已 skip 的旧 M1/raw 资格测试随本项重建或删除。判据 = ADR 内各切片判据 + 全量/A/B。
+      链：`ROADMAP.md` P2.9
+- [ ] **T3 双包抽象对照按部件审查**（三任务路线图，多轮）：C/Verilog 逐部件查抽象泄露，部件序
+      lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config；每部件
+      用判据②声明面缺失探针 + ③弱信号 + 第二语言复用实验，输出 leak 清单（修复立项/登记接受）
+      并回填矩阵。判据/路线见 `docs/gaps/gap-engine-abstraction-audit.md`。
+
 
 - [ ] **结构欠账 S 有 71 项新增未下结论**：`python tools/structural_score.py --compare` 实测 **基线 0 →
       当前 1341（Δ +1341，新增 71 项，exit 1）**——新代码（`linter/lookahead.py` 类体、`preprocessor/macro_expand.py`、

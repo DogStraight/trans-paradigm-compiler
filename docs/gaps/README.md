@@ -66,6 +66,7 @@
 | `gap-semantic-elaboration-boundaries.md` | 语义/插件契约（elaboration/单例/inject） |
 | `gap-c-semantic-base.md` | C 语义基座（符号表/作用域/声明顺序：`(myint)x` 截断丢内容、`myint *b;` 不可分、`sizeof` 宽进、引擎语义钩子空转；落点三案 + parser 接口四选一 + 待拍板 8 条） |
 | `gap-c-preprocessor-scope.md` | C 预处理器范围基线（标准宏与指令全集三表 + 扩展排除表 + tpc 承载面与 4 处机制级缺口 + 首片 A/B；作者 2026-10-17 定"只考虑 C 标准中的宏"） |
+| `gap-preprocessor-macro-timeline.md` | 预处理器宏展开时序（T1）：宏定义前/`#undef`/include 内定义顺序；两复现形态、事件表/终表机制缺口、A1 host 时序 + A2 include 预展开方案与判据/止损 |
 | `gap-c-typedef-cast.md` | C typedef 名强转（G4）：解析前符号判定的调查与方案（最小矩阵/真实语料实测、M1/站点/符号来源三类缺口、B=parser 内符号表推荐 / A=raw 过渡 / C·D 否；待作者拍板引擎契约扩展） |
 | `gap-c-real-corpus.md` | C 真实语料接入与误报基线（#43 调查轮：候选语料/许可、harness 前置、实测误报面、两类 linter FP 最小复现、方案 A/B/C 与门禁判据草案） |
 | `gap-verification-engineering.md` | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |

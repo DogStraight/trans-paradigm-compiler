@@ -16,6 +16,12 @@
 > **刻度完成后的全项审查**（作者 2026-10-21 定）：主线 1 刻度 7→9 完成后、P3/性能类改动之前，
 > 做一次引擎能力面全项审查——判据 =「能力×语言矩阵 + 第二语言复用实验」，台账见
 > `docs/gaps/gap-engine-abstraction-audit.md`。每多一门语言多一套特殊处理 = 一个未审查的抽象。
+> **执行序列（作者 2026-10-23 定）**：T1 预处理器宏展开时序 → T2 `pre_scan` 专项清理 →
+> T3 双包（C/Verilog）抽象对照按部件审查。理由：T1 解锁语料门禁（判据 5）；T2 先移除
+> linter 侧最大耦合面；T3 在架构稳定后逐部件查抽象泄露。每项独立判据/独立提交：
+> · T1 = `TODO.md` 1.3 + `docs/gaps/gap-preprocessor-macro-timeline.md`（A1 host 时序 + A2 include 内预展开；判据 7/7 `parse_ok` + 门禁）
+> · T2 = `P2.9` + `docs/decisions/0024-two-phase-lint-prescan-retirement.md`（linter 两阶段/符号无关化、机制退役、67 条 skip 测试重建或删）
+> · T3 = `docs/gaps/gap-engine-abstraction-audit.md`（执行路线/矩阵）+ `gap-language-penetration.md`（判据②声明面缺失探针）；部件序 lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config
 >
 > **架构基本定型**：除非编译理论出现重大突破，不再做架构级重构——**指部件结构稳定**（子系统划分
 > 与接口边界）。**插件形态与插件能力是架构中持续增长的位置**（AST 后插件开放），新增插件形态
@@ -177,9 +183,9 @@
 
 > 作者 2026-10-22 定调：`pre_scan`（lexer 后、parser 前的文本级正则扫描）是**耦合设计**，
 > 信息量不足且职责错位 ⇒ 作**专项整治**、不在日常刻度逐片推进；设计/分片/判据已落档
-> （`docs/decisions/0024-two-phase-lint-prescan-retirement.md`）。**触发** = 刻度主线完成后
-> 取回执行（现状：唯一承重 = C linter raw 资格；parser 提示面零消费 A/B 0/144；机制本体提及
-> 37 文件/236 行；C 两期产物无管线消费者）。
+> （`docs/decisions/0024-two-phase-lint-prescan-retirement.md`）。**已取回** = 三任务路线图
+> T2（T1 之后执行）；现状：parser 提示面已删（#49）、唯一承重 = C linter raw 资格；机制
+> 本体提及 37 文件/236 行；67 条旧 raw 资格测试已 skip 待随本项重建或删除。
 
 ## P3 — 增量解析（v0.2 核心，非收尾）
 
@@ -300,4 +306,5 @@
 > 渗透复审**（判据 ②/③，按需在改动时顺带做）。⚠ 新增语言包作暴露法只在隔离跑
 > （每语言一进程）下可用——多语言同进程已有真实串味史，不作日常手段。
 > **引擎 vs 插件能力边界的设计原则**（三分法 / 两失效信号 / 普适原语清单）见
-> `core/component_protocol.md`。
+> `core/component_protocol.md`。**2026-10-23 升级为 T3 战役**：C/Verilog 双包按部件
+> 逐轮审查（判据②③ + 第二语言复用实验），路线见 `docs/gaps/gap-engine-abstraction-audit.md`。

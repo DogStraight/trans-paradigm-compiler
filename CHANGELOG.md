@@ -7,6 +7,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **剩余三任务路线图 + T1 预处理器宏展开时序调查**（2026-10-23，循环 #50，docs-only）：
+  作者把剩余工作定为 T1 宏展开时序 → T2 `pre_scan` 专项清理 → T3 C/Verilog 双包抽象对照
+  按部件审查，路线落 `ROADMAP.md`「当前主线」（含顺序理由、每项判据指针、T3 部件序）。
+  · T1 调查（新档 `docs/gaps/gap-preprocessor-macro-timeline.md`）：展开器逐行用**最终宏表**
+    （host + 全部 include 终态），未建模 C 的可见性顺序（`#define` 起效/`#undef`/include 内
+    定义序）。实测两形态（本文件原型后置定义、头文件原型后置 `gzgetc` 型）check 均
+    `parse_ok=False` syntax 3；真实语料 5 文件即此。已列 A1 host 时序 + A2 include 内预展开、
+    判据（最小 2 形态 + 7/7 语料 + 门禁 + 保真/幂等/A/B 0/144）与止损（A2 一轮不成就登记
+    触发式边界、门禁按 2/7 partial）。
+  · T2 立项（TODO 三）指向 ADR-0024 分片 + 67 条 skip 测试处置；T3 执行路线落
+    `docs/gaps/gap-engine-abstraction-audit.md`（六部件序、每轮输出 leak 清单/判据②探针/
+    第二语言复用实验/止损）。
+
+### Added
+
 - **G4 typedef 名强转收口：parser 内符号表 + 规则符号门控**（2026-10-22，循环 #49，
   方案 B，作者拍板）：
   · **引擎**：`parser/parser_core.py::_ScopeStack` 接线 `_symbol_gate`

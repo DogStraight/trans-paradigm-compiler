@@ -34,6 +34,32 @@ C 包的价值之一是**抽象压力测试**：每出现一次"这台语言要�
 3. 引擎必须再改一次 ⇒ 记 leak，写内置化方向与判据（落 `TODO.md` 或 `ROADMAP.md` 立项）；
 4. 复现命令/临时包位置写回本行——**没有复现的记录按观察计**。
 
+## 执行路线（T3，作者 2026-10-23 拍板）
+
+C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个部件、独立判据/独立提交。
+两包对照的作用 = 同一抽象在两门语言里若处理不同，差异处即 leak 候选（或用第二语言
+复用实验证伪）。
+
+| 序 | 部件 | 重点对照面 | 已有探针/证据 |
+|---|---|---|---|
+| 1 | lexer / preprocessor | 词法声明面、宏/条件/include 处理、注释边界 | 判据①最小包、`gap-preprocessor-*`、`gap-language-penetration` 矩阵 |
+| 2 | parser | 规则字段/消歧/raw/符号面（#49 新面）、错误路径 | 判据②删声明段、A/B、`gap-parser-linter-approximation` |
+| 3 | linter | L1/L2/发现面、宏检查、raw 资格（T2 后重审） | 判据②、lint accuracy、`linter/linter_architecture.md` |
+| 4 | analyzer / elaboration | scope/symbol/精化基座、语言语义插件边界 | `gap-c-semantic-base`、精化能力位、`component_protocol.md` |
+| 5 | transform / renderer | 归一化、注释/宏 splice、渲染布局声明面 | 渲染保真/幂等门禁、`gap-formatter-line-behavior` |
+| 6 | pipeline / config / plugin 契约 | `[engine] uses`、声明键→消费点、空转检测、双路径 | `tools/config_sites.py`、`tools/feature_sites.py`、`structural_score.py` |
+
+每部件**输出**（一轮内可交付）：
+1. 矩阵行审查：四态归类（原样/新声明键/新引擎代码/逃生门）+ 方言复制项；
+2. leak 清单：每项 = 证据命令 + C/Verilog 对照 + 第二语言复用实验结论（成立 ⇒ 撤销；
+   需再改引擎 ⇒ 记 leak + 内置化方向/判据，落 TODO 或本档）；
+3. 判据②（声明面缺失探针）：临时删一段语言包声明跑受影响测试，仍绿处 = 引擎替声明做事；
+4. 收口：修复进实现轮 / 接受登记本档「不做」表；`structural_score --compare` 与
+   `feature_sites compare` 不新增未登记散点。
+
+**止损**：每部件最多 1 调查 + 1 实现轮；第二语言复用实验需要临时语言包（不提交，
+位置写回本档行）；不能证伪的候选按"观察，未对照"记，不进实现清单。
+
 ## 当前矩阵（按证据状态；调查轮顺带维护）
 
 | # | 能力面 | 语言现状 | 四态 | 证据 / 复现 | 内置化方向 | 状态 |
