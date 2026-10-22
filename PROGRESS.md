@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：进入路线图 T2（pre_scan 专项，ADR-0024）调查轮：盘点当前唯一承重面（linter raw 资格）/机制提及面/67 条 skip 测试与两期产物消费者，定 S2/S3/S4 实施顺序与判据（符号无关 M1 → 分析期裁决 → 机制删除），先出删除清单与反例。
-- **待验证假设**：M1 符号无关化后 linter 仍能保持诊断面（T1/A-B 已验证 raw 面退役一部分）；67 条 skip 测试可在新语义下重建（而非全删）；删除 pre_scan 后 C 包 token 面/诊断面无可见变化。
-- **台账**：主线 1 刻度 9/9 完成（判据 1–5 全过）；T1 记录见 `gap-preprocessor-macro-timeline.md`；语料门禁 110s（cJSON 解析回溯成本 → TODO 三性能项，不阻塞 T2）。
+- **意图**：T2b（ADR-0024 复裁后）= 删除 `pre_scan` 机制本体：`lexer/pre_scan.py` + 导出 + 全局缓存键/能力串 + 两包 `_pre_scan.toml`/`tpc.toml` 行 + `analyzer/structure` 读取 + linter 符号提示接线（先静态化或同轮删）+ C 两期产物（`two_phase_product` 等）+ 相关测试（`test_pre_scan_fallback`、分期用例、符号提示/资格测试处置）；判据 = 受影响套件全绿、`grep pre_scan` 生产路径归零、A/B 0/144、语料门禁不变。
+- **待验证假设**：raw 位点在 T2a 后无生产消费者（M1 资格静态化即可证明）；linter 删符号提示后诊断面只受 raw/资格面影响（其测试同时删除/改写）；verilog 无 type_name ⇒ 零行为变化。
+- **台账**：T2a ✅ 复合字面量 typedef 直接建树（变异 123）；ADR-0024 已复裁：pre_scan 零承重（禁配置实验 1617 passed/1 死测试、语料 0 诊断）；T2c（raw 管线大删）待 T2b 后按"先证后删"执行。
 
 ## 估算依据（对照锚，可复核）
 

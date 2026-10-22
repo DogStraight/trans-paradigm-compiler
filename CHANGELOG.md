@@ -7,6 +7,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **T2a：typedef 名复合字面量直接建树（#53，ADR-0024 复裁）**：
+  · `CompoundLiteral` 类型名收 `@CastTypeName|@CastTypedefName`（复用 #49 门控）⇒
+    `(t){1}` / `(S){ .a = 1 }` 解析期直接建 `CompoundLiteral`，不再走 raw 兜底；
+    P4 的"复合字面量 raw 边界"测试改为直接结构断言；变异新增（去分支 ⇒ 用例红，清单 123）。
+  · **ADR-0024 复裁**：G4（#49）后 typedef 强转已由 parser 符号表解析，T2a 补齐复合字面量；
+    实测**临时禁用两包 `[lexer] pre_scan`** ⇒ C/linter/pipeline 套件 1617 passed（唯一失败
+    = 断言 pre_scan 期记录的死测试）、C 真实语料 7/7 零诊断 ⇒ **pre_scan 零承重**，
+    依赖它的 raw 管线在 C 上也已无生产消费者。T2 由"两阶段改造"改为**删除两条死机制**：
+    T2b 删 pre_scan 本体/配置/两期产物/符号提示接线；T2c 删 raw 管线（含 67 skip，先证后删）；
+    T2d 文档收口。判据/止损/否掉备选见 ADR-0024（重写）。
+  · 验证：C/linter/pipeline 1618 passed/58 skipped；复合字面量直解结构断言；A/B 0/144；
+    pyright 0（全量门禁在 T2b/T2c 各片收口时重跑）。
+
+### Added
+
 - **真实 C 语料门禁落地（退出判据 5 收口；循环 #52，T1 收尾）**：
   · 语料入库 `tests/e2e/samples/real_c_ref/`：cJSON 1.7.19（MIT）两文件 + zlib 1.3.2
     （zlib license）六 C + 四头 + 14 个最小系统头 stub；`CREDITS.md` 记来源/版本/许可

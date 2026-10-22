@@ -403,7 +403,7 @@ operand = "$4"
 is_atom = true
 production = [
     "bracket.l_parentheses",
-    "@CastTypeName",
+    "@CastTypeName|@CastTypedefName",
     "bracket.r_parentheses",
     "@InitList",
 ]

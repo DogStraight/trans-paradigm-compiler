@@ -100,14 +100,12 @@ class TestSymbolDeterminedStructure:
         # 结构唯一：CastExpr 只出现一次（无 raw 候选重复产出）
         assert sum(1 for n in iter_nodes(ast) if n.node_name == "CastExpr") == 1
 
-    def test_compound_literal_is_documented_boundary(self, c_env):
-        """`(t){1}`：承载期建候选失败 ⇒ 不提升、不报错（行为与本批之前一致）。"""
+    def test_compound_literal_typedef_is_direct(self, c_env):
+        """`(t){1}`：T2 起 typedef 名复合字面量由解析期符号判定直接建树（不再走 raw）。"""
         res = _run("typedef int t;\nx = (t){1};\n")
         assert res.get("success") is True and not res.get("error"), res.get("error")
-        raws = _raw_nodes(res["ast"])
-        assert len(raws) == 1
-        assert getattr(raws[0], ru.UNDERSTAND_ATTR, None) is None
-        assert getattr(raws[0], "sub_node", None) in (None, [])
+        assert _raw_nodes(res["ast"]) == []
+        assert any(n.node_name == "CompoundLiteral" for n in iter_nodes(res["ast"]))
 
 
 class TestRenderFidelity:
@@ -124,11 +122,9 @@ class TestRenderFidelity:
         again = _run(output)
         assert (again.get("output") or "") == output
 
-    def test_verbatim_authority_kept_for_still_raw_forms(self, c_env):
-        """仍走 raw 的形态：`_verbatim_text` 直出权威仍在（渲染与原句一致）。"""
+    def test_typedef_compound_literal_renders_direct(self, c_env):
+        """复合字面量直接结构渲染保真（原句 token 序列保持）。"""
         res = _run("typedef int t;\nx = (t){1};\n")
-        raw = _raw_nodes(res["ast"])[0]
-        assert getattr(raw, "_verbatim_text") == "x = (t){1}"
         assert "x = (t){1};" in (res.get("output") or "")
 
     def test_trailing_comment_survives(self, c_env):

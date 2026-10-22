@@ -1237,6 +1237,14 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        return None  # 变异：关闭注释回退\n        view, pos_map = view_info",
         "test": "tests/engine/linter/test_linter_expression_comments.py",
     },
+    {
+        "why": "typedef 名复合字面量（T2a）：CompoundLiteral 类型名收 @CastTypedefName 门控支；"
+               "去掉后 `(t){1}` 只能走已退役的 raw 兜底（无 pre_scan 时整句误报）",
+        "file": "grammar/c/00_expressions.toml",
+        "old": '    "@CastTypeName|@CastTypedefName",\n    "bracket.r_parentheses",\n    "@InitList",',
+        "new": '    "@CastTypeName",  # 变异：去掉 typedef 名复合字面量\n    "bracket.r_parentheses",\n    "@InitList",',
+        "test": "tests/languages/c/test_c_raw_understanding.py",
+    },
 ]
 
 
