@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **退出判据 4 收口：构造 × 标准档位断言面**（2026-10-22，循环 #46，test-only）：
+  新增 `tests/languages/c/test_c_construct_standard_matrix.py`，把 `tools/c_acceptance.py::CASES`
+  的 **49 条接受面构造**逐条挂上标准归属（C99 / C11 / C23；C17 为缺陷修正版、**无新语法**，
+  插件目录只有 `tpc.toml` 已由测试锁定），并断言：① 清单与归属表一一对应（meta，防清单漂移）；
+  ② 每条构造在**其标准档**解析完整且出现该构造的增量节点（C99 在 baseline 档）；
+  ③ C11/C23 构造在**下档不可见**——下档解析截断或不含增量节点（宽进口径：未声明关键字被当
+  普通调用静默接受是允许的，与 `test_c_standard_tiers.py` 头注同口径）。
+  覆盖：47 条解析层构造上/下档 + 2 条预处理（归属 C99，接受面由 A2 `#include` e2e 覆盖）。
+  判据 `pytest tests/languages/c/test_c_construct_standard_matrix.py`（70 例全绿）。
+
+### Added
+
 - **C 无名抽象指针形参（真实语料 G3 收口）**（2026-10-22，循环 #45，C 语法面）：
   C99 §6.7.6 允许 `parameter-declaration` 省略 declarator——`void f(void *, size_t);` /
   `int g(const char *, const char *);` 这类「只有 `*` 链（可带限定符）、无名字」的原型是
