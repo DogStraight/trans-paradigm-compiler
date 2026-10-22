@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **退出判据 3 收口 + 刻度块 7 收口**（2026-10-22，循环 #47，test-only）：新增
+  `tests/languages/c/test_c_exit_criteria_negative.py`——四族代表负样本各被拒 + 正样本不误报：
+  ① 作用域 = raw 安全网 **E002**（遮蔽例 `typedef int t; void f(){ int t; x=(t)y; }` ⇒ 管线失败 +
+  E002；无遮蔽正样本闭环）；② 链接 = 存储类约束族 **CSC001–CSC012** 近似面（`typedef static` /
+  `static extern` / `_Thread_local` 用于函数；正样本 `static inline` 不误报）——C 链接性完整规则
+  （§6.2.2 跨声明，阶段 3 **S2**）按既有拍板**不采**；③ 标签 = **LAB001–LAB003**（重复 label /
+  未定义 goto / case 无 switch）；④ 函数原型 = 语法非法原型被拒（`int f(...);` 无参数变参；
+  正样本含 `int f(void)` / 变参 `int g(int, ...)` / 无原型 `int h()` / 新收口的抽象指针形参）。
+  **S3 原型一致性（跨声明类型一致、`void` 参数约束）需类型模型 = 触发式搁置**：本文件反向锁定
+  "当前不检查"（不一致原型/void 约束样本断言不报），防"看起来已覆盖"的误传。
+  刻度：块 7 由 🟡 → ✅（S2 不采 + S3 触发式搁置均为登记边界，不属活跃缺口）；已完成 **8/9**
+  块、加权约 **65–70%**；退出判据 1–4 全过，**判据 5 唯一前置 = G4（typedef 名强转 / 切片 1b
+  = 解析前符号判定）**。
+
+### Added
+
 - **退出判据 4 收口：构造 × 标准档位断言面**（2026-10-22，循环 #46，test-only）：
   新增 `tests/languages/c/test_c_construct_standard_matrix.py`，把 `tools/c_acceptance.py::CASES`
   的 **49 条接受面构造**逐条挂上标准归属（C99 / C11 / C23；C17 为缺陷修正版、**无新语法**，
