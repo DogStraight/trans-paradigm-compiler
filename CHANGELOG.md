@@ -276,6 +276,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`pre_scan` 退役改为「暂缓专项整治」**（2026-10-22，作者拍板；docs-only）：作者判断
+  "让 lexer 做预扫描是耦合设计，不太好"，但处理应**专项整治**而非日常刻度逐片推进——
+  **先完成刻度主线，之后再集中力量去掉该机制**。处理：ADR-0024 状态改 `deferred`
+  （设计、消费面实测、分片 S1–S5 与判据保留，取回即执行）；`ROADMAP.md` 新增 P2.9
+  （触发 = 刻度主线完成；含实测现状：唯一承重 = C linter raw 资格、parser 提示面零消费
+  A/B 0/144、两期产物无消费者、机制提及 37 文件/236 行）；`TODO.md` §3.1 执行项移除
+  （暂缓项不进 TODO）；`docs/README.md`、`MODEL_INDEX.md`、两份 gap 档同步改"暂缓"口径。
+  `PROGRESS.md` 下一轮入口回到刻度主线：G3 未命名抽象指针形参。
+
+### Changed
+
 - **决策：退役 lexer 预扫描，改两阶段 lint（ADR-0024）**（2026-10-22，#45 调查/设计轮；
   **docs-only**，未动生产代码）：作者判断 `pre_scan`（lexer 后、parser 前的文本级正则扫描）
   信息量不足以支撑符号判定，要求"延后到分析阶段"。本轮实测消费面后立项：

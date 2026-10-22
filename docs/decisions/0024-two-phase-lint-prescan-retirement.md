@@ -1,7 +1,9 @@
 # ADR-0024: 退役 lexer 预扫描——raw 资格符号无关化，符号判定后移 analyze
 
-- Status: accepted
-- Date: 2026-10-22（#45 调查轮：作者要求评估 `pre_scan` 存废 → 选定"先立项两阶段 lint，落地后全删"）
+- Status: deferred（暂缓；**刻度主线完成后作专项整治，集中力量处理**）
+- Date: 2026-10-22（#45 调查轮：作者要求评估 `pre_scan` 存废 → 先出两阶段 lint 设计；
+  同日作者拍板"这可能需要专项整治，之后再处理：lexer 做预扫描是耦合设计，先不管此处，
+  先把刻度推进完成之后再集中力量去掉这个机制"）
 - 关联：`docs/gaps/gap-c-semantic-base.md`（预扫描期 P1 / 决策 ③⑧⑨）、
   `docs/gaps/gap-parser-linter-approximation.md`（M1 资格判定 / raw 承载）、
   `linter/linter_architecture.md`（L1/L2 与内部 warning 面）、

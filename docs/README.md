@@ -75,8 +75,9 @@
   方法/判据/台账位置；台账在 `gaps/gap-engine-abstraction-audit.md`）。
   案例型（决策 + 实现同轮落档）：`decisions/0023-tier-gated-grammar.md`（档位门控：
   可选件 grammar 随 `enabled` 加载；替代 ADR-0021 原"暂缓"行）。
-  设计型（决策已定、分片实现中）：`decisions/0024-two-phase-lint-prescan-retirement.md`
-  （退役 lexer 预扫描：raw 资格符号无关化、符号判定后移 analyze；执行项在 `TODO.md` §3.1）。
+  设计型（方向已定、**暂缓**）：`decisions/0024-two-phase-lint-prescan-retirement.md`
+  （退役 lexer 预扫描：raw 资格符号无关化、符号判定后移 analyze；刻度后专项整治取回，
+  取回入口见 `ROADMAP.md` P2.9）。
 - **长期暂缓项/触发条件（策略）** → `decisions/` 的**策略型 ADR**（"长期项不列待办" +
   「结论/为什么不做/触发条件」表，现存 `decisions/0021-long-term-deferral-strategy.md`）；
   **不进 TODO**——触发出现时按体量取回 TODO/ROADMAP，

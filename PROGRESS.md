@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：实现轮 = pre_scan 退役 **S1（配置面，纯加法）**：C 包 `[linter]` 段新增 `type_name_form` / `raw_exclude_rules` 声明键（双写期，旧消费点仍读旧源 ⇒ 零行为变化）；判据 = 两键可加载 + `tests/engine/linter` 与 C 包套件全绿 + A/B 0/144。
-- **待验证假设**：`[linter]` 段挂载形态（verilog 先例：`file/section` 对象）可直接承载这两个标量键；双写期无需改 `linter/scanner.py` 读取源，S2 才切消费方。
-- **台账**：ADR-0024（两阶段 lint 决策与分片）；`docs/gaps/gap-c-semantic-base.md` 决策 ③⑧ 已注方向变更；证据 = 37 文件/236 行提及面 + 禁用符号的 9/33 测试红 + rule_hints A/B 0/144。
+- **意图**：实现轮 = G3 未命名抽象指针形参（`void f(void *, size_t);` / `int g(const char *, const char *);`）：ParamDecl 声明符位收"只有 `*` 链（可带限定符）、无名字"的抽象声明符；判据 = 最小复现转正 + zlib 对应诊断清零（见 `gap-c-real-corpus.md`「根因」G3）。
+- **待验证假设**：`@Pointer`（`*` 链 + 限定符）+ `@TypedefName @Pointer` 两种抽象形态即可覆盖语料原型声明；函数指针/数组型抽象声明符按真实语料触发再扩。
+- **台账**：`pre_scan` 退役（两阶段 lint）方向已定但**暂缓为专项整治**（ADR-0024 / ROADMAP P2.9，刻度后集中处理）；能力面审查矩阵 #1 行已收口（ADR-0023）。
 
 ## 估算依据（对照锚，可复核）
 
