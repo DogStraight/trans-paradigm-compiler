@@ -1,8 +1,8 @@
 # Gap — C 语义基座（符号表 / 作用域 / 声明顺序）（ROADMAP「C 语义层切片 1b」）
 
-- 状态：**已拍板（作者 2026-10-10）**——方向 = linter 判"候选是否收敛"（不收敛出**内部
-  warning**）→ parser 歧义位点走 **raw 暂缓建树** → **analyzer 插件**补理解路径；
-  **P1→P4 分片实施**（P1 = C 包符号收集产物，含**分期标注**）。裁决全表见末节 `## 已拍板`
+- 状态：**已收口（2026-10-23 T2，#53–#57）**——pre_scan / linter 内部 warning / raw 承载 /
+  P4 理解提升全部删除；符号判定 = parser `_ScopeStack`（#49）+ analyze 期 `c_symbols`。
+  下文 P1→P4 叙述为历史设计记录，现行口径见 `CHANGELOG.md` #49–#57 与 ADR-0024
 - 关联：`ROADMAP.md`「C 语义层切片 1b」（与 C 包阶段 3 共用前置；阶段 3 已交付，残片见 `TODO.md`「五、搁置」）；
   `docs/gaps/gap-semantic-elaboration-boundaries.md`（两套 scope 并存）；`grammar/c/**`
 - 参照：`docs/references.md`「C 语言文法参照」；GCC `gcc/c/c-parser.h`；
@@ -36,7 +36,7 @@
      `parser/parser_core.py:168` 的 `_ScopeStack.register` **全仓无调用方**（实测 grep）⇒
      符号 store 恒空、`lookup` 恒返回 `None`。`parse_sentence`（`block_parser.py:37-44`）
      与 atom 路径（`parser/parser_core.py:196-215`）都**不记录"还有别的候选也成立"**。
-   - 词法预扫描 `lexer/pre_scan.py`（`{name: kind}` + `rule_hints`）机制齐备；C 包现已声明（`base/_pre_scan.toml`）。
+   - 词法预扫描 `lexer/pre_scan.py` **已于 T2b 删除**（ADR-0024）。
     ⚠ **2026-10-22**：方向 = 两阶段 lint（符号判定后移 analyze），落地后删；作者拍板**暂缓为专项整治**（ADR-0024 / ROADMAP P2.9）。
    - analyzer 侧另有**完整**的 `analyzer/scope.py::Scope/Symbol`（post-parse，声明驱动
      `[*.analyzer.scope/symbol]`）——C 包未声明，且与 parser 侧 `_ScopeStack` **无共享**。
@@ -152,7 +152,7 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
   谓词键是 parser 契约面，作者要求先由 linter 承担"收敛与否"的判定。
 - **② 查询钩子**（pack 提供 `is_type_name` callable）：**延后**（与①同缺口，且倾向先用数据）。
 - **③ 两遍**：真两遍破"先声明后使用"⇒ 原不做；2026-10-22 定为**两阶段 lint**（lint 符号无关 →
-  parse raw → analyze 裁决），"保留 pre_scan"作废；**暂缓为专项整治**（刻度后集中处理）。
+  parse raw → analyze 裁决），"保留 pre_scan"作废；**已由 T2（#53–#57）执行完毕**。
 - **④ raw 路径**：**采纳为内部机制**——不选边、保留原样节点交后端定，渲染走引擎既有
   raw 直出（先例 `_verbatim_text`）。它能立刻把"整函数截断丢内容"变成"完整保留"，且不碰
   契约面。
@@ -164,7 +164,7 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 **P4** analyzer 插件消费 raw + 符号，实现理解路径（`(myint)x` 判定在此闭环）。
 
 **最小首片（P1）**：C 包的**声明式符号收集产物**——每条符号
-`{name, kind（typedef/标签/变量/枚举常量）, scope, decl_order, phase（pre_scan/analyze）}`，
+`{name, kind（typedef/标签/变量/枚举常量）, scope, decl_order, phase（仅 analyze）}`，
 未声明标识符默认 `not typedef`（显式化）。判据：正 `typedef int myint; myint v;` ⇒
 `myint`=typedef、`v`=variable；负 `int myint; myint *b;` ⇒ `myint`=variable（**不得** typedef）；
 声明顺序 `myint v; typedef int myint;` ⇒ 使用点处不在作用域；作用域：块内 typedef 出块失效、
@@ -179,7 +179,7 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 - C 包接受域现状（含 `(myint)x` 行）：`docs/gaps/gap-language-pack-scope.md`
 - 保真判据：`tests/languages/c/test_c_render_fidelity.py`；接受面盘点：`tools/c_acceptance.py`
 - 引擎侧实现点：`parser/parser_core.py`（`_ScopeStack`）、`parser/rule_selector.py`
-  （`scope_lookup_fn`/`pre_hints`）、`parser/block_parser.py`、`lexer/pre_scan.py`、
+  （`scope_lookup_fn`）、`parser/block_parser.py`（raw 面已删）、
   `analyzer/scope.py`、`core/define.py`（`peek`）
 
 ## 已拍板（作者 2026-10-10）
@@ -193,7 +193,7 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 | 5 | raw 路径是否升格 | **作为内部机制存在**，不升格为公开一等判据；先例 = 宏体（raw 源区间），"把问题上移一层" |
 | 6 | 两套 scope 是否合并 | **不合并**；但机制文档须写明两者**本质是一套识别系统的不同时期**、能力不同 |
 | 7 | 两遍是否允许影响形态 | 非核心问题——**只允许 pre-scan 重排候选、不允许影响形态**（fail-open） |
-| 8 | C 包 `pre_scan` 是否落地 | **曾落，现将删**（2026-10-22 方向变更：两侧改两阶段 lint，见决策 ③ 更新与 `docs/decisions/0024-two-phase-lint-prescan-retirement.md`） |
+| 8 | C 包 `pre_scan` 是否落地 | **曾落，已删**（T2b #54；见 `docs/decisions/0024-two-phase-lint-prescan-retirement.md`） |
 
 **关键设计句（作者原话要点）**：关键在 **linter** —— linter 先过歧义路径；路径**无法收敛**
 时 linter 给出**内部 warning**；之后 parser 经过此处**走 raw 路径、暂缓建树**；之后由

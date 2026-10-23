@@ -65,10 +65,6 @@
       判据：全量语料门禁 ≤30s 且解析结果不变。链：`tests/e2e/eval_diag_baseline_c.py`
 ## 三、预算与登记（代码结构债 / 功能散点）
 
-- [ ] **T2 `pre_scan` 专项清理**（三任务路线图；ADR-0024）：T2a ✅ 复合字面量 typedef；
-      T2b ✅ #54（pre_scan 机制/配置/linter M1/C 两期产物已删；全量 4454/38 绿）；
-      T2c ✅ 删 raw 管线（P4/引擎契约/parser 承载/linter M2 与 warning 旁路全删）——先证后删；T2d 文档收口待做；
-      T2d = 文档收口（gap/README pre_scan 历史叙述）。链：`ROADMAP.md` P2.9、ADR-0024
 - [ ] **T3 双包抽象对照按部件审查**（三任务路线图，多轮）：C/Verilog 逐部件查抽象泄露，部件序
       lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config；每部件
       用判据②声明面缺失探针 + ③弱信号 + 第二语言复用实验，输出 leak 清单（修复立项/登记接受）

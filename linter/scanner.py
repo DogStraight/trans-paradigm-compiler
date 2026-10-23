@@ -384,7 +384,6 @@ class LinterScanner:
         errors = macro_syntax_diagnostics(source, self._rules_dir)
         errors += self._discovery.unrecognized_diagnostics()
         errors += registry.validate_all(tokens)
-        # M2 窄档摘诊断（与 parser 侧 raw 承载**同批**）：只摘 `eligible` 位点 region
         # 内的两类**结构类**码；其余码（phase1-boundary / lexer-error / 宏卫生 / ST*）
         # 一律保留 ⇒ 真错不被静默。
         return errors

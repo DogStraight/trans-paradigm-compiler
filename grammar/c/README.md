@@ -249,15 +249,13 @@ grammar/c/
 | `name` | 符号名 |
 | `kind` | `typedef` / `tag`（struct·union·enum 标签）/ `variable` / `function` / `enumerator` |
 | `scope` / `scope_kind` | 作用域路径与种类（`<global>` / `<global>/FuncDef` / `<global>/FuncDef/CompoundStmt`） |
-| `decl_order` | 收集序（≈ 源序，供"先声明后使用"判定）；`pre_scan` 期无（`None`） |
+| `decl_order` | 收集序（≈ 源序，供"先声明后使用"判定） |
 | `decl_line` | 声明所在源行（parser 挂的 `_pos_line`） |
-| `phase` | 名称来自哪个时期：`analyze`（后置分析器，精确）｜`pre_scan`（词法预扫描，粗） |
+| `phase` | 名称期别（字段保留；T2b 起只产 `analyze`） |
 
-**分期语义（作者硬要求）**：`pre_scan` 期是**文本级、平坦、首见归属**的粗收集
-（`base/_pre_scan.toml`；无作用域/无声明序，引擎兜底正则还会带入类型词等杂质——头注有
-逐条实测）——**只作提示与分期对比**；`analyze` 期由后置 analyzer 插件给出精确作用域 +
-声明序。同一位点两期都有记录时**两条都保留**（`phases_for` 可判），形态判定只看
-`analyze`（`is_typedef` 内已过滤）。
+**期别**：T2b（ADR-0024）已删除 lexer 预扫描与两期合并；产物只由 analyze 期给出
+（精确作用域 + 声明序），`phase` 字段保留为产物自述。形态判定只看 analyze 记录
+（`is_typedef` 内即此口径）。
 
 **默认偏置（显式化）**：未声明标识符 = `_api.DEFAULT_TYPEDEF_BIAS`（`"not typedef"`）——
 `is_typedef()` 的缺省即此值，调用点勿再各自硬编码。
@@ -267,7 +265,6 @@ grammar/c/
 | 位置 | 作用 |
 |---|---|
 | `01_declarations.toml` / `02_types.toml` / `03_statements.toml` 的 `[Rule.analyzer.c_symbol_collect]` | 收集点 + AST 路径 + `typedef`/函数标记（语言知识全在参数里） |
-| `base/_pre_scan.toml` + `tpc.toml` 的 `[lexer] pre_scan` | `phase="pre_scan"` 的来源（**只收集、不声明 `rule_hints`** ⇒ 不重排 parser 候选） |
 | `plugins/semantics/_{symbols,_api}.py` | 原语/产物装配 + 只读查询 API（`phase`/`is_typedef`/`records_for`） |
 
 ```python
@@ -277,8 +274,7 @@ from grammar.c.plugins.semantics import _api
 
 at = AnalysisTraversal(rules, rules_dir="grammar/c")
 at.analyze(parser.parse(lexer.tokenize(src)))
-_api.product_from(at)                      # 仅 analyze 期产物（读 context.extra["c_symbols"]）
-_api.two_phase_product(at, src, "grammar/c")  # 两期合并（逐条带 phase）
+_api.product_from(at)                      # analyze 期产物（读 context.extra["c_symbols"]）
 _api.declaration_view(at)                  # **声明位置派生视图**（见下：声明位置问题的唯一入口）
 ```
 
@@ -487,29 +483,12 @@ C23 项（`#warning`/`#elifdef`/`#embed`/`__VA_OPT__`/`__has_include`）。
 接缝重扫不跨行、前瞻上限外不展开（256 行 / 8192 字符）、沿用最终宏表、渲染行结构可重排
 ——以守卫断言锁在 `tests/engine/preprocessor/test_macro_multiline_call.py` / `test_macro_rescan.py`。
 
-## P4 理解路径（两段协作）
+## raw 承载 / P4 理解路径（已删除）
 
-歧义路径（`x = (myint)y;`：`myint` 是不是类型名）走**两段协作**，能力都必须有：
-
-| 段 | 落点 | 做什么 |
-|---|---|---|
-| **承载** | `parser/block_parser.py`（引擎，P4 第一步） | raw 节点：`_verbatim_text`（渲染权威）+ `raw_names`/`raw_line`/`raw_column`/`raw_order` + **`raw_candidate`**（候选子树，已还原源码原文）+ `raw_substituted`（取证）。承载期 `sub_node == []` |
-| **理解** | `plugins/semantics/_raw_understand.py`（analyzer postpass） | 语义二次确认（不绕过遍历期 P4 校验 `validate_raw_statement`）+ **结构选定**（候选里出现 `UNDERSTOOD_STRUCTURES`）⇒ 结论挂 `raw_understand`，摘要进 `context.extra["c_raw_understanding"]` |
-| **改树** | `plugins/semantics/_raw_transform.py`（transform 插件） | 按结论把 `raw_candidate` 提升为 `sub_node`（`RawStatement > ExprStmt > … > CastExpr`），**保留 `_verbatim_text`** |
-
-**契约 A3 的有意升级 + 不变式**（承载期 → 提升后）：
-
-> **渲染权威 = `_verbatim_text`**（`renderer/node_renderer.py` 对带该标记的节点整段直出、
-> 不遍历子节点）；**子树只是分析的确定结构，其显著 token 序列必须与 `_verbatim_text` 等价**。
-
-三条推论（都有判据）：① 提升**不改渲染**（直出早返回）；② `Node.iter_children()` 含属性挂载的
-子节点 ⇒ 提升后候选同时挂在 `sub_node` 与 `raw_candidate`，按 `id` 去重 ⇒ 遍历**恰好一次**；
-③ 提升幂等（`sub_node` 非空即跳过）。
-
-**诚实边界**：`(t){1}` 复合字面量在承载期建候选失败 ⇒ 不提升、不报错（raw 仍直出，
-行为与本批之前一致）；该形态要进入理解路径需先补承载期。判据：
-`tests/languages/c/test_c_raw_understanding.py`（管线级：结构/保真/幂等/负样本/边界）、
-`tests/engine/analyzer/test_p4_raw_understanding.py`（两段单元判据，含去重与幂等）。
+> **2026-10-23 T2 收口（ADR-0024）**：raw 承载（parser `RawStatement`）、P4 理解/提升插件
+> （`_raw_understand.py`/`_raw_transform.py`/`_raw_bridge.py`/`_p4_query.py`）与
+> E002/E003 安全网已全部删除；typedef 强转与复合字面量由 parser 解析期直接建树
+> （#49 G4 / #53 T2a）。历史判据见 `CHANGELOG.md` #49–#57 与 ADR-0024。
 
 ## 写包者须知（本包实测教训，写新包必看）
 

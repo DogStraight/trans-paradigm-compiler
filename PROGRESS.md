@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T2d 收口——清理 gap/README/MODEL_INDEX 中 pre_scan/raw 历史叙述与幽灵引用，核对 `ctx.raw_source` 等残留命名；跑全量冻结树；随后进 T3（双包抽象对照按部件审查，先 lexer/preprocessor 部件，用判据②删声明/③lang_penetration 探针出 leak 清单）。
-- **待验证假设**：T2c 后 raw/pre_scan 生产路径无消费者（M2/内部 warning 已无输入）；文档清理后 `check_doc_refs`/预算/all grep 归零；T3 首部件可在 1 调查轮内出矩阵。
-- **台账**：T2c ✅（切片①#55/②#56/③#57；全量 4374 passed/14 skipped，pyright/变异绿）；T2a/T1 ✅；主线 1 刻度 9/9。
+- **意图**：启动 T3 部件①（lexer/preprocessor）调查轮——按 `gap-engine-abstraction-audit.md` 执行路线，用判据②（删语言包声明看测试是否变红）与 `tools/lang_penetration.py` 出 leak 清单；C/Verilog 对照 token 面/预处理器形态，逐条落"修复立项 or 登记接受"。
+- **待验证假设**：T2 删除后引擎侧语言残留已减少但 lexer/preprocessor 仍有 C/Verilog 形态声明面错位；判据②可稳定区分"配置驱动"与"引擎硬编码"；单部件 1 调查 + 1 实现轮可收口。
+- **台账**：T2 ✅（#53–#58：pre_scan/raw 全删、skip 75→14、全量 4374/14、A/B 0/144、render 124/124、c_acceptance 49/0）；T1 ✅；主线 1 刻度 9/9。
 
 ## 估算依据（对照锚，可复核）
 

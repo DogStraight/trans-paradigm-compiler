@@ -1,6 +1,6 @@
 # ADR-0024: 退役 lexer 预扫描 + 依赖它的 raw 管线（符号判定后移 analyze）
 
-- Status: **active（T2 执行中）**；作者 2026-10-22 定调"待刻度完成后作专项整治"，
+- Status: **done（2026-10-23 T2 收口，§T2a–T2d）**；作者 2026-10-22 定调"待刻度完成后作专项整治"，
   2026-10-23 主线 1 刻度 9/9 完成 → 取回执行。
 - 历史：2026-10-22 #45 调查出两阶段设计；#49 删除 parser 侧预扫描消费面
   （`pre_symbols`/`pre_hints`/`rule_hints`，零消费、A/B 0/144）。
@@ -102,8 +102,10 @@ T2c（raw 管线大删：M2 摘诊断/parser raw 承载/P4 理解提升/E002·E0
   删 `test_lint_internal_warnings.py`/`test_linter_symbol_hints.py`/lookahead 收敛用例；变异 -1。
   验证：linter+pipeline+C 1585 passed/7 skipped；全量 **4374 passed/14 skipped**；pyright 0；
   变异目标校验通过；`core/global_state` 清 raw 契约登记 2 条。**T2c 完成**（raw 管线全删：P4/契约/parser 承载/linter 资格与摘诊断面）。
-- **T2d（余）**：文档收口——gap/README/MODEL_INDEX 的 pre_scan/raw 历史叙述清理、
-  `ctx.raw_source` 命名与残留注释核对；随后全量冻结树。
+- **T2d ✅ #58**：文档收口——`linter_architecture`/`grammar/c/README`/`MODEL_INDEX`/
+  `gap-c-semantic-base`/`gap-parser-linter-approximation`/`gap-engine-abstraction-audit`/
+  两包 README/AGENTS 的 pre_scan/raw 叙述改写；全量 4374/14、A/B 0/144、render 124/124、
+  `c_acceptance` 49/0、doc refs/预算全绿。**T2 收口**（T3 启动）。
 
 ## 权衡
 

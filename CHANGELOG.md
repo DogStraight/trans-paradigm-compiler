@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **T2d：pre_scan/raw 文档收口（#58，ADR-0024 done）**：
+  · 改写 `linter/linter_architecture.md`（收敛 warning/raw 资格 → 退役说明）、
+    `grammar/c/README.md`（期别/两期 API/P4 章节）、`gap-c-semantic-base.md`/
+    `gap-parser-linter-approximation.md`（历史方案 + 收口状态）、`gap-engine-abstraction-audit.md`
+    （矩阵 #3 收口）、`MODEL_INDEX.md`/`docs/README.md`/`lexer/README.md`/`parser/AGENTS.md`/
+    `gap-c-typedef-cast.md` 幽灵引用清理。
+  · 验证：全量 **4374 passed/14 skipped**；A/B **0/144**；render **124/124**；
+    `c_acceptance` **49/0**；doc refs/预算 PASS。**T2 全部收口**，进入 T3。
+
+### Added
+
 - **T2c 切片③：删除 linter M2 与候选收敛内部 warning 旁路（#57，ADR-0024）**：
   · 删 `scanner` 的 M2 摘诊断（`_DOWNGRADABLE_CODES`/`_apply_narrow_downgrade`）、
     `internal_warnings` 状态/取用；删 lookahead 收敛判定面（`_record_convergence`/

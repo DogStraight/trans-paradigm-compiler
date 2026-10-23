@@ -213,91 +213,14 @@ flowchart TD
   match 前需前置），`limit` 含终止符（多取一个 token 消费分号，否则 TaskDeclOld 的
   `;` 超出区间而失败）。
 
-### 候选收敛判定与「内部 warning」旁路
+### 候选收敛 / 内部 warning / raw 资格（已退役）
 
-Level 2 试解析除了择一（行为不变），还判一次**候选是否收敛**：
-
-- **判据**：只统计**上下文允许的候选**（`LookaheadTable._allowed_in_context`）——
-  `errs == 0` 的 ≥2 且最大 `consumed` 并列 ⇒ 未收敛（`ambiguous_full_match`）；
-  允许集非空但全部 `errs > 0` ⇒ 未收敛（`no_full_match`）。唯一最优/可区分 ⇒ 收敛。
-- **上下文允许集**（`_collect_member_only`，语言无关推导）：**容器成员专用语句**
-  不算语句位候选——即 `is_statement` 且被某规则 `@call`、但**没有** caller 是
-  inline 语句分派器（如 C 的 `StructMember` 只被 `StructBody` 的 `@StructMember*`
-  调用）。没有这层过滤时，顶层 `typedef int myint; myint v;` 会被 `StructMember`
-  这个伪候选带成"未收敛"（实测 `Declaration`/`StructMember` 同 `errs=0`）。
-- **载体 = 旁路，不升格为诊断**：未收敛位点写入 `LookaheadTable` 的内部列表
-  （按次重置，先例 = `Discovery._unrecognized` 的重置/取用模式）→
-  `Discovery.internal_warnings()` → `LinterScanner.internal_warnings()` →
-  `pipeline._stage_lint` 存入 `_PipelineContext.internal_warnings`，供后续
-  "歧义位点 raw 暂缓建树"按**行/列**消费。
-  **不进** `LintDiagnostic`、不进 `lsp_diagnostic`/`tpc lint --json`、不影响 exit code、
-  不落盘——用户可见面与机制引入前逐字节相同（e2e 快照对照）。
-- **条目形态**（P3 可直接消费）：`{kind, reason, context, pos, line, column, token,
-  tied, allowed, all, symbol_dependent, symbol_names, symbol_shape, region}`——`pos` 是
-  **本次 linter token 流**下标（linter 吃展开态、parser 吃锚形态，两个 token 流不同源）
-  ⇒ 跨阶段定位用 `line`/`column`。
-
-### raw 资格判定（P3b **M1 已落**：替换式试解析 + typedef 命名空间 + 声明可用性）
-
-未收敛位点只有在**三条判据全过**（`eligible=True`）时才**够格**进 raw/降级档。
-**M1 只写内部证据字段，不接 raw、不摘诊断 ⇒ 用户可见面逐字节不变**（`--json` 快照
-SHA256 / lint accuracy / diag baseline 三证）。判据实现在
-`lookahead._record_convergence`（组装）/ `_type_name_hits`（②）/
-`_substitution_trial`（①），证据字段随条目写进内部旁路（`trial_ok`/`decl_line`/
-`decl_depth`/`use_depth`/`substitute_type`/`eligible`…）。
-
-- **① 替换式试解析**（`_substitution_trial`）：把 `( id )` 里那个 id 的 token `type`
-  **临时**换成包声明的"类型名形态"（`[pre_scan.decl.*].trial_as`，C = `keyword.int`），
-  用**同一候选集、同一 limit** 重跑 Level 2 试解析；判据 = `errs == 0 且
-  consumed == limit - i`（**整句**通过）。通过 ⇒ 该句唯一问题是"这个 id 的类型名身份
-  语法层解析不了"；否则句子里还有别的真问题 ⇒ 不 eligible。
-  ⚠ 试解析必须在**干净 packrat 缓存**上求值：三层 memo 以 token 位置为键，改型前的
-  旧结果会被命中（实测：不清 memo 时目标句判 `errs=1/consumed=6` 失败；清空后
-  `errs=0/consumed=7` 通过）⇒ `RuleMatcher.memo_suspended()` 快照/清空/还原。
-  引擎只提供"换一个 token 的 type 后重跑试解析"的通用能力，不解释语言语义。
-- **② typedef 命名空间**（`_type_name_hits`）：命中名 kind ∈ 包声明 `type_name = true`
-  的 kind（C 只 `typedef`；`tag_*` 不算 ⇒ `struct t{}; x=(t)y;` 不进档）。包声明
-  `type_name = true` 必须同时给 `trial_as`，否则 `load_pre_scan_config` **fail-fast**。
-- **③ 声明可用**（两个子判据各自记录：`order_ok`/`depth_ok`）：
-  · **位置先后** `(decl_line, decl_column) <= (use_line, use_column)`——同行也要比列
-    （`x=(t)y; typedef int t;` 同行声明在后，只比行号分不出先后，实测反例 7）；
-  · **深度守卫** `decl_depth <= use_depth`——**块内声明不得给块外使用点发资格**
-    （`void f(void) { typedef int t; }` 之后的 `x = (t)y;`：位置先后成立但
-    `decl_depth=1 > use_depth=0` ⇒ 不 eligible；无守卫时真错被静默，独立审计 A 类）。
-  两者位置数据都来自**并行读取面** `pre_scan_with_lines`（`lexer/pre_scan.py`；既有
-  `pre_scan()` 签名/行为不变）：行/列经清理偏移映射回原文，深度 = 清理后文本里 `{`/`}`
-  计数；使用侧深度按 **token** 计（字符串/注释里的花括号是单 token，不会误计）。
-- **两层独立护栏**（都不是单点）：kind 过滤护住 `symbol_dependent` 标记；
-  `trial_as` 必要性护住 `eligible`——去掉任一，另一层仍挡住对应反例。
-- **反例集（八条，必须仍报真错）**：`x = (t)y + ;`、`+ (u)z + ;`、跨行 `+`、
-  `+ "unterminated;`、缺 `;` 的 `x=(t)y`、`x=((t))y;`、`x=(t)y; typedef int t;`、
-  `struct t{}; x=(t)y;`；另加审计 A 类及其同族（块内声明→块外使用，深度守卫）。
-  诊断与收紧前**逐条相同**（PRE/POST 快照对拍）。
-- **M2（raw + 窄档摘诊断）路线 = 与 P4 原子落地**：raw 段由 analyzer 用
-  `phase="analyze"` 的**精确符号面**校验"该名在此处确实是 typedef"；校验不过 ⇒ 报错
-  （**不静默**）。因此下列问题归 **M2+P4 判据**、不属 P3b：
-  · **作用域遮蔽**：`typedef int t;\nvoid f(void) { int t; x = (t)y; }` —— pre_scan 无
-    作用域 ⇒ M1 判不出"此处 `t` 已被局部变量遮蔽"；M2 **不得只依赖 M1**。
-  · **引擎既有赋值链宽松**（审计 B 类，如 `x = (t)y + z = 1;`）——既有宽松面，不混入
-    P3b 判据。
-  · `tpc check` 的 `parse_ok=False` 而 `exit_code=0` 观察——归 M2+P4 的收口判据。
-- **已知边界（M1）**：① 遮蔽不可分（见上，已如实登记）；② `pre_scan` 首见归属 ⇒ 同名
-  多处声明以**首次**声明位置为准。
-- **位点发现面（P3c 前置切片，task-28 已落）**：位点由 discovery 的扫描面决定，此前
-  **只到块体语句位**（根块 / `is_block` 规则体）——非块容器的 production 语句位
-  （C `CompoundStmt = { @Stmt* }`：函数体、以及其中的 if/while/for 单语句体）不产生
-  位点。现于 `discovery._discover_bracket` 的语句分支接入
-  `_scan_container_sites`：分类命中的规则是**引用式容器**（`_is_nested_container`，
-  配置驱动）且语句以括号开启符起始 ⇒ 用括号配对取体区间 `[i+1, close)`，交给
-  `_discover_range(record=False)` 走**同一套**扫描逻辑（分类/边界/递归单实现），
-  只记内部 warning：不注册节点、不报未识别诊断 ⇒ 诊断/`--json`/exit code 零变化。
-- **单一来源**：位点条目的 `region` 由 `lookahead._find_boundary` → `_stmt_ends`/
-  `_block_ends` 推导；扫描面推进用 `_statement_end` → `_derived_end_case` →
-  同一 `_stmt_ends`（不引入第二份语句结束推导）。扩容为**逐语句**推进，无逐 token 重扫。
-- **为什么不升格为公开判据**：`symbol_dependent`/`eligible` 是内部证据字段，不进
-  `LintDiagnostic`/`--json`/exit code。
-
----
+> **2026-10-23 T2 收口（ADR-0024）**：linter 的候选收敛内部 warning、M1 raw 资格判定
+> （替换式试解析/typedef 命名空间/声明顺序）、M2 窄档摘诊断、parser raw 承载、analyzer
+> P4 理解/提升与 E002·E003 安全网**已全部删除**；`pre_scan` 机制同步退役。
+> 现行分工：linter 只出**用户诊断**；typedef/复合字面量等符号相关形态由 parser
+> `_ScopeStack`（#49 G4）与 analyze 期 `c_symbols` 产物裁决。历史判据见
+> `CHANGELOG.md` #49–#57 与 ADR-0024。
 
 ## 4. 配置驱动（语法规则字段 + TOML 规则）
 

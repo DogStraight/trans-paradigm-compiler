@@ -1,6 +1,7 @@
 # Gap — parser/linter 错误处理近似（无解析器恢复 + 启发式边界）
 
 - 状态：接受（设计选择，标注源码；非待闭环）。宏落语法位的情形不走 parser 恢复：宏边界节点
+- 状态补充（2026-10-23 T2 收口）：本档 P3b–P4（内部 warning/raw 资格/raw 承载/P4 理解提升）**已全部删除**（#53–#57），下文为历史方案与判据记录；现行实现见 `CHANGELOG.md` 与 ADR-0024。
   由管线就树产生、句级检查前移 linter 展开路径（跳过能力本就在 linter，不必在 parser 重建）。
 - 关联：`linter/linter_architecture.md`（已知边界表）
 - 参照：yacc/antlr 的错误恢复（skip-to-sync）、svlint/verible 对坏输入的容错

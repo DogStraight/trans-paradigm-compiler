@@ -1,6 +1,7 @@
 # Gap — C typedef 名强转（G4）：「解析前符号判定」的调查与方案
 
 - 状态：**方案 B 已实施（#49，2026-10-22）**；真实语料 2/7 文件 `parse_ok=True`，
+- 状态补充：T2c（#57）已删除 raw 承载/P4 安全网；本文 raw 相关叙述为历史（G4 后实际由解析期符号判定接管）。
   余 5 个 zlib 文件 = **预处理宏展开时序**（新暴露的另案边界，非 G4）
 - 关联：`docs/gaps/gap-c-real-corpus.md`（G4 = 真实语料门禁唯一前置）、
   `docs/decisions/0024-two-phase-lint-prescan-retirement.md`（两阶段 lint / pre_scan 退役，
@@ -22,13 +23,13 @@ G4 = **typedef 名强转**（`(T)x` / `(T*)x`）在解析期无法消歧：`(id)
 | # | 形态 | parse_ok | syntax | 说明 |
 |---|---|---|---|---|
 | 1 | `void f(void){ T *p = (T*)0; }` | ❌ | 1 | 函数内声明 + 指针强转初值 |
-| 2 | `void f(void){ T x = (T)y; }` | ✅ | 0 | 语句级 raw 已承载 |
+| 2 | `void f(void){ T x = (T)y; }` | ✅ | 0 | 解析期符号判定直接建树（#49） |
 | 3 | `T f(void){ return (T)x; }` | ❌ | 1 | 关键字语句（return） |
 | 4 | `void f(void){ if ((T)x) y; }` | ❌ | 1 | 关键字语句（if） |
 | 5 | `void f(void){ for (T i=0; i<(T)n; i++) { } }` | ❌ | 1 | 关键字语句（for） |
 | 6 | `static T *gp = (T*)0;` | ❌ | 1 | 文件域声明 |
-| 7 | `void f(void){ x = (T)y; }` | ✅ | 0 | 语句级 raw 已承载 |
-| 8 | `void f(void){ g((T)0); }` | ✅ | 0 | 语句级 raw 已承载 |
+| 7 | `void f(void){ x = (T)y; }` | ✅ | 0 | 解析期符号判定直接建树（#49） |
+| 8 | `void f(void){ g((T)0); }` | ✅ | 0 | 解析期符号判定直接建树（#49） |
 
 真实语料（check 路径，当前基线）：**7/7 文件 `parse_ok=False`**；syntax 计数
 cJSON 56 / zutil 7 / crc32 4 / adler32 3 / compress 6 / uncompr 5 / gzread 0（gzread 为
