@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **块 10：yaml 真实 workflow 两遍渲染幂等（#76）**：parser `_consume_block_end`
+  对零宽块结束符（yaml `space.dedent`）不再消费紧随的独占行注释——其 `line` 指向
+  下一行内容，注释不在结束符物理行上；留给父容器按 Comment 项处理。修复 ci.yml
+  第一遍把块末注释并到 `shell: pwsh` 行、第二遍再并下一行的 `format(format(x)) != format(x)`。
+  · 新增 `TestRealWorkflowFiles::test_real_workflow_files_idempotent`；
+    ci.yml/nightly.yml 两遍逐字相同；yaml 110 测试全绿。
+  · 全量 4392 passed/14 skipped；A/B 0/144；pyright 0；S Δ-92。
+  · TODO 删除 yaml 项；PROGRESS 块 10 更新（剩 cp1252 / eval_benchmark）。
+
+### Added
+
 - **块 10：跨语言同进程 C→verilog→C postpass 不丢失（#74）**：
   `SharedComponents` 缓存命中时按当前全局 `_active_components` 与缓存语言组件名比较，
   不一致则重建配置与组件注册表（postpass/原语/capability）再复用对象。

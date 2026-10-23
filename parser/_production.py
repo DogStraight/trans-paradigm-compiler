@@ -255,6 +255,12 @@ def _consume_block_end(parser, context: ParseContext, rule: GrammarRule, rule_no
     if not tok or tok.type != be:
         return
     context.advance_token()
+    # 零宽块结束符（yaml 的 space.dedent 等）没有真实物理行：其 `line` 指向
+    # 下一行内容，紧随的独占行注释**不在结束符行上**。此时不消费注释，留给
+    # 父容器按独占行 Comment 项处理（否则会挂 trailing，渲染并到上一行，
+    # 两遍渲染不幂等；ci.yml 实测）。
+    if str(tok.content) == "":
+        return
     while context.has_more_tokens():
         nxt = context.peek_token()
         if not nxt or nxt.type != COMMENT_TOKEN_TYPE:

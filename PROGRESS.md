@@ -24,7 +24,7 @@
 | 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |
 | 8 | **诊断粒度** | ✅ 块内 2 坏语句 → 2 条位置正确 `phase-statement`（#71；父容器粗诊断让位）；`test_c_block_diagnostics.py` |
 | 9 | **渲染/注释遗留** | ⏳ #72 调查：LineSuffix 吞 token 根因=flatten；强制 group broken 修 C 但 yaml 往返回归，已回退；需源行感知方案 |
-| 10 | **工程化缺口** | ⏳ A/B inproc ✅ #73；C→V→C ✅ #74；yaml 幂等 #75 调查（块末注释挂 IndentBlock trailing）；cp1252、eval_benchmark 待 |
+| 10 | **工程化缺口** | ⏳ A/B inproc ✅ #73；C→V→C ✅ #74；yaml 幂等 ✅ #76（零宽块结束符不吞注释，两遍逐字相同）；cp1252、eval_benchmark 待 |
 | 11 | **吞吐/基准** | ⏳ fuzz 40→100 iter/s；parser 2.5x；benchmark 阈值进 CI |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 
@@ -32,9 +32,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 10 继续——优先 C→V→C 同进程 postpass 丢失（库入口真 bug，可写回归）或 yaml workflow 幂等；A/B inproc 已可用作证据通道。
-- **待验证假设**：C→V→C 丢失由 `setup_grammar` 清空 `_loaded_components` + SharedComponents 缓存命中不重装导致；可加"同进程两轮 check 诊断一致"回归。
-- **台账**：块 1/2/3/8 ✅；块 9 ⏳（#72 调查，修复回退）；块 10 ⏳（#73 A/B inproc）；主线 2 当前 4/12；P1 待批准。
+- **意图**：块 10 继续——CI cp1252 排练口径（`tools/ci_rehearsal.py` 注入 `PYTHONIOENCODING=cp1252` 后跑通）或 `eval_benchmark` 显式口径登记；随后块 11 吞吐/基准。
+- **待验证假设**：cp1252 排练失败集中在未自护脚本输出编码；注入 env + 少量脚本自护可在不改行为下全 PASS。
+- **台账**：块 1/2/3/8 ✅；块 9 ⏳（#72 源行感知方案未成）、块 10 ⏳（3/5：#73/#74/#76）；主线 2 当前 4/12；P1 待批准。
 
 ## 估算依据（对照锚，可复核）
 

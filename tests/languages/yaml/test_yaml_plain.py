@@ -203,6 +203,20 @@ class TestRealWorkflowFiles:
             n2 = _node_names(ast2)
             assert n1 == n2, f"{rel}: 往返结构不一致 {n1} vs {n2}"
 
+    def test_real_workflow_files_idempotent(self, yaml):
+        """真实 workflow 两遍渲染逐字相同（#75：块末独占注释不得并入上一行）。"""
+        import os
+
+        root = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."
+        )
+        for rel, _ in self._FILES:
+            with open(os.path.join(root, rel), encoding="utf-8") as f:
+                src = f.read()
+            first = yaml["renderer"].render(_parse(src, yaml))
+            second = yaml["renderer"].render(_parse(first, yaml))
+            assert first == second, f"{rel}: 两遍渲染不幂等"
+
     def test_real_workflow_keeps_key_values(self, yaml):
         """关键形态抽查：块标量 run、CI 表达式、路径值都在渲染输出中。"""
         import os

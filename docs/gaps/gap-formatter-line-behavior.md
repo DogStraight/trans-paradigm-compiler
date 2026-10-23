@@ -90,7 +90,7 @@
   当前单测面见下（`test_column_align.py` 的方向保留 4 例）。
 - 1/2/3：设计选择，不改（如需段落式重排属新能力，非修复）。
 
-## 条目 6 调查：yaml 两遍渲染幂等失败（#75，2026-10-24，未修）
+## 条目 6 收口：yaml 两遍渲染幂等（#75 调查 → #76 修复，2026-10-24）
 
 - 复现：`.github/workflows/ci.yml` 用 `grammar/yaml` 解析+渲染两遍；第一遍输出
   `shell: pwsh # wheel 安装验证：…`（注释被并到上一行），第二遍把下一行
@@ -103,7 +103,7 @@
   容器 body 的 `Comment` 项，而不是挂块节点 trailing；同型判据可复用 `_lift_gap_comments`
   的源行窗口，但需覆盖"块末项之后、父级下一项之前"的窗口。修后判据 = ci.yml/nightly.yml
   两遍全文逐字相同 + `tests/languages/yaml/test_yaml_plain.py` 全绿。
-- 当前状态：缺口保留（TODO 条目仍在），本轮只定位不改。
+- 修复（#76）：`parser/_production.py::_consume_block_end` 对**零宽块结束符**（yaml `space.dedent`）不再消费紧随的独占行注释；注释留给父容器作 Comment 项。ci.yml/nightly.yml 两遍逐字相同，yaml 测试全绿；回归 `TestRealWorkflowFiles::test_real_workflow_files_idempotent`。
 
 ## 关联条目
 
