@@ -66,7 +66,7 @@
 ## 三、预算与登记（代码结构债 / 功能散点）
 
 - [ ] **T2 `pre_scan` 专项清理**（三任务路线图；ADR-0024）：T2a ✅ 复合字面量 typedef；
-      T2b ✅ 主体 #54（pre_scan 机制/配置/linter M1/C 两期产物已删；全量冻结树待补跑）；
+      T2b ✅ #54（pre_scan 机制/配置/linter M1/C 两期产物已删；全量 4454/38 绿）；
       T2c = 删 raw 管线（M2/parser raw/P4/E002·E003 + 剩余 skip）——先证后删；
       T2d = 文档收口（gap/README pre_scan 历史叙述）。链：`ROADMAP.md` P2.9、ADR-0024
 - [ ] **T3 双包抽象对照按部件审查**（三任务路线图，多轮）：C/Verilog 逐部件查抽象泄露，部件序

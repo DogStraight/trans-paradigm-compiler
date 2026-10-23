@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T2b 收尾 + T2c 启动——补跑全量 `pytest tests`（冻结树）；T2c = 删 raw 管线剩余面（M2 窄档摘诊断、parser raw 承载/`raw_sites`、P4 理解/提升插件、E002/E003 安全网与对应测试，含 21 条 skip）；先证后删：grep 生产路径无消费者 + 受影响套件/全量/A-B/语料门禁不变。
-- **待验证假设**：T2b 后 raw 位点已无来源（内部 warning 无 eligible 字段）⇒ parser `raw_sites` 恒空、P4 通路不可达；verilog 无 raw 声明 ⇒ 删除零行为变化；C 复合字面量/强转/真实语料解析面不受影响。
-- **台账**：T2b 主体 #54（pre_scan 机制/配置/linter M1/C 两期产物已删，受影响套件+语料+A/B 绿；全量待补）；T2a ✅ 复合字面量；T2c 判据/止损见 ADR-0024；主线 1 刻度 9/9 不变。
+- **意图**：T2c 启动——按"先证后删"删 raw 管线剩余面：先落证据（T2b 后内部 warning 无 eligible/位点恒空、`grep` 生产路径无 raw 资格来源），再分片删：① linter M2 摘诊断 + convergence/internal_warnings 旁路；② parser raw 承载（`raw_sites/raw_source/try_raw_*`/`build_raw_candidate`）；③ C P4 理解/提升插件（`_raw_understand`/`_raw_transform`）与 E002/E003 安全网；④ 对应测试（p4/raw/parser raw/internal warnings）+ 变异表条目。
+- **待验证假设**：raw 位点在 T2b 后无来源 ⇒ parser raw 分支不可达；P4 插件只消费 raw 节点 ⇒ 可删；verilog 无 raw 声明 ⇒ 删除零行为变化；C 真实语料/复合字面量/强转不受影响。
+- **台账**：T2b ✅ #54（全量 4454 passed/38 skipped）；T2a ✅；T1 ✅；主线 1 刻度 9/9；T2c 后剩 T2d 文档收口 → T3。
 
 ## 估算依据（对照锚，可复核）
 

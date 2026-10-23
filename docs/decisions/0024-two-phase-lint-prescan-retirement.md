@@ -40,7 +40,7 @@ E002·E003 安全网）在 C 上也不再被生产路径使用**（raw 位点只
 - **T2a（✅ 本提交）**：C `CompoundLiteral` 类型名收 `@CastTypeName|@CastTypedefName`
   （复用 #49 门控）⇒ `(t){1}` 直接建树；P4 的"复合字面量 raw 边界"测试改为直接结构断言；
   变异：去该分支 ⇒ 用例红（清单 123 条）。
-- **T2b（✅ 主体 #54）**：
+- **T2b（✅ #54）**：
   - 引擎：`lexer/pre_scan.py` 整文件、`lexer/__init__` 导出、`core/global_state.py` 的
     `lexer.pre_scan._CACHE`、`core/engine_capabilities.py` 能力族串、`analyzer/structure.py`
     的预扫描读取（若有）、两包 `tpc.toml` 的 `[lexer] pre_scan` 行、`grammar/{c,verilog}/
@@ -81,8 +81,8 @@ raw 位点不再产生）；C `_api` 的 `two_phase_product`/`pre_scan_records`/
 verilog 真实语料基线 **无增长**；A/B **0/144**；pyright **0**；`check_doc_refs` PASS；
 生产代码 `grep pre_scan|PHASE_PRE_SCAN|two_phase_product` **0**。变异表 123→**118**。
 
-**遗留**：全量 `pytest tests` 冻结树待下一轮补跑（本提交按 partial 记）；T2c（raw 管线
-大删：M2 摘诊断/parser raw 承载/P4 理解提升/E002·E003 + 剩余 skip 测试）未开始。
+**全量验证（#54 收口）**：`pytest tests` **4454 passed / 38 skipped**（删测后 skip 由 75 降）；
+T2c（raw 管线大删：M2 摘诊断/parser raw 承载/P4 理解提升/E002·E003 + 剩余 skip 测试）待启动。
 
 ## 权衡
 

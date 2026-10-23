@@ -17,7 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 删 C 两期产物 `two_phase_product`/`pre_scan_records`/`merge_phases`/`phases_for`/
     `PHASE_PRE_SCAN`；`test_c_symbol_collection` 改 analyze-only；删
     `test_pre_scan_fallback.py`、`test_linter_raw_eligibility.py`；变异表 123→118。
-  · 验证（**partial**：全量冻结树待下一轮）：C+linter+pipeline 1617 passed/21 skipped；
+  · 验证：C+linter+pipeline 1617 passed/21 skipped；全量 **4454 passed / 38 skipped**；
     e2e 129/7；C 真实语料 7/7 零诊断；verilog 基线无增长；A/B 0/144；pyright 0；
     `check_doc_refs` PASS；生产代码 pre_scan grep 0。
   · 余：T2c 删 raw 管线（M2/parser raw/P4/E002·E003 + 剩余 skip）；T2d 文档收口。
