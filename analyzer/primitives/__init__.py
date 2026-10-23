@@ -21,9 +21,8 @@ from .registry import (
 from . import _scope
 from . import _symbol
 from . import _identifier
-from . import _raw_validate
 
-_PRIMITIVE_MODULES = (_scope, _symbol, _identifier, _raw_validate)
+_PRIMITIVE_MODULES = (_scope, _symbol, _identifier)
 
 __all__ = [
     "register_primitive",

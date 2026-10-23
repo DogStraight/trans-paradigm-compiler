@@ -496,22 +496,6 @@ _MUTATIONS: list[dict[str, str]] = [
         "test": "tests/engine/core/test_marker_matches.py",
     },
     {
-        "why": "改树段（`c.raw_promote`）不再提升 ⇒ raw 段停留在占位、**没有确定结构**（P4 理解路径的"
-               "结构面整体消失；判据 1 必红）",
-        "file": "grammar/c/plugins/semantics/_raw_transform.py",
-        "old": "            node.add_attr(CHILDREN_FIELD, [candidate])\n",
-        "new": "            continue  # 变异：不提升\n",
-        "test": "tests/languages/c/test_c_raw_understanding.py",
-    },
-    {
-        "why": "理解段不再做结构选定 ⇒ 结论 `ok=False` ⇒ 改树段无据可依、不提升（P4 理解路径的"
-               "**理解面**整体失效；判据 1 必红）",
-        "file": "grammar/c/plugins/semantics/_raw_understand.py",
-        "old": "        structure, type_text = _select_structure(candidate, names)\n",
-        "new": "        structure, type_text = \"\", \"\"  # 变异：不做结构选定\n",
-        "test": "tests/engine/analyzer/test_p4_raw_understanding.py",
-    },
-    {
         "why": "CSC001 丢掉**例外表**（退化为朴素计数）⇒ 合法共现形态被误报（`static _Thread_local` / "
                "`extern _Thread_local` / `static thread_local`），handler 单元判据同时红",
         "file": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
@@ -1199,7 +1183,7 @@ _MUTATIONS: list[dict[str, str]] = [
         "file": "grammar/c/00_expressions.toml",
         "old": '    "@CastTypeName|@CastTypedefName",\n    "bracket.r_parentheses",\n    "@InitList",',
         "new": '    "@CastTypeName",  # 变异：去掉 typedef 名复合字面量\n    "bracket.r_parentheses",\n    "@InitList",',
-        "test": "tests/languages/c/test_c_raw_understanding.py",
+        "test": "tests/languages/c/test_c_compound_literal.py",
     },
 ]
 

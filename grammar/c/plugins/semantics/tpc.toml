@@ -1,36 +1,16 @@
-# semantics — C 符号收集产物（声明式；`phase = "analyze"`）+ P4 理解路径（两段协作）
+# semantics — C 符号收集产物（声明式；`phase = "analyze"`）
 #
-# 定位：`docs/gaps/gap-c-semantic-base.md` 的最小首片——产出"带作用域 / 声明序 / 分期标注"
-# 的只读符号记录表；并在其上加 **P4 理解路径**：
-#   · analyzer 段「理解」= `_raw_understand.py`（postpass：语义二次确认 + 结构选定 ⇒ `raw_understand`）；
-#   · transform 段「改树」= `_raw_transform.py`（按结论把 `raw_candidate` 提升为 `sub_node`，
-#     保留 `_verbatim_text` ⇒ 渲染仍直出）。形状与不变式见 `grammar/c/README.md`。
-#
-# 声明面分工：
-#   · 本组件 = analyzer handler（`c_symbol_collect` 原语 + `c_symbols` 后置产物 + 理解结论）
-#     + transform handler（raw 提升插件）；
-#   · 收集点与提取路径 = 核心包的 `[Rule.analyzer.c_symbol_collect]` 声明
-#     （`01_declarations.toml` / `02_types.toml` / `03_statements.toml`——**语言知识在 TOML**）；
-#   · 结构名白名单（`CastExpr`/`CompoundLiteralExpr`）= 包侧常量（`_raw_understand.py`）。
+# 定位：`docs/gaps/gap-c-semantic-base.md` 的最小首片——产出"带作用域 / 声明序"的
+# 只读符号记录表；收集点与提取路径 = 核心包的 `[Rule.analyzer.c_symbol_collect]` 声明
+# （`01_declarations.toml` / `02_types.toml` / `03_statements.toml`——**语言知识在 TOML**）。
 #
 # ⚠ 不声明 `[grammar] files`（本组件无新规则）；不声明任何 rule_hints / 解析期行为。
 
 [analyzer]
-handlers = ["_symbols.py", "_raw_understand.py"]
+handlers = ["_symbols.py"]
 
 # 遍历结束后把符号表物化为只读产物（写 `AnalysisContext.extra["c_symbols"]`）。
 # 无 requires（只读符号表）；produces 与 `_symbols.PRODUCT_KEY` 同名。
 [[analyzer.postpasses]]
 run = "_symbols.py:run_symbol_product"
 produces = ["c_symbols"]
-
-# P4 理解段：符号产物齐备后给 raw 节点挂理解结论（`requires = ["c_symbols"]` 保证顺序）。
-# 结论同时写 `AnalysisContext.extra["c_raw_understanding"]`（可视化 / trace 可查）。
-[[analyzer.postpasses]]
-run = "_raw_understand.py:run_raw_understanding_product"
-requires = ["c_symbols"]
-produces = ["c_raw_understanding"]
-
-# P4 改树段：transform 插件（按上述结论机械提升 raw 节点的 `sub_node`）。
-[transform]
-handlers = ["_raw_transform.py"]

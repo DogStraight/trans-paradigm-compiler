@@ -12,16 +12,11 @@ from typing import Any
 from core.define import Node
 from analyzer.primitives.registry import register
 
-from grammar.c.plugins.semantics import _raw_bridge
 from grammar.c.plugins.semantics._api import (
     collect_declarator_site,
     collect_named_site,
     build_product,
 )
-
-# 导入即注册 raw 校验查询（`register_raw_name_query`）；用模块级引用表达
-# "这是有意为之的副作用导入"（同 analyzer/primitives/__init__ 的 _PRIMITIVE_MODULES）。
-_REGISTERED_QUERIES = (_raw_bridge,)
 
 
 @register("c_symbol_collect")
