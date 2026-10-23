@@ -59,21 +59,15 @@
       接入时 semantic 事实型码仍被收集（或显式登记"benchmark 只对语法完整文件"口径）。
       链：`tests/e2e/eval_benchmark.py`、`docs/gaps/gap-c-preprocessor-scope.md` ㉒
 
-- [ ] **C 真实语料解析回溯成本（性能）**：cJSON.c 单文件解析 ~50–90s（#49 前已有；
-      真实语料门禁单次 ≈90–110s）。成因疑似 atom/后缀候选重复回溯（表达式含大量嵌套
-      括号/成员链时呈指数）；优化面 = atom FIRST 预过滤（已加，效果有限）/位置级 memo。
-      判据：全量语料门禁 ≤30s 且解析结果不变。链：`tests/e2e/eval_diag_baseline_c.py`
+- [ ] **C 真实语料解析回溯成本（性能，主线 2 块 2）**：cJSON 单文件 50–90s、语料门禁
+      ≈90–110s；成因 = atom/后缀候选重复回溯（嵌套括号/成员链处呈指数）。历史实验：atom FIRST
+      预过滤已回退（语义回归），位置级 memo/候选重排待测量。判据：cJSON ≤5s、门禁 ≤30s、
+      解析结果不变（A/B + corpus）。链：`tests/e2e/eval_diag_baseline_c.py`
 ## 三、预算与登记（代码结构债 / 功能散点）
 
-- [ ] **结构欠账 S 有 71 项新增未下结论**：`python tools/structural_score.py --compare` 实测 **基线 0 →
-      当前 1341（Δ +1341，新增 71 项，exit 1）**——新代码（`linter/lookahead.py` 类体、`preprocessor/macro_expand.py`、
-      `tools/feature_sites.py`、循环 #21 的 `preprocessor/macro_timeline.py` / `map_invocations_to_source` 等）未按 R6
-      逐项判保持。判据：每项"重构删掉"或记入 `tools/structural_kept.json`（**reason + source**），`--compare` 回 0。
-      链：`policy/structural_budget.md`
-- [ ] **功能散点步 2b**：剩余 16 个未收敛登记点（有意保留的边界，非欠账——收敛一个删一个；清单与判据见
-      `docs/gaps/gap-feature-scatter.md`「步 2 收敛目标与接受边界」），**另有新增散点未登记**：
-      `python tools/feature_sites.py compare` 实测 **`check` 8→13**（其中 `check:MAC001` 为循环 #21 新增实例）、
-      **`config` 29→30**、**`config:lexer.pre_scan` 2→3** ⇒ 合并登记点或写保持理由。
+- [ ] **功能散点步 2b**：剩余未收敛登记点属**有意保留边界**（收敛一个删一个；清单见
+      `docs/gaps/gap-feature-scatter.md`「步 2」）；**新增散点已清零**（T3-① #60 刷新基线，
+      `feature_sites compare` 现 0 增长）。
 
 ## 四、策略层（不进本档）
 

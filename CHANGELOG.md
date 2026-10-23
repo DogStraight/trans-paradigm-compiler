@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **主线 2 刻度立档（12 块：工具化 + 高性能 0.1.4）**：`PROGRESS.md` 改写为新主线刻度
+  （块 1 基线清算 → 2 parser 性能 → 3/4 片段模式 P0/P1 → 5 unit graph → 6 精化基座 graph 化 →
+  7 增量/编辑器 → 8 诊断粒度 → 9 渲染注释 → 10 工程化缺口 → 11 吞吐基准 → 12 收口）；
+  `ROADMAP.md` 当前主线改写、删除已完成 P2.9；`TODO.md` 清理三条过期项（结构欠账/散点新增/
+  性能前提措辞）。片段模式设计输入 = `_drafts/marker-mode-evaluation.md`（未入库；P1 声明面/
+  能力位属框架级，待作者批准）。
+
+### Added
+
 - **T3 部件⑥：pipeline/config 审查 + C uses 漂移修复（#66；T3 收口 #59–#66）**：
   · L1：C `[engine].uses` 删除 T2c 遗留的 `transform.slots.v1`（C 已无任何 transform 声明；
     `grep grammar/c transform` = 0；policy + C 套件 1238 passed 绿）。
