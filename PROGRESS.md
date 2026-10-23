@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T3 部件③（linter）调查轮——对照 C/Verilog linter 声明面（L1/L2 规则、宏检查/宏卫生、消歧表）、错误路径与诊断面；用判据②（删 linter 声明段）与 `lint accuracy`、A/B 出 leak 清单，落矩阵行。
-- **待验证假设**：T2 删除 raw 资格后 linter 只剩用户诊断面（两包声明面应同构）；宏检查/样式检查的分包差异是语言策略而非引擎方言；单部件 1 调查 + 1 实现轮可收口。
-- **台账**：T3-② 完成（parser 无 leak；协议节点名登记接受；判据② 6/16/6 红证；A/B 0/144）；T3-① ✅；T2 ✅；T1 ✅。
+- **意图**：T3 部件④（analyzer/elaboration）调查轮——对照 C `semantics` 符号产物/检查插件与 Verilog `typed_ports`/`semantic_check`/elaboration 的 analyze 面，审 scope/symbol 原语、postpass 产物契约与插件边界；判据②（删 `[Rule.analyzer.*]`/postpass 声明）+ 相关测试出 leak 清单。
+- **待验证假设**：C `c_symbols` 与 Verilog typed_ports 均走同一 `analyzer` 原语/插件契约（component_protocol）；scope/symbol 声明面两包同构，无引擎语言分支；单部件 1 调查 + 1 实现轮可收口。
+- **台账**：T3-③ 完成（linter 无 leak；判据② 5/6/6 红证；lint accuracy 33/fp0；A/B 0/144）；T3-①② ✅；T2 ✅；T1 ✅。
 
 ## 估算依据（对照锚，可复核）
 

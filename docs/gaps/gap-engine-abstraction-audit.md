@@ -70,6 +70,7 @@ C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个�
 | 4 | **文件链接 / 入口点** | C 的 `#include` 全链路（`path_forms`、内容进流、行映射、渲染剪枝）；Verilog 的 `module_index` 项目符号可见性；CLI 单文件 vs `ProjectChecker.check(paths)` 多入口 | **新引擎代码**（缺统一 unit graph） | `preprocessor/primitives/include.py`、`pipeline/__init__.py`（include 剪枝）、`analyzer` 的 `module_index`、`ROADMAP.md`「用户侧 CLI 形态」；两门语言各一套索引 | 引擎级 **unit graph / 入口协议**（根文件集 + 解析器声明 + 单位索引 + 链接策略），两门语言的索引收敛为配置 | 待审查（阶段 5 真实 C 语料接入会先逼一遍） |
 | 5 | **容器成员位增量**（轮 #35） | `StructBody = { (@StructMember\|@StructMemberExtra)* }` + 空槽位注入 | **原样**（零引擎改动） | `tests/languages/c/test_c_standard_conformance.py::TestStaticAssertMemberPosition`；门禁变异 101 | —（抽象成立） | 已过 |
 | 7 | **字面量前缀 / 数字形态声明面**（轮 #37/#38） | C 用 `[string] prefixes` + `[[number.based]]`（`suffix` / `base_prefix` / `digit_separator`）按名合并表达 L/u/U/u8、`0b…`、`1'000`；其余语言包不声明即无影响 | **原样**（引擎声明面） | `tests/languages/c/test_c_lexer.py::TestLiteralPrefixes/TestLiteralPrefixTiers/TestDigitSeparator{,Tiers}`；`tests/engine/lexer/test_number_digit_separator.py`；门禁变异 103/104/105/106 | —（抽象成立） | 已过 |
+| 10 | **linter 声明面（T3-③）** | C：`[macro_syntax]` + 插件 check 规则；Verilog：`[linter] macro_hygiene`/`style_check`；宏检查/样式消费点均为引擎通用、无语言分支 | **原样** | `lang_penetration --dirs linter`（0 结构名）；判据② 5/6/6 红证；lint accuracy 33/fp0；A/B 0/144 | —（无 leak） | 已审 ✅ |
 | 9 | **parser 声明面（T3-②）** | C 的 `register`/`requires_symbol`/`symbol_namespaces` 与 Verilog 的规则字段（`is_atom`/块边界）全走同一引擎字段；协议节点名（Root/Comment/MacroCall/pratt 产物）为引擎契约 | **原样（+协议面接受）** | `tools/lang_penetration.py --dirs parser`；判据② 见上「T3 部件②审查记录」；A/B 0/144 | —（无 leak） | 已审 ✅ |
 | 8 | **词法/预处理声明面（T3-①）** | C/Verilog 注释/数字/宏/字符串形态全在包内声明；判据②删声明均红；弱信号 0 结构名；c4 复用同一面 | **原样 + 1 方言复制（Verilog 注释双声明）** | `tools/lang_penetration.py --dirs lexer preprocessor`；删声明探针见上「T3 部件①审查记录」 | 删 Verilog `token.toml` 重复 `[comment]`（#60 已做） | 已审（L1/L2 ✅） |
 | 6 | **注释归属**（行中/行尾/前置/容器项间） | 引擎统一槽位模型，各语言布局只消费槽位 | **原样** | `renderer/renderer_architecture.md`（注释处理节）；`tests/engine/renderer/test_comment_slots.py` + C/verilog 渲染门禁 | —（抽象成立） | 已过（本轮 #32/#33 的修复未引入语言分支） |
@@ -136,6 +137,35 @@ A/B **0/144**；`structural_score --compare` S=1110（Δ0）、`feature_sites co
 **leak 清单**：无。C 的 parser 符号字段是通用声明面（供任何包声明，Verilog 选择插件面是
 语言策略，不是引擎方言）；协议节点名是引擎契约。**第二语言复用实验**：无 leak 候选 ⇒
 按止损不做（观察，未对照）。
+
+## T3 部件③审查记录（linter，#62）
+
+**弱信号**：`python tools/lang_penetration.py --dirs linter` → 结构名字面量 **0 处**；
+Tier A 23 处逐条核对全为误报：`width`/`_max_width`（样式页宽）、`reset_atom_memo`
+（动词）。Tier B 125 仅计数。⇒ 无"引擎按名认语言结构"信号。
+
+**声明面对照**（两包选不同检查面，但都由引擎通用消费者读取）：
+
+| 语言 | linter 声明面 | 消费者 |
+|---|---|---|
+| C | `[macro_syntax]`（宏**定义**形式语法；`_macro.toml`）；无 `[linter]` 段；check 规则走插件能力（`checks.rules.v1`，TAG/ENUM/LAB/MAC/CSC） | `linter/macro_syntax.py`；插件 L2 handler |
+| Verilog | `[linter] macro_hygiene`（宏**使用**卫生）+ `style_check`（样式页宽） | `linter/checkers/macro_hygiene.py`、`style.py` |
+
+两者是**互补检查**而非同能力双写；引擎按配置启用、无语言分支。
+
+**判据②（临时删声明 → 受影响测试；测后还原）**：
+
+| 探针 | 结果 |
+|---|---|
+| 删 Verilog `[linter] macro_hygiene` | `test_linter_macro_hygiene.py` **5 failed** |
+| 删 Verilog `[linter] style_check` | `test_linter_style.py` **6 failed** |
+| 删 C `[macro_syntax]` | `test_c_macro_syntax_check_path.py` **6 failed** |
+
+**诊断面**：`eval_lint_accuracy` hit_code **33 / fp 0**；A/B **0/144**；
+`structural_score --compare` S=1110（Δ0）；`feature_sites compare` 0。
+
+**leak 清单**：无。T2 删除 raw 资格后 linter 只剩**用户诊断**面（两包同构）；检查分包差异
+属语言策略/插件契约（④ 部件继续审 `checks.rules.v1`）。第二语言复用实验无候选 ⇒ 不做。
 
 ## 可实现性（leak 候选的内置化骨架；审查轮细化）
 
