@@ -18,6 +18,8 @@ _type_ports_flat = {
     "key": "{scope.name}.{name}",
     "source": {
         "attr": "ports",
+        # 成品扁平行属性名（T3-⑤ 声明化：引擎只读该键，不认识 verilog 属性名）
+        "resolved_attr": "resolved_ports",
         "items": True,
         "exclude_keys": ["type_spec", "target_role"],
     },

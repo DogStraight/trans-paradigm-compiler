@@ -65,9 +65,6 @@
       判据：全量语料门禁 ≤30s 且解析结果不变。链：`tests/e2e/eval_diag_baseline_c.py`
 ## 三、预算与登记（代码结构债 / 功能散点）
 
-- [ ] **T3-⑤ 修复**（transform/renderer）：`_semantic_mapping` 去掉 `ports`/`resolved_ports` 硬编码，
-      改读 mapping entry 声明键 `source.resolved_attr`；Verilog `_mapping.py` 声明之。判据见
-      `gap-engine-abstraction-audit.md`「T3 部件⑤审查记录」（引擎 grep 无字面量、去声明键 8 failed）。
 - [ ] **T3 双包抽象对照按部件审查**（三任务路线图，多轮）：C/Verilog 逐部件查抽象泄露，部件序
       lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config；每部件
       用判据②声明面缺失探针 + ③弱信号 + 第二语言复用实验，输出 leak 清单（修复立项/登记接受）

@@ -1168,6 +1168,14 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": '    "@CastTypeName",  # 变异：去掉 typedef 名复合字面量\n    "bracket.r_parentheses",\n    "@InitList",',
         "test": "tests/languages/c/test_c_compound_literal.py",
     },
+    {
+        "why": "T3-⑤ L1 声明化：mapping entry 的 `source.resolved_attr` 是成品扁平行唯一来源；"
+               "删除该声明键 ⇒ 成品行不再注入，typed_ports 行来源/嵌套/invert 判据必红",
+        "file": "grammar/verilog/plugins/typed_ports/_mapping.py",
+        "old": "        \"resolved_attr\": \"resolved_ports\",\n",
+        "new": "",
+        "test": "tests/languages/verilog/test_typed_ports.py",
+    },
 ]
 
 

@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **T3 部件⑤实现：transform 成品行属性声明化（#65，L1 修复）**：
+  · `transform/_semantic_mapping.py` 去掉 `attr == "ports"` / `sym.attrs["resolved_ports"]`
+    硬编码，改读 mapping entry 的声明键 `source.resolved_attr`；helper 更名
+    `_has_declared_flat_rows`；Verilog `typed_ports/_mapping.py` 声明
+    `"resolved_attr": "resolved_ports"`。引擎 `grep` 的 `ports`/`resolved_ports` 字面量 **0**。
+  · 判据：去掉 Verilog 声明键 → `test_typed_ports` **4 failed**（声明承重）；变异表新增该条
+    （114→115）；全量 **4377 passed/14 skipped**；A/B **0/144**；`structural_score` Δ0。
+  · 余：部件⑥（pipeline/config）→ T3 收口。
+
+### Added
+
 - **T3 部件①实现：Verilog 注释单一声明面 + 工具基线刷新（#60）**：
   · L1：删 `grammar/verilog/token.toml` 中重复的 `[comment].pairs`（保留
     `base/_lexer.toml`，与 C 对齐）；修复后删剩余一份 ⇒ `lexer.tokenize("// c")` 无

@@ -18,7 +18,7 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
         trigger = { kind = "..." }    ← 符号类别触发
         table = "name"                ← 输出到 mapping["name"]
         key = "{scope.name}.{name}"   ← 键模板
-        source = { attr = "ports", ... } ← 从符号 attrs 提取
+        source = { attr = "<attr>", ... } ← 从符号 attrs 提取
         items = true                   ← 源数据是列表，逐项处理
         fields = { ... }               ← 每项提取的子字段
 
@@ -26,7 +26,7 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
     1. SemanticMappingPlugin._build_mappings() — 从 scope 树构建映射表
     2. ConfigDrivenTransform.process()         — 使用映射表展开类型端口
     （resolve.*/apply_refs 后处理已删——role 端口展开由组件 postpass 写
-    resolved_ports、_apply_entry 直接注入，见 ADR-0015 关联的 typed_ports
+    成品行属性名（`source.resolved_attr`）、_apply_entry 直接注入，见 ADR-0015 关联的 typed_ports
     step 2；引擎 resolve_refs 原语链已整体移除）
 Doc: docs/language_walkthrough.md（语义映射）
 """
@@ -133,8 +133,8 @@ class SemanticMappingPlugin(TransformPlugin):
 
         if not source_cfg.get("items", False):
             return
-        # 成品扁平行（resolved_ports）直接注入；否则走字段模板提取
-        if _uses_resolved_ports(source_cfg, sym):
+        # 成品扁平行（`source.resolved_attr` 声明）直接注入；否则走字段模板提取
+        if _has_declared_flat_rows(source_cfg, sym):
             self._inject_flat_rows(table, key, source_data)
             return
         items_result, values = self._process_items(entry, source_data)
@@ -148,7 +148,7 @@ class SemanticMappingPlugin(TransformPlugin):
             )
 
     def _inject_flat_rows(self, table: str, key: str, source_data: list) -> None:
-        """成品扁平行注入（`resolved_ports` 路径）+ 行来源旁路收集。
+        """成品扁平行注入（`source.resolved_attr` 路径）+ 行来源旁路收集。
 
         行来源（展开侧协议的溯源字段）不进表数据——只旁路收集供
         `describe()` 落盘。
@@ -212,8 +212,8 @@ class SemanticMappingPlugin(TransformPlugin):
 #   `{$.key}`  → 取 item 同键的值（源缺键 = 该字段整体跳过）
 #   含 `[*]`   → 按路径取值，路径上遇列表按 `[*]` 展开成多行（笛卡尔）
 #   其它       → 字面量（每行都写该字符串）
-# 回退路径专用：role 端口集有 `resolved_ports` 时 `_apply_entry` 直接注入成品行，
-# 不走这里（见 transform/README.md「resolved_ports 优先注入」）。
+# 回退路径专用：源有声明键 `source.resolved_attr` 的成品行时 `_apply_entry` 直接注入，
+# 不走这里。
 
 
 def _apply_field_template(
@@ -303,23 +303,24 @@ def _entry_key(entry: dict, sym: Any, scope: Scope) -> str:
     return key
 
 
-def _uses_resolved_ports(source_cfg: dict, sym: Any) -> bool:
-    """源是否走 `resolved_ports` 成品行路径（组件递归展开的完整端口集）。
+def _has_declared_flat_rows(source_cfg: dict, sym: Any) -> bool:
+    """源是否走"成品扁平行"路径（组件递归展开后的完整集合）。
 
-    role 端口集若已有组件递归展开的结果（含 nested/invert 对侧），它已是扁平
-    `{direction, name, packed_range}` 行，直接注入、不走 fields 模板提取。
-    引擎只做通用判断（`attr == "ports"` 且有 `resolved_ports`），语言知识在组件侧。
+    语言包在 mapping entry 的 `source.resolved_attr` 声明"成品行属性名"；引擎只读
+    该声明键，不认识任何语言属性名。未声明 ⇒ 不走成品行路径（回退字段模板提取）。
     """
-    if source_cfg.get("attr") != "ports":
+    resolved_attr = source_cfg.get("resolved_attr")
+    if not resolved_attr:
         return False
-    return bool(sym.attrs.get("resolved_ports"))
+    return bool(sym.attrs.get(resolved_attr))
 
 
 def _entry_source(source_cfg: dict, sym: Any) -> list:
-    """源数据：attr 取值（resolved_ports 优先）→ 列表归一 → 包含过滤 → 排除过滤。"""
+    """源数据：attr 取值（声明键优先）→ 列表归一 → 包含过滤 → 排除过滤。"""
     data = sym.attrs.get(source_cfg.get("attr", ""), [])
-    if _uses_resolved_ports(source_cfg, sym):
-        data = sym.attrs.get("resolved_ports")
+    resolved_attr = source_cfg.get("resolved_attr")
+    if resolved_attr and _has_declared_flat_rows(source_cfg, sym):
+        data = sym.attrs.get(resolved_attr)
     if not isinstance(data, list):
         data = [data] if data else []
     data = _apply_filter(data, source_cfg.get("filter", {}))

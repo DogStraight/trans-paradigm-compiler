@@ -348,7 +348,7 @@ def _flatten_dict(obj: dict, ctx: dict, prefix: str) -> None:
 def _expand_primitive(engine, node, config, root_scope):
     """expand 原语：lookup + foreach + emit
 
-    消费 type_ports_flat 表（组件 postpass 展开的完整端口集，经 resolved_ports
+    消费语言包声明的成品行表（组件 postpass 展开的完整集合，经 resolved_attr
     注入），对每条扁平端口 { direction, name } 做 foreach → switch → emit AST
     节点。
 

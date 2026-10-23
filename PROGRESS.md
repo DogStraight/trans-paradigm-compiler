@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T3 部件⑤实现轮——修 L1 引擎硬编码：`transform/_semantic_mapping.py` 改为读 mapping entry 的声明键 `source.resolved_attr`，Verilog `_mapping.py` 声明 `resolved_attr = "resolved_ports"`；判据 = 引擎无 `ports`/`resolved_ports` 字面量、去掉声明键 → Verilog 套件 8 failed、全量/A-B/渲染门禁绿。
-- **待验证假设**：resolved_ports 路径完全由 typed_ports 配置承载（变异已证 8 failed）；改声明键后行为等价；随后进部件⑥（pipeline/config）审 `[engine] uses`/声明键消费/空转检测。
-- **台账**：T3-⑤ 审查完成（renderer 无 leak；L1 transform 硬编码已立项；判据② 22/8/rc2 红证）；T3-①②③④ ✅；T2 ✅；T1 ✅。
+- **意图**：T3 部件⑥（pipeline/config/plugin 契约）调查轮——审 `[engine] uses`/声明键→消费点/空转检测/双路径：用 `tools/config_sites.py`、`feature_sites.py`、`structural_score.py` 与判据②（删声明键）出 leak 清单，落矩阵最后一行；随后 T3 收口（回顾矩阵/未修项/T3 总结）。
+- **待验证假设**：两包 `[engine] uses` 与 pipeline units 声明同构；配置键消费点无空转/双读；`structural_score`/`feature_sites` 基线保持 0 增长；T3 六部件矩阵可完整收口。
+- **台账**：T3-⑤ 收口（#64 审 + #65 修：L1 声明化，引擎字面量 0；全量 4377/14、A/B 0/144）；T3-①②③④ ✅；T2 ✅；T1 ✅。
 
 ## 估算依据（对照锚，可复核）
 
