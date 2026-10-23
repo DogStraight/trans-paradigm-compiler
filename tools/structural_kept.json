@@ -1,13 +1,4 @@
 {
-  "_note": [
-    "判保持登记表（结构欠账分口径的豁免源，见 policy/structural_budget.md）。",
-    "每条必须写理由与出处——'保持'是结论，不是'没看'；没有理由的项不许进这里。",
-    "键 = \"<族>|<项键>\"（与 tools/structural_baseline.json 的 items 键同形）。",
-    "工具在 compute 阶段跳过这些项，--compare 不再把它们报为回归。",
-    "⚠ 理由必须**自足**：不许写\"见某草稿某节\"——草稿会随收尾销毁（_drafts/ 纪律），",
-    "指针一断这条'保持'就退化成'没看'。完整性由 tests/policy/test_structural_kept.py 守",
-    "（理由长度 + 键能解析到真实定义；结构性搬家后路径失效会当场变红）。"
-  ],
   "items": {
     "CLASS|lexer/main_lexer.py:Lexer": "模块即类（R2）判保持——作者 2026-09-20 定调「允许拆文件，但认知复杂度低时可以接受内聚」。实测：类内 38 个方法**最大认知 12 / 最大 CC 6**（阈 15 / 10 以下），合计认知 144 / CC 125；规模来自**方法数（覆盖面广）**而非单个方法深度——拆 mixin 只切共享 `self._*` 状态，是形式拆分。",
     "CLASS|linter/checkers/matcher.py:RuleMatcher": "模块即类（R2）判保持——同 Lexer 同判据。实测：32 个方法最大认知 14 / 最大 CC 9（均在阈下），合计认知 172 / CC 158；规模来自规则匹配的分支族（每支一个短方法），不是单点难读。",
@@ -37,6 +28,11 @@
     "CLONE|policy.check_doc_refs._collect_d2_targets <-> policy.check_doc_refs._rule_d2_nav_indexes": "同形不同源（非重复，**同文件内**）：共性只有“遍历 NAV_FILES → 逐行读文本”5 行前导骨架；两处语义**刻意不对称**且已在 docstring 记录——`_rule_d2_nav_indexes` 走 `_iter_md_lines`（**跳过 ``` 代码块**）产 `list[Finding]`，`_collect_d2_targets` 走 `text.splitlines()`（**含代码块**）产 `set[str]`，孤儿集是引用集的**超集**。抽前导需把“行过滤 + 产出口”做成回调参数，反而掩盖这处不对称。2026-09-22 B-C 快照按 A–G 重归位时发现：此前仅由 R4（两侧都在 policy/）机械豁免、**无逐项结论**，本次补登记。",
     "COG|parser.parser_core._atom_parser_impl": "性能缓存保持：atom 位置 memo 的命中/未命中分支是块 2 回溯收口的核心（cJSON parse 58.7→6.5s、语料门禁 90–110→29.4s；`docs/gaps/gap-parser-backtracking.md`）。分支不可再拆而不引入额外调用开销；判据 = parser/语言/e2e 套件 + A/B 0/144 + corpus 0 诊断。2026-10-23 块 2 实施判定。",
     "COG|tools.fragment_rewrite._parse_markers": "P0 片段变换记号的单层配对状态机（begin/end/嵌套/未闭合/死分支水域）分支密度高；P0 为可失败原型，P1 契约面批准后会重写为声明式规则/能力位。判据=tests/engine/test_fragment_rewrite.py（10 条）+ 死分支/负例；2026-10-23 块3 P0 判定。",
-    "CC|tools.fragment_rewrite._parse_markers": "P0 片段变换记号的单层配对状态机（begin/end/嵌套/未闭合/死分支水域）分支密度高；P0 为可失败原型，P1 契约面批准后会重写为声明式规则/能力位。判据=tests/engine/test_fragment_rewrite.py（10 条）+ 死分支/负例；2026-10-23 块3 P0 判定。"
+    "CC|tools.fragment_rewrite._parse_markers": "P0 片段变换记号的单层配对状态机（begin/end/嵌套/未闭合/死分支水域）分支密度高；P0 为可失败原型，P1 契约面批准后会重写为声明式规则/能力位。判据=tests/engine/test_fragment_rewrite.py（10 条）+ 死分支/负例；2026-10-23 块3 P0 判定。",
+    "COG|linter.discovery.Discovery._discover_statement": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。",
+    "CC|linter.discovery.Discovery._discover_statement": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。",
+    "COG|linter.discovery._is_bracket_stmt_container": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。",
+    "CLASS|linter/discovery.py:Discovery": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。",
+    "CLASS|linter/lookahead.py:LookaheadTable": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。"
   }
 }

@@ -25,7 +25,7 @@ from .checker import (
     CTX_TOP,
     DiscoveredNode,
 )
-from .lookahead import LookaheadTable
+from .lookahead import LookaheadTable, fallback_statement_names
 
 # discovery 递归深度上限（坏输入收敛防御，见 _discover_range 注释）
 _MAX_DISCOVER_DEPTH = 64
@@ -65,6 +65,44 @@ def _derive_attr_openers(tree: dict) -> tuple[str, str] | None:
     return None
 
 
+def _is_bracket_stmt_container(discovery: "Discovery", rule: str, opener: str) -> bool:
+        """规则是否为**以当前括号开头的纯定界语句容器**（如 `{ @Stmt* }`）。
+
+        与 scanner 的纯容器判定同口径：production 只含定界 token + 语句/块引用，
+        且首个元素就是当前开括号；用于把 `{...}` 转块分支递归 body，同时避免把
+        `[[nodiscard]] int f(void){...}` 这类"属性前缀 + 函数定义"误当括号容器。
+        """
+        info = discovery._tree.get(rule, {}) or {}
+        if info.get("block_start") or info.get("block_end"):
+            return False
+        prods = info.get("prods") or []
+        if not prods:
+            return False
+        first = prods[0]
+        if not isinstance(first, dict) or first.get("type") != "token":
+            return False
+        if opener not in split_token_types(first.get("token_type", "")):
+            return False
+        delim = (
+            set(discovery._block_openers)
+            | set(discovery._block_closers)
+            | set(discovery._bracket_openers)
+            | set(discovery._bracket_closers)
+        )
+        seen_body = False
+        for elem in prods:
+            if not isinstance(elem, dict):
+                return False
+            typ = elem.get("type")
+            if typ == "token":
+                if not set(split_token_types(elem.get("token_type", ""))) <= delim:
+                    return False
+            elif typ in ("repeat", "optional", "plus", "call"):
+                seen_body = True
+            else:
+                return False
+        return seen_body
+
 class Discovery:
     """发现器：产出自动注册的扁平节点列表。"""
 
@@ -98,6 +136,9 @@ class Discovery:
         self._continuation_openers = self._derive_continuation_openers(tree)
         # 未识别语句诊断（本次 discover 累积，scan 后由 scanner 合并）。
         self._unrecognized: list[LintDiagnostic] = []
+        # 括号定界语句容器 body 的语句恢复深度（仅该上下文启用 fallback 候选，
+        # 避免把全局"未识别"诊断语义改成 phase-statement）
+        self._stmt_recovery_depth = 0
 
     def _derive_continuation_openers(self, tree: dict) -> frozenset[str]:
         """容器结构延续关键字（配置驱动推导，不硬编码）。
@@ -300,7 +341,11 @@ class Discovery:
         # 错算到 `{` 之后一格，绕开了括号分支（偶然生效）。
         if candidates and isinstance(candidates[0], str):
             info = self._tree.get(candidates[0], {}) or {}
-            if info.get("block_end"):
+            # 块规则（有 block_end）或括号定界语句容器（如 CompoundStmt
+            # `{ @Stmt* }`）：转块分支注册节点并递归 body。
+            if info.get("block_end") or _is_bracket_stmt_container(
+                self, candidates[0], t.type
+            ):
                 return self._discover_block(
                     tokens, i, end, context, depth, nodes, record=record
                 )
@@ -342,11 +387,20 @@ class Discovery:
             return end_idx
         rule = self._rule_of(candidates)
         be = (self._tree.get(candidates[0], {}) or {}).get("block_end") or ""
-        end_idx = self._skip_to_end(tokens, i, {be}, end) if be else i + 1
-        if end_idx > i:
+        if be:
+            end_idx = self._skip_to_end(tokens, i, {be}, end)
             body_start, body_end = self._block_body(
                 tokens, i, end_idx, candidates[0], end
             )
+        else:
+            # 括号定界语句容器（如 C `CompoundStmt` = `{ @Stmt* }`）：规则没有
+            # block_start/end 字段，但开括号同时是引擎 block opener。用括号配对
+            # 定边界并递归 body——否则整块只作为一个语句检查，`@Stmt*` 内首个
+            # 坏语句的 trial 错误被 _match_repeat 丢弃，只剩一条 coarse 诊断。
+            end_idx = self._skip_balanced(tokens, i, end)
+            body_start, body_end = i + 1, max(i + 1, end_idx - 1)
+        self._stmt_recovery_depth += 1 if not be else 0
+        try:
             children = (
                 self._discover_range(
                     tokens, body_start, body_end, context, depth + 1, record=record
@@ -354,10 +408,13 @@ class Discovery:
                 if body_start < body_end
                 else []
             )
-            if record:
-                node = self._make_stmt_node(rule, i, end_idx, context)
-                node.children = children
-                nodes.append(node)
+        finally:
+            if not be:
+                self._stmt_recovery_depth -= 1
+        if record:
+            node = self._make_stmt_node(rule, i, end_idx, context)
+            node.children = children
+            nodes.append(node)
         return end_idx
 
     def _discover_statement(
@@ -382,11 +439,21 @@ class Discovery:
         if candidates is None:
             return i + 1
         if not candidates:
-            # 有语句起点特征但无任何已知语句规则匹配（拼错关键字/残缺结构头）
-            # → 记录未识别诊断，不静默吞错。
-            if record:
-                self._record_unrecognized(tokens, i)
-            return i + 1
+            # 括号定界语句容器 body 内（如 C 函数体 `{ a + ; b + ; }`）：Level 2
+            # 试解析无候选时按首 token 的已知语句候选回退注册，让检查阶段逐条报
+            # 精确错误；其余上下文保持原"未识别"诊断语义（不改变全局错误分类）。
+            if self._stmt_recovery_depth and record:
+                fallback = fallback_statement_names(
+                        self._lookahead.keyword_map,
+                        self._lookahead.ident_candidates,
+                        tokens[i].type,
+                    )
+                if fallback:
+                    candidates = fallback[:1]
+            if not candidates:
+                if record:
+                    self._record_unrecognized(tokens, i)
+                return i + 1
         rule_name = candidates[0]
         nested = isinstance(rule_name, str) and self._is_nested_container(rule_name)
         if nested:

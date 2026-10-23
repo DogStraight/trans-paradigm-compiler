@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **块 8 块内诊断粒度（#71）**：C `CompoundStmt` 的 `{ ... }` 作为括号定界语句容器递归发现子语句；
+  容器 body 内 Level 2 试解析无候选时按首 token 回退注册；父容器检查器在子节点存在时让位。
+  `void f(void) { a + ; b + ; }` 现报 **2 条位置正确**的 `phase-statement`（char 17/23），不再只报
+  1 条指向块起点；合法块 0 诊断。非容器上下文保持原未识别语义。
+  · 新增 `tests/languages/c/test_c_block_diagnostics.py`；linter/C/Verilog/e2e 全绿；A/B 0/144。
+  · 结构分：`COG/CC`/类规模增长按块 8 行为理由登记 kept；PROGRESS 块 8 ✅（4/12）；TODO 删除该项。
+
+### Added
+
 - **块 3 片段模式 P0（#70）**：独立 CLI `tpc fragment` + `tools/fragment_rewrite.py`：
   显式行注释记号（`// tpc:fragment id=<id> begin` … `// tpc:fragment end`，单层/显式 id）圈定区域，
   纯语法规则 `always @(*)` → `always @*`；默认 dry-run diff、`--write` 落盘。

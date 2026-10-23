@@ -8,14 +8,6 @@
 
 ## 一、C 包缺陷（能做的）
 
-### 1.1 检查与诊断面（"该报的没报 / 报得粗"）
-- [ ] **块内诊断粒度粗（每块只报一条，且报文指错位置）**：`void f(void) { a + ; b + ; }` → 1 条指向
-      `b` 的 `expected '}'`，**真错在 `a + ;`**（c4 同形样本 → 2 条精确）。成因 = `CompoundStmt` 块体无
-      独立语句节点 + `matcher._match_repeat` 遇错即 `break`；两条候选修法**各有实测代价**（(A) 包侧改块
-      规则 ⇒ 推翻本包锁进测试的 `Declaration`/`ExprStmt` 消歧；(B) 引擎侧语句边界恢复 ⇒ 改变**所有语言**
-      的坏输入诊断面）。判据：块内每条坏语句各报一条**位置正确**的诊断。
-      链：`docs/gaps/gap-parser-linter-approximation.md`
-
 ### 1.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
 - [ ] **展平行内行尾注释的 LineSuffix 落地**：行终止注释落在**展平行内**的声明符/说明符之间
       时，LineSuffix 在原子节点边界就地落地，把后续 token 吞进注释（`struct S { int // c\nx; };`

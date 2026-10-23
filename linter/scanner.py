@@ -22,6 +22,7 @@ from core.define import GrammarRule
 from core.config_registry import ConfigRegistry, declare_cfg
 from core.errors import ConfigError
 from core.token_protocol import (
+    split_token_types,
     BRACKET_L_PREFIX,
     BRACKET_R_PREFIX,
     bracket_left,
@@ -118,6 +119,77 @@ def _derive_opener_prev_excludes(tree: dict) -> dict[str, frozenset[str]]:
         for prod in info.get("prods", []):
             _feature_end_tokens(prod, excludes)
     return {k: frozenset(v) for k, v in excludes.items()}
+
+
+def _is_pure_stmt_container(
+    tree: dict,
+    block_openers,
+    block_closers,
+    bracket_openers,
+    bracket_closers,
+    rule,
+) -> bool:
+    """纯定界语句容器（如 `{ @Stmt* }`）：只有定界 token + 语句引用。
+
+    这类节点的父检查器会把 `@Stmt*` 内坏语句的 trial 错误吞成一条
+    coarse 诊断；子节点已独立注册检查器时报精确错误，父检查器应跳过。
+    有 block_start/end 的关键字容器不在此列（父检查器负责块结构）。
+    """
+    if not isinstance(rule, str):
+        return False
+    info = tree.get(rule, {}) or {}
+    if info.get("block_start") or info.get("block_end"):
+        return False
+    prods = info.get("prods") or []
+    if not prods:
+        return False
+    delim = (
+        set(block_openers)
+        | set(block_closers)
+        | set(bracket_openers)
+        | set(bracket_closers)
+    )
+    seen_body = False
+    for elem in prods:
+        if not isinstance(elem, dict):
+            return False
+        typ = elem.get("type")
+        if typ == "token":
+            if not set(split_token_types(elem.get("token_type", ""))) <= delim:
+                return False
+        elif typ in ("repeat", "optional", "plus", "call"):
+            seen_body = True
+        else:
+            return False
+    return seen_body
+
+
+def _register_discovery_checkers(scanner, tokens, registry) -> None:
+    def register(node) -> None:
+        if node.children and _is_pure_stmt_container(
+            scanner._tree,
+            scanner._block_openers,
+            scanner._block_closers,
+            scanner._bracket_openers,
+            scanner._bracket_closers,
+            node.rule,
+        ):
+            for child in node.children:
+                register(child)
+            return
+        registry.add(
+            StatementChecker(
+                node.rule,
+                node.start,
+                node.end,
+                scanner._matcher,
+            )
+        )
+        for child in node.children:
+            register(child)
+
+    for node in scanner._discovery.discover(tokens):
+        register(node)
 
 
 class LinterScanner:
@@ -363,20 +435,7 @@ class LinterScanner:
         # 注册为独立 StatementChecker——父节点按 production 匹配（@Stmt 由
         # matcher 用 end_case 扁平跳过），子节点独立检查自身区间，扁平验证。
         if self.enable_phase2:
-            def register(node) -> None:
-                registry.add(
-                    StatementChecker(
-                        node.rule,
-                        node.start,
-                        node.end,
-                        self._matcher,
-                    )
-                )
-                for child in node.children:
-                    register(child)
-
-            for node in self._discovery.discover(tokens):
-                register(node)
+            _register_discovery_checkers(self, tokens, registry)
 
         # 未识别语句诊断（发现阶段记录）与各 Checker 诊断合并输出。
         # 宏定义的**形式化语法**约束在此层（AST 前）：指令行已被扫指令消费、不进 lint

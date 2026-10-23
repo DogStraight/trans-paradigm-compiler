@@ -142,12 +142,22 @@ _MUTATIONS: list[dict[str, str]] = [
         "file": "linter/discovery.py",
         "old": """        if candidates and isinstance(candidates[0], str):
             info = self._tree.get(candidates[0], {}) or {}
-            if info.get("block_end"):
+            # 块规则（有 block_end）或括号定界语句容器（如 CompoundStmt
+            # `{ @Stmt* }`）：转块分支注册节点并递归 body。
+            if info.get("block_end") or _is_bracket_stmt_container(
+                self, candidates[0], t.type
+            ):
                 return self._discover_block(
                     tokens, i, end, context, depth, nodes, record=record
                 )
 """,
-        "new": "",
+        "new": """        if candidates and isinstance(candidates[0], str):
+            info = self._tree.get(candidates[0], {}) or {}
+            if False:  # 变异：不转块分支
+                return self._discover_block(
+                    tokens, i, end, context, depth, nodes, record=record
+                )
+""",
         "test": "tests/languages/c4/test_c4_linter.py",
     },
     {

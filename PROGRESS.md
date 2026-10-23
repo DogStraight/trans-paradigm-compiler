@@ -22,19 +22,21 @@
 | 5 | **unit graph 内置能力** | ⏳ `unit_graph.v1`：C include 与 Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分支 |
 | 6 | **精化基座 graph 化** | ⏳ elaboration 只消费 graph 原子/边；T3 接受项 `inst_sites` 命名关闭 |
 | 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |
-| 8 | **诊断粒度** | ⏳ 块内 N 个坏语句 → N 条位置正确诊断 |
+| 8 | **诊断粒度** | ✅ 块内 2 坏语句 → 2 条位置正确 `phase-statement`（#71；父容器粗诊断让位）；`test_c_block_diagnostics.py` |
 | 9 | **渲染/注释遗留** | ⏳ LineSuffix/注释簿记/括号首元素三形态幂等且保真 |
 | 10 | **工程化缺口** | ⏳ A/B inproc、yaml workflow 幂等、cp1252 排练、C→V→C postpass、eval_benchmark 口径 |
 | 11 | **吞吐/基准** | ⏳ fuzz 40→100 iter/s；parser 2.5x；benchmark 阈值进 CI |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 
-**当前 3 / 12**。基线锚：全量 4377/14、A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、feature 0。
+**当前 4 / 12**。基线锚：全量 4377/14、A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、feature 0。
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 4 片段模式 P1 **需作者批准契约面**（`[[island_rules]]` + `island_rewriter` 能力位）；未批前转块 8 诊断粒度（引擎/语言包内、不依赖新声明面），批后 P1 插入块 4。
-- **待验证假设**：P1 的声明段/能力位是框架级（新 schema/组件类型），须先批；P0 独立工具已证明 identity/死分支/假记号/幂等安全判据；块 8 的块内多错误恢复可独立推进。
-- **台账**：块 1 ✅、块 2 ✅（cJSON 2.98s/门禁 20–23s）、块 3 ✅（#70：10 单测、259 文件 0 变化）；主线 2 当前 3/12；P1 契约问题见 `gap-fragment-mode.md`。
+- **意图**：P1 契约面仍待作者批准；未批前转块 9 渲染/注释遗留——先复现 LineSuffix 吞噬
+  （`struct S { int // c\nx; };`）、注释簿记事务化、括号首元素注释三形态，再按触发条件修。
+- **待验证假设**：三形态当前各有最小复现且互相独立；LineSuffix 修法（全局换行点延迟）不改变
+  已锁"注释不丢"测试；块 8 修复不改变合法输入诊断面（全量/A-B 已验证）。
+- **台账**：块 1/2/3/8 ✅；块 9 ⏳；主线 2 当前 4/12；P1 待批准（`gap-fragment-mode.md`）。
 
 ## 估算依据（对照锚，可复核）
 

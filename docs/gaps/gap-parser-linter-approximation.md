@@ -96,6 +96,19 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
   收益有限——**当前无计划，接受现状**。
 - linter 近似面收窄：随语法规则完善（`_stmt_ends` 推导）自动收窄，非独立任务。
 
+## 块内诊断粒度收口（#71，2026-10-23）
+
+- 原状：`void f(void) { a + ; b + ; }` 只报 1 条 `expected '}'` 指 `a`（`@Stmt*` 的 trial 错误被
+  `matcher._match_repeat` 丢弃，整块作一个检查器）。
+- 修复（引擎 linter 发现层，不改 grammar）：`{ ... }` 作为**括号定界语句容器**递归发现子语句
+  （`CompoundStmt` production 只含定界 token + 语句引用）；容器 body 内 Level 2 试解析无候选时按
+  首 token 回退注册；父容器检查器在子节点存在时让位。非容器上下文保持原 `phase-unrecognized`
+  语义（不回退）。
+- 判据：`tests/languages/c/test_c_block_diagnostics.py`——两条坏语句 **2 条 `phase-statement`**，
+  位置分别落在 `+`（char 17/23），不再指块起点/`}`；合法块 0 诊断。
+- 回归：全量套件、A/B、C/Verilog/e2e linter 面全绿；`COG/CC` 与类规模增长按块 8 理由登记
+  `tools/structural_kept.json`。
+
 ## 关联条目
 
 - `linter/linter_architecture.md`「已知边界问题」表（**多行 RHS 误报** / **`@*` 敏感列表误判**）

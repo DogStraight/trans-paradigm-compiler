@@ -320,6 +320,23 @@ def _elem_called_rules(feat: dict | None) -> set[str]:
     return set()
 
 
+def fallback_statement_names(
+    keyword_map: dict, ident_candidates: list, token_type: str
+) -> list[str]:
+    """语句起点候选回退名单（不做 Level 2 试解析收敛）。
+
+    用于 discovery 在括号定界容器 body 内 Level 2 无候选时按首 token 的已知
+    语句候选注册节点，让检查阶段报精确结构错误。
+    """
+    if token_type in keyword_map:
+        entries = keyword_map[token_type]
+    elif token_type == "id":
+        entries = ident_candidates
+    else:
+        return []
+    return [e["name"] for e in entries]
+
+
 class LookaheadTable:
     """从规则树预计算的前瞻消歧表。"""
 
