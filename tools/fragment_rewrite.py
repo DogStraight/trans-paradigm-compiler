@@ -213,6 +213,16 @@ def _print_diff(name: str, result: RewriteResult) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows 远端 runner 默认 cp1252：中文摘要/源内容直接 print 会抛
+    # UnicodeEncodeError（本地 UTF-8 排练绿、CI 红）。输出流改用 backslashreplace，
+    # 保证 CLI 不因控制台编码崩溃（内容仍可读，转义而非乱码）。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(errors="backslashreplace")
+            except (OSError, ValueError):
+                pass
     ap = argparse.ArgumentParser(
         description="片段变换 P0（显式记号 + always @(*) 规则）"
     )

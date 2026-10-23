@@ -591,6 +591,14 @@ def _add_fragment_parser(sub) -> None:
 
 def _cmd_fragment(args: argparse.Namespace) -> None:
     """tpc fragment — P0 原型：显式记号区域 always @(*) → always @*。"""
+    # 远端 Windows runner 默认 cp1252：中文 diff/摘要直接 print 会 UnicodeEncodeError。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(errors="backslashreplace")
+            except (OSError, ValueError):
+                pass
     from tools.fragment_rewrite import _print_diff, rewrite_file
 
     result = rewrite_file(args.file, args.rules_dir, args.write)

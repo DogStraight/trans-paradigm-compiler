@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **块 10：CI 排练对齐 cp1252 控制台（#77）**：
+  · `tools/ci_rehearsal.py::_run` 对 Python 子进程注入 `PYTHONIOENCODING=cp1252`
+    （模拟无 `PYTHONUTF8` 的远端 Windows runner），wheel 外跑 CLI 同口径；
+  · `tpc fragment`（main.py + tools 入口）输出流 `errors=backslashreplace`，避免中文
+    diff/摘要在 cp1252 下 UnicodeEncodeError（cp1252 排练实测暴露的唯一失败）。
+  · 证据：cp1252 下 pytest 主回归 PASS、smoke/hardcode/docrefs/pyright/edge/fuzz/cli/wheel
+    逐项 PASS（修复前主回归 1 failed = fragment CLI）。
+  · TODO 删除该项；PROGRESS 块10 更新（只剩 eval_benchmark 口径）。
+
+### Added
+
 - **块 10：yaml 真实 workflow 两遍渲染幂等（#76）**：parser `_consume_block_end`
   对零宽块结束符（yaml `space.dedent`）不再消费紧随的独占行注释——其 `line` 指向
   下一行内容，注释不在结束符物理行上；留给父容器按 Comment 项处理。修复 ci.yml

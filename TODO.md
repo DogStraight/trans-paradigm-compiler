@@ -29,10 +29,6 @@
 
 ## 二、工具与门禁基础设施（非主线，收口时按影响做）
 
-- [ ] **CI 排练与远端 runner 的编码口径差**：开发机 `PYTHONUTF8=1`（UTF-8）、GitHub windows runner 无此
-      变量（cp1252）⇒ **排练绿、CI 红**（已实测踩过）。待做：(a) `tools/ci_rehearsal.py` 的 Python 步骤注入
-      `PYTHONIOENCODING=cp1252`（已验证优先于 `PYTHONUTF8`）；(b) 清扫剩余未自护脚本（现测 24 个）。
-      判据：cp1252 下排练全 PASS。
 - [ ] **`eval_benchmark` 丢弃 parse 失败文件的 semantic**：`not f.get("parse_ok")` 直接 `continue`
       （两处）⇒ C 样本接入后事实型 check（如 too-few 的 MAC001）会被当"不可对拍"低报。判据：C 样本
       接入时 semantic 事实型码仍被收集（或显式登记"benchmark 只对语法完整文件"口径）。

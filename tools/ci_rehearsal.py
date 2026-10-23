@@ -69,9 +69,22 @@ def _text(value: object) -> str:
     return str(value)
 
 
+def _py_env(argv: list[str], env_extra: dict | None = None) -> dict:
+    """Python 子进程 env：模拟远端 Windows runner 的 cp1252 输出编码。
+
+    `PYTHONUTF8=1` 只在开发机有；显式 `PYTHONIOENCODING=cp1252` 优先于它
+    （已由 CI 排练事故验证），让"本地绿、远端红"的编码差在排练里暴露。
+    """
+    env = {**os.environ, **(env_extra or {})}
+    exe = os.path.basename(argv[0]).lower()
+    if exe.startswith("python"):
+        env["PYTHONIOENCODING"] = "cp1252"
+    return env
+
+
 def _run(argv: list[str], env_extra: dict | None = None, timeout: int = 900):
     """跑子进程 → (exit_code, 合并输出)。超时按占用退出码 124 处理（不是静默跳过）。"""
-    env = {**os.environ, **(env_extra or {})}
+    env = _py_env(argv, env_extra)
     try:
         proc = subprocess.run(
             argv,
@@ -139,7 +152,7 @@ def _wheel_install_check() -> tuple[int, str]:
         [exe, "format", sample],
         cwd=tempfile.gettempdir(),
         capture_output=True, text=True, encoding="utf-8", errors="replace",
-        env={**os.environ}, timeout=300,
+        env=_py_env([py, "format", sample]), timeout=300,
     )
     log.append(f"[off-repo CLI] exit={proc.returncode}")
     shutil.rmtree(venv, ignore_errors=True)
