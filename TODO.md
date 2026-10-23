@@ -37,10 +37,6 @@
       变量（cp1252）⇒ **排练绿、CI 红**（已实测踩过）。待做：(a) `tools/ci_rehearsal.py` 的 Python 步骤注入
       `PYTHONIOENCODING=cp1252`（已验证优先于 `PYTHONUTF8`）；(b) 清扫剩余未自护脚本（现测 24 个）。
       判据：cp1252 下排练全 PASS。
-- [ ] **跨语言同进程后 C 包 postpass 静默丢失**：C→verilog→C（同进程两个 `ProjectChecker`）时
-      `setup_grammar` 清空 `_loaded_components`、`SharedComponents` 缓存命中不重装 ⇒ 第二次 C 的
-      CSC/LAB/MAC 诊断全丢（循环 #21 审计实测；单语言 CLI 不复现，库入口受影响）。判据：C→V→C
-      两轮 check 诊断集合一致。链：`analyzer/shared_components.py`、`parser/__init__.py::setup_grammar`
 - [ ] **`eval_benchmark` 丢弃 parse 失败文件的 semantic**：`not f.get("parse_ok")` 直接 `continue`
       （两处）⇒ C 样本接入后事实型 check（如 too-few 的 MAC001）会被当"不可对拍"低报。判据：C 样本
       接入时 semantic 事实型码仍被收集（或显式登记"benchmark 只对语法完整文件"口径）。

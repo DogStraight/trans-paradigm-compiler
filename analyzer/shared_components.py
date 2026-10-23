@@ -28,6 +28,25 @@ class SharedComponents:
     _CACHE: dict[str, dict] = {}
 
     @classmethod
+    def _activate(cls, rules_dir: str, ext_dirs: list[str]) -> None:
+        """把全局组件注册表重建为 `rules_dir` 对应语言（缓存命中路径用）。"""
+        from core.config_registry import ConfigRegistry
+        from core.plugin_loader import load_all_components
+
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        full_dir = (
+            rules_dir if os.path.isabs(rules_dir) else os.path.join(root, rules_dir)
+        )
+        plugins_dir = os.path.join(full_dir, "plugins")
+        declared_optional, active_tier = ConfigRegistry.tier_state(full_dir)
+        ConfigRegistry.load_all(full_dir, ext_dirs=ext_dirs, plugins_dir=plugins_dir)
+        load_all_components(
+            plugins_dir=plugins_dir,
+            declared_optional=declared_optional,
+            active_tier=active_tier,
+        )
+
+    @classmethod
     def get(cls, rules_dir: str, ext_dirs: list[str], register=None) -> dict:
         """取（必要时装载）该 `rules_dir` 的共享组件。
 
@@ -39,6 +58,14 @@ class SharedComponents:
         """
         cached = cls._CACHE.get(rules_dir)
         if cached is not None:
+            # 跨语言同进程：别的语言 `setup_grammar` 会清空 `_loaded_components`；
+            # 缓存命中只复用规则/词法对象还不够——组件注册表（postpass/原语/
+            # capability）必须**重新建立为本语言**，否则第二次 C 检查的
+            # CSC/LAB/MAC 全部静默丢失（C→verilog→C 实测）。
+            from core.plugin_loader import _active_components
+
+            if set(_active_components) != set(cached.get("component_names", ())):
+                cls._activate(rules_dir, ext_dirs)
             return cached
 
         from core.config_registry import ConfigRegistry
@@ -87,6 +114,10 @@ class SharedComponents:
                 rules_dir=full_dir,
                 line_comment_starts=lexer.line_terminating_comment_starts(),
             ),
+            "component_names": (),
         }
+        from core.plugin_loader import _active_components
+
+        shared["component_names"] = tuple(_active_components)
         cls._CACHE[rules_dir] = shared
         return shared

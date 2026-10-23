@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **块 10：跨语言同进程 C→verilog→C postpass 不丢失（#74）**：
+  `SharedComponents` 缓存命中时按当前全局 `_active_components` 与缓存语言组件名比较，
+  不一致则重建配置与组件注册表（postpass/原语/capability）再复用对象。
+  修复库入口 `ProjectChecker` 第二轮 C 的 CSC/LAB/MAC 静默丢失（单语言 CLI 不复现）。
+  · 回归：`tests/engine/analyzer/test_checker_cross_language.py`（LAB001 两轮一致）；
+  · 同语言重复 check 走快速路径（不重复 load）。
+  · TODO 删除该项；PROGRESS 块 10 进度更新。
+
+### Added
+
 - **块 10 工程化：A/B 对拍 inproc 档可用（#73）**：`tools/ab_pipeline_compare.py`
   `--plugins` 默认改为 `<pack>/plugins`（换语言包不再手改）；采样输出增加"取最后一个 JSON
   对象"兜底与带 stdout/stderr 的诊断错误（旧行为裸 `JSONDecodeError`）。
