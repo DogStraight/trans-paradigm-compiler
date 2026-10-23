@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **块 10 工程化：A/B 对拍 inproc 档可用（#73）**：`tools/ab_pipeline_compare.py`
+  `--plugins` 默认改为 `<pack>/plugins`（换语言包不再手改）；采样输出增加"取最后一个 JSON
+  对象"兜底与带 stdout/stderr 的诊断错误（旧行为裸 `JSONDecodeError`）。
+  · 证据：`--mode inproc --pack grammar/verilog`（不带 `--plugins`）与 C 包均 `0/1`，不再
+    C 插件注入 verilog 的 `GrammarError`。
+  · TODO 删除该项；PROGRESS 块 10 标记部分完成（其余 4 项待）。
+
+### Added
+
 - **块 8 块内诊断粒度（#71）**：C `CompoundStmt` 的 `{ ... }` 作为括号定界语句容器递归发现子语句；
   容器 body 内 Level 2 试解析无候选时按首 token 回退注册；父容器检查器在子节点存在时让位。
   `void f(void) { a + ; b + ; }` 现报 **2 条位置正确**的 `phase-statement`（char 17/23），不再只报

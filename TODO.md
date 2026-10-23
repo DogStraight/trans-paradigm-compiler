@@ -29,11 +29,6 @@
 
 ## 二、工具与门禁基础设施（非主线，收口时按影响做）
 
-- [ ] **A/B 对拍工具 `--mode inproc` 不可用**：`--plugins` 默认 `grammar/c/plugins`
-      ⇒ verilog `GrammarError`（C 插件注入 verilog 规则）；改指后 JSON 采样报
-      `JSONDecodeError`。修好才能用 inproc 档当证据。**另**：`--products` 产物摘要档
-      已交付（循环 #29；CLI 档逐文件比 lint JSON + `tpc format` 渲染）。
-      链：`tools/ab_pipeline_compare.py`
 - [ ] **yaml 渲染对真实 workflow 不幂等（无门禁覆盖）**：仓库自己的 `.github/workflows/*.yml` 两遍渲染，
       第二遍把 `shell: pwsh` 后的注释**上提一行**（offset≈2349）⇒ `format(format(x)) != format(x)`；与渲染器
       接线无关。判据：该文件两遍逐字相同 + `tests/languages/yaml` 全绿。

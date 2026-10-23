@@ -24,7 +24,7 @@
 | 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |
 | 8 | **诊断粒度** | ✅ 块内 2 坏语句 → 2 条位置正确 `phase-statement`（#71；父容器粗诊断让位）；`test_c_block_diagnostics.py` |
 | 9 | **渲染/注释遗留** | ⏳ #72 调查：LineSuffix 吞 token 根因=flatten；强制 group broken 修 C 但 yaml 往返回归，已回退；需源行感知方案 |
-| 10 | **工程化缺口** | ⏳ A/B inproc、yaml workflow 幂等、cp1252 排练、C→V→C postpass、eval_benchmark 口径 |
+| 10 | **工程化缺口** | ⏳ A/B inproc ✅ #73（换包默认 plugins，JSON 采样兜底）；yaml 幂等、cp1252、C→V→C postpass、eval_benchmark 待 |
 | 11 | **吞吐/基准** | ⏳ fuzz 40→100 iter/s；parser 2.5x；benchmark 阈值进 CI |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 
@@ -32,9 +32,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 9 二轮——按 #72 结论做**源行感知**的 LineSuffix 落地（注释源行 vs 下一换行点），或先修独立块 10（A/B inproc）避免连续两天卡同一处；优先把 LineSuffix 方案缩到 C 声明符形态验证。
-- **待验证假设**：yaml 回归来自"无条件强制断"，不是注释语义本身；带"该行是否有后续 token"判据的断行可同时满足 C 与 yaml；全量/A-B 不变。
-- **台账**：块 1/2/3/8 ✅；块 9 ⏳（#72 调查，修复回退）；主线 2 当前 4/12；P1 仍待作者批准。
+- **意图**：块 10 继续——优先 C→V→C 同进程 postpass 丢失（库入口真 bug，可写回归）或 yaml workflow 幂等；A/B inproc 已可用作证据通道。
+- **待验证假设**：C→V→C 丢失由 `setup_grammar` 清空 `_loaded_components` + SharedComponents 缓存命中不重装导致；可加"同进程两轮 check 诊断一致"回归。
+- **台账**：块 1/2/3/8 ✅；块 9 ⏳（#72 调查，修复回退）；块 10 ⏳（#73 A/B inproc）；主线 2 当前 4/12；P1 待批准。
 
 ## 估算依据（对照锚，可复核）
 

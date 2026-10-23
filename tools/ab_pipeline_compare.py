@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import shutil
 import subprocess
@@ -106,6 +107,11 @@ def _cli_snapshot(cwd: Path, files: list[str], *, products: bool = False) -> dic
     return out
 
 
+def _default_plugins(pack: str, plugins: str | None) -> str:
+    """inproc 档插件目录：显式给出优先，否则随语言包推导（换包不用手改）。"""
+    return plugins or os.path.join(pack, "plugins")
+
+
 def _inproc_snapshot(cwd: Path, payload: dict) -> dict:
     proc = subprocess.run(
         [_python(), "-c", _INPROC_SNIPPET],
@@ -118,7 +124,22 @@ def _inproc_snapshot(cwd: Path, payload: dict) -> dict:
     )
     if proc.returncode != 0:
         raise SystemExit(f"采样失败（cwd={cwd}）:\n{proc.stdout[-1500:]}\n{proc.stderr[-1500:]}")
-    return json.loads(proc.stdout)
+    text = proc.stdout.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        # 采样脚本可能被栈内库的 warning 污染 stdout：取最后一个 JSON 对象再试，
+        # 仍失败则带 stdout/stderr 尾给出可诊断错误（旧实现裸 JSONDecodeError）。
+        start, end = text.find("{"), text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                pass
+        raise SystemExit(
+            f"采样输出不是合法 JSON（{exc}）：\nstdout 尾：{text[-1200:]}\n"
+            f"stderr 尾：{proc.stderr[-1200:]}"
+        ) from None
 
 
 def _corpus() -> list[str]:
@@ -158,7 +179,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--mode", choices=("cli", "inproc"), default="cli")
     ap.add_argument("--files", nargs="*", default=None, help="CLI 档：输入文件（默认样本语料）")
     ap.add_argument("--pack", default="grammar/c", help="inproc 档：语言包目录")
-    ap.add_argument("--plugins", default="grammar/c/plugins", help="inproc 档：插件目录")
+    ap.add_argument(
+        "--plugins",
+        default=None,
+        help="inproc 档：插件目录（默认 = <pack>/plugins；换语言包无需再手改）",
+    )
     ap.add_argument("--sources-file", default=None, help="inproc 档：每行一个输入文件")
     ap.add_argument("--expect-changed", type=int, default=None, help="期望变化的输入条数")
     ap.add_argument("--json", default=None, help="把结果写到该路径")
@@ -192,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if not args.sources_file:
                 raise SystemExit("inproc 档需要 --sources-file")
+            args.plugins = _default_plugins(args.pack, args.plugins)
             rels = [
                 ln.strip()
                 for ln in Path(args.sources_file).read_text(encoding="utf-8").splitlines()
