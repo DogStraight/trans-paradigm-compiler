@@ -518,6 +518,20 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         )
         return None
 
+    # 规则级早拒（性能）：单 production 规则的 FIRST 已知时，当前 token 不可能
+    # 起始该规则 ⇒ 直接失败，不建节点/不进 log/不建帧。trivia/宏/占位 token 豁免
+    # （可出现在任意规则位；见 Parser._first_reject_special）。
+    firsts = getattr(self, "_rule_first_tokens", None)
+    if firsts is not None:
+        allowed = firsts.get(rule.name)
+        tok = context.peek_token()
+        if (
+            allowed is not None
+            and tok is not None
+            and tok.type not in allowed
+            and tok.type not in self._first_reject_special
+        ):
+            return None
     self._log_state(
         lambda: f"尝试规则: {rule.name} | {self._debug_token_info(context)}",
         context=context,

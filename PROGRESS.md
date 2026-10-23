@@ -16,7 +16,7 @@
 | # | 块 | 状态 |
 |---|----|------|
 | 1 | **基线清算** | ✅ 三探针：S Δ0、feature 0、config_sites PASS（TODO 过期三项已清，`864e472`） |
-| 2 | **parser 性能收口** | ⏳ memo 已实施 #68：同机 57.6→8.75s（6.6x，median）、门禁 31.5s（min 31.3）；**cJSON ≤5s 未达/门禁 borderline**；全量/A-B/语料绿 |
+| 2 | **parser 性能收口** | ✅ atom memo + FIRST 早拒（#68/#69）：cJSON 57.6→**2.98s**（19.3x）；门禁 **20–23s**；A/B 0/144、全量 4377/14、7/7 0 诊断 |
 | 3 | **片段模式 P0** | ⏳ 独立 CLI + 显式记号 + bytes identity（LF/CRLF/BOM/无尾）+ 一条真实规则 + dry-run diff + falsification 记录；设计输入 `_drafts/marker-mode-evaluation.md`（未入库） |
 | 4 | **片段模式 P1** | ⏳ `[[island_rules]]` 声明面 + rewriter 能力位 + 多规则/冲突/后验；**契约面需作者批准**（P0 不碰声明面） |
 | 5 | **unit graph 内置能力** | ⏳ `unit_graph.v1`：C include 与 Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分支 |
@@ -28,13 +28,13 @@
 | 11 | **吞吐/基准** | ⏳ fuzz 40→100 iter/s；parser 2.5x；benchmark 阈值进 CI |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 
-**当前 1 / 12**。基线锚：全量 4377/14、A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、feature 0。
+**当前 2 / 12**。基线锚：全量 4377/14、A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、feature 0。
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 2 继续——先做**稳定基准**（3 次 median 的 cJSON/gate 探针；减少机器负载方差），再攻剩余 ~8–9s：候选去重（`PostfixExpr`/`ParenthesizedExpr` 同层重复）、生产式/快照热点 micro-opt；目标 cJSON ≤5s、门禁 ≤30s。
-- **待验证假设**：memo 已消除 2^k 主因；剩余为主干解析成本，可由候选去重/热路径优化再降 ~40%；AST/A-B/语料不变。
-- **台账**：块 1 ✅（`864e472`）；块 2 memo 实施 #68（同机 6.6x、全量/AB/语料绿，目标未达）；主线 2 当前 1/12。
+- **意图**：块 3 片段模式 P0——先读 `_drafts/marker-mode-evaluation.md` 的 P0/falsification 条款，定独立 CLI（dry-run diff）+ 显式记号 + bytes identity 四例 + 一条真实规则（纯语法）；不碰新声明段/能力位（P1 待作者批准）。
+- **待验证假设**：P0 可复用 lexer token 流与现有 matcher（文本级）完成，不需改 parser 阻断语义；identity gate 覆盖 LF/CRLF/BOM/无尾；一条规则在真实 C/Verilog 文件上命中/误改统计可复现。
+- **台账**：块 1 ✅（#67/#68 之前的清算）、块 2 ✅（#68/#69：cJSON 2.98s、门禁 20–23s、全量 4377/14）；主线 2 当前 2/12。
 
 ## 估算依据（对照锚，可复核）
 

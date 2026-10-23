@@ -335,6 +335,18 @@ def _merge_follow(
     return len(follows[member]) != before
 
 
+def compute_first_map(
+    rules: dict[str, GrammarRule], operator_members: list[str] | None = None
+) -> tuple[dict[str, set[str]], dict[str, bool]]:
+    """规则 FIRST + nullable（引擎通用；供 try_plain_rule 早拒等）。
+
+    与 `compute_follows` 同一套不动点实现；语言知识仍来自规则声明/运算符分类。
+    """
+    names = set(rules)
+    trees = _rule_trees_map(names, rules)
+    return _compute_first_nullable(names, trees, rules, operator_members)
+
+
 def compute_follows(
     rules: dict[str, GrammarRule],
     operator_members: list[str] | None = None,

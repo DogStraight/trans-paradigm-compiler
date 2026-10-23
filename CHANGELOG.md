@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **块 2 收口：parser 回溯优化——atom memo + 规则级 FIRST 早拒（#68/#69）**：
+  · atom 位置 memo（`(token 位置, 作用域版本)`；`_ScopeStack.version` 仅在真实状态变化时递增；
+    `restore` 无变化快速路径）消除嵌套括号下重复解析的 2^k。
+  · `follow.compute_first_map`（FIRST+nullable 完整不动点）+ `build_rule_first_map`
+    （排除块/pratt/nullable/空 FIRST）驱动 `try_plain_rule` 规则级早拒；token 不在 FIRST 且
+    非 trivia/宏/占位 ⇒ 直接失败，不建节点/日志/帧。
+  · 结果：cJSON 解析 **57.6s → 2.98s（median，19.3x）**；C 语料门禁 **20–23s**（目标 ≤30s）；
+    A/B **0/144**；全量 **4377/14**；corpus 7/7 0 诊断；pyright 0；S Δ0（AST 节点名序列一致）。
+  · 文档：`gap-parser-backtracking.md` 收口；PROGRESS 块 2 ✅（2/12）；TODO 性能项删除。
+
+### Added
+
 - **块 2：parser atom 位置 memo（#68，partial）**：`_atom_parser_impl` 按
   `(token 位置, 作用域版本)` 缓存 atom 结果；`_ScopeStack` 版本号仅在真实状态变化时递增；
   `Parser.parse` 每次清空 memo；`restore` 增加无变化快速路径。消除嵌套括号下

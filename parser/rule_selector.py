@@ -111,6 +111,30 @@ def _build_start_token_map_names(
     return name_map
 
 
+def build_rule_first_map(
+    grammar_rules: dict[str, GrammarRule], operator_members: list[str] | None = None
+) -> dict[str, frozenset[str]]:
+    """规则 → 完整 FIRST 集合（供 try_plain_rule 早拒）。
+
+    用 `follow.compute_first_map` 的 FIRST+nullable 不动点（覆盖多 production/
+    @call/optional 等全部形态）；**nullable 规则不入表**（可匹配空 ⇒ 早拒不安全）。
+    块/pratt 规则由各自分派处理，也不入表。
+    """
+    from .follow import compute_first_map
+
+    firsts, nullable = compute_first_map(grammar_rules, operator_members)
+    out: dict[str, frozenset[str]] = {}
+    for name, rule in grammar_rules.items():
+        if getattr(rule, "is_block", False) or getattr(rule, "pratt", False):
+            continue
+        if nullable.get(name):
+            continue
+        toks = firsts.get(name) or set()
+        if toks:
+            out[name] = frozenset(toks)
+    return out
+
+
 class RuleSelector:
     def __init__(
         self,

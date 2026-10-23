@@ -1,6 +1,6 @@
 # Gap — parser 回溯成本与 atom 位置级 memo（主线 2 块 2）
 
-- 状态：**atom 位置 memo 已实施（#68，2026-10-23，partial）**：同机基线 57.6s → 8.1–9.1s（median 8.75s，6.6x）；门禁 31.3–34.3s（median 31.5s，min 31.3s）。**目标 cJSON ≤5s 未达、门禁 borderline（≤30s）**；继续优化。
+- 状态：**块 2 收口（#68/#69，2026-10-23）**：atom 位置 memo + 规则级 FIRST 早拒；cJSON **57.6s → 2.98s（median）**、C 语料门禁 **20.3–23.0s**；A/B 0/144、全量 4377/14、7/7 0 诊断、pyright 0。
 - 关联：`PROGRESS.md` 块 2；`TODO.md`「C 真实语料解析回溯成本」；`tests/e2e/eval_diag_baseline_c.py`
 - 参照：`docs/gaps/gap-parser-linter-approximation.md`（parser 无错误恢复为刻意接受）；linter packrat 记忆化先例
 
@@ -35,7 +35,13 @@
 - 同机对照：pre-memo 57.6s → 8.75s（median，6.6x）；AST 节点名序列 SHA1 与改前一致（25,230 节点）；全量 4377/14、A-B 0/144、门禁 7/7 0 诊断；`COG|_atom_parser_impl` 以性能分支理由进 `tools/structural_kept.json`。
 - 剩余：直接成本仍 ~8–9s；继续优化需降候选/热点开销（见下）。
 
-## 实施方向（下一轮）
+## 收口记录（#69）
+
+- 在 `try_plain_rule` 增加规则级早拒：`follow.compute_first_map` 给出完整 FIRST+nullable；`build_rule_first_map` 只收非块/非 pratt、非 nullable、FIRST 非空的规则；当前 token 不在 FIRST 且非 trivia/宏/占位豁免 ⇒ 直接失败（不建节点/日志/帧）。
+- 结果：cJSON median **2.98s**（较 pre-memo 57.6s **19.3x**）；门禁 median ~21s（含 linter 等全阶段）；A/B 0/144；全量 4377/14；corpus 7/7 0 诊断；S Δ0。
+- 累计手段：atom 位置 memo（#68）+ 规则级 FIRST 早拒（#69）；未改 AST（节点名序列 hash 一致）。
+
+## 后续（非块 2）
 
 1. 在 `Parser` 内实现**每 parse 清空**的 atom 位置 memo：
    - 键 = `(start_ptr, state_token)`；`state_token` 至少含作用域栈版本/深度（门控规则需要），

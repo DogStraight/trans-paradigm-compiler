@@ -20,6 +20,7 @@ from core.define import (
 )
 from core.config_registry import declare_cfg
 from core.errors import ConfigError
+from core.token_protocol import MACRO_CALL_TOKEN_TYPE, TRIVIA_TOKEN_TYPES
 from ._constants import COMMENT_TOKEN_TYPE, IDENTIFIER_TOKEN_TYPE, ROOT_RULE_NAME
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
@@ -408,7 +409,7 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     return ast_node
 
 
-from .rule_selector import RuleSelector
+from .rule_selector import RuleSelector, build_rule_first_map
 import parser.pratt_parser as pratt_parser
 
 # 导入拆分后的模块方法
@@ -527,8 +528,13 @@ class Parser:
             if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
         ]
         self._init_pratt_language()
-        self._init_rule_selector(rules_dir, rule_selector)
         self._init_skip_types()
+        self._init_rule_selector(rules_dir, rule_selector)
+        # 规则级早拒用 FIRST（保守子集；见 build_rule_first_map）
+        self._rule_first_tokens = build_rule_first_map(self.grammar_rules)
+        # 早拒豁免：trivia/skip/宏/占位 token 可能出现在任意规则位（配置/宏机制）
+        self._first_reject_special = set(self.skip_types) | set(TRIVIA_TOKEN_TYPES)
+        self._first_reject_special.add(MACRO_CALL_TOKEN_TYPE)
         # 停点/trace 过滤器（set_trace 设置，按规则名或 token 位置）
         self._trace_rule: str | None = None
         self._trace_token_pos: int | None = None
