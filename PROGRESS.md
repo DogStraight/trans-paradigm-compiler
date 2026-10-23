@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T2c 启动——按"先证后删"删 raw 管线剩余面：先落证据（T2b 后内部 warning 无 eligible/位点恒空、`grep` 生产路径无 raw 资格来源），再分片删：① linter M2 摘诊断 + convergence/internal_warnings 旁路；② parser raw 承载（`raw_sites/raw_source/try_raw_*`/`build_raw_candidate`）；③ C P4 理解/提升插件（`_raw_understand`/`_raw_transform`）与 E002/E003 安全网；④ 对应测试（p4/raw/parser raw/internal warnings）+ 变异表条目。
-- **待验证假设**：raw 位点在 T2b 后无来源 ⇒ parser raw 分支不可达；P4 插件只消费 raw 节点 ⇒ 可删；verilog 无 raw 声明 ⇒ 删除零行为变化；C 真实语料/复合字面量/强转不受影响。
-- **台账**：T2b ✅ #54（全量 4454 passed/38 skipped）；T2a ✅；T1 ✅；主线 1 刻度 9/9；T2c 后剩 T2d 文档收口 → T3。
+- **意图**：T2c 切片②——删 parser raw 承载：`parser_core` 的 `raw_sites/raw_source/_raw_sites_consumed/_raw_trial_active`、`block_parser` 的 `RawStatement`/`match_raw_site`/`try_raw_sentence`/`build_raw_candidate`/试建台账、`_production.py::_try_raw_at_statement_start` 接入点、pipeline 的 raw 位点构建/消费日志；随后切片③删 linter M2/`internal_warnings` 旁路与相关测试/变异。
+- **待验证假设**：raw 位点无来源（T2b 后）⇒ parser raw 分支不可达；删后 C 解析/诊断面不变（复合字面量/强转由语法直接建树）；verilog 零变化。
+- **台账**：T2c 切片① ✅ #55（P4/引擎 raw 契约已删，受影响套件+变异+doc refs 绿）；T2b ✅ #54；T1 ✅；主线 1 刻度 9/9。切片②③后补全量冻结树。
 
 ## 估算依据（对照锚，可复核）
 
