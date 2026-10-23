@@ -78,7 +78,7 @@
       "引擎侧登记": 10,
       "插件内": 6,
       "文档": 3,
-      "测试": 1
+      "测试": 2
      },
      "scatter": [
       "analyzer/elaboration/README.md",
@@ -94,7 +94,7 @@
      "scatter_count": 9,
      "stage_count": 0,
      "stage_files": [],
-     "total": 20
+     "total": 21
     }
    },
    "summary": {
@@ -175,6 +175,216 @@
      "stage_files": [],
      "total": 11
     },
+    "CSC001": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "插件内": 4,
+      "文档": 2,
+      "测试": 2
+     },
+     "scatter": [
+      "tools/check_gate_efficacy.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 9
+    },
+    "CSC002": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 1,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 5
+    },
+    "CSC003": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 2,
+      "文档": 1,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 4
+    },
+    "CSC004": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 2,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 6
+    },
+    "CSC007": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 2,
+      "文档": 1,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 4
+    },
+    "CSC008": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 2,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "CSC009": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 2,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "CSC010": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 2,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "CSC011": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 2,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "CSC012": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 2,
+      "文档": 1,
+      "测试": 2
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 5
+    },
+    "ENUM001": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/type_semantics/rules/_tag_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 1,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 5
+    },
+    "ENUM002": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/type_semantics/rules/_tag_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 1,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 5
+    },
+    "ENUM003": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/type_semantics/rules/_tag_check.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "插件内": 6,
+      "文档": 3,
+      "测试": 1
+     },
+     "scatter": [
+      "tools/check_gate_efficacy.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 11
+    },
     "EX001": {
      "converged": [
       "tests/e2e/samples/check_accuracy/expected.json"
@@ -213,6 +423,60 @@
      "stage_files": [],
      "total": 8
     },
+    "LAB001": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/labels/rules/_label_check.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "插件内": 4,
+      "文档": 2,
+      "测试": 2
+     },
+     "scatter": [
+      "tools/check_gate_efficacy.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 9
+    },
+    "LAB002": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/labels/rules/_label_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 1,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 5
+    },
+    "LAB003": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/labels/rules/_label_check.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "插件内": 4,
+      "文档": 1,
+      "测试": 2
+     },
+     "scatter": [
+      "tools/check_gate_efficacy.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 8
+    },
     "LC001": {
      "converged": [
       "tests/e2e/eval_benchmark.py",
@@ -234,6 +498,26 @@
      "stage_count": 0,
      "stage_files": [],
      "total": 10
+    },
+    "MAC001": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/macro_args/rules/_macro_args_check.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 2,
+      "插件内": 4,
+      "文档": 5,
+      "测试": 4
+     },
+     "scatter": [
+      "analyzer/semantic_checks.md",
+      "preprocessor/README.md"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 15
     },
     "NC001": {
      "converged": [
@@ -554,6 +838,42 @@
      "stage_files": [],
      "total": 6
     },
+    "TAG001": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/type_semantics/rules/_tag_check.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 2,
+      "插件内": 5,
+      "文档": 4,
+      "测试": 2
+     },
+     "scatter": [
+      "preprocessor/primitives/include.py",
+      "tools/check_gate_efficacy.py"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 13
+    },
+    "TAG002": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "grammar/c/plugins/checks/type_semantics/rules/_tag_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 1,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 5
+    },
     "UN001": {
      "converged": [
       "tests/e2e/eval_benchmark.py",
@@ -601,12 +921,12 @@
     }
    },
    "summary": {
-    "budget": 8,
+    "budget": 16,
     "converged_total": 40,
-    "instances": 24,
+    "instances": 43,
     "scatter_max": 3,
     "scatter_median": 0,
-    "scatter_total": 11,
+    "scatter_total": 19,
     "stage_max": 0,
     "stage_median": 0
    }
@@ -649,23 +969,6 @@
      "stage_count": 0,
      "stage_files": [],
      "total": 3
-    },
-    "lexer.pre_scan": {
-     "converged": [],
-     "converged_count": 0,
-     "declared_in": "lexer/pre_scan.py",
-     "kept": null,
-     "roles": {
-      "引擎侧登记": 2
-     },
-     "scatter": [
-      "core/global_state.py",
-      "lexer/pre_scan.py"
-     ],
-     "scatter_count": 2,
-     "stage_count": 0,
-     "stage_files": [],
-     "total": 2
     },
     "linter.macro_hygiene": {
      "converged": [],
@@ -816,7 +1119,8 @@
      "declared_in": "lexer/main_lexer.py",
      "kept": null,
      "roles": {
-      "引擎侧登记": 3
+      "引擎侧登记": 3,
+      "文档": 1
      },
      "scatter": [
       "lexer/main_lexer.py",
@@ -826,7 +1130,7 @@
      "scatter_count": 3,
      "stage_count": 0,
      "stage_files": [],
-     "total": 3
+     "total": 4
     },
     "renderer.style": {
      "converged": [],
@@ -866,12 +1170,12 @@
     }
    },
    "summary": {
-    "budget": 29,
+    "budget": 27,
     "converged_total": 1,
-    "instances": 14,
+    "instances": 13,
     "scatter_max": 3,
     "scatter_median": 2,
-    "scatter_total": 29,
+    "scatter_total": 27,
     "stage_max": 0,
     "stage_median": 0
    }
@@ -1033,5 +1337,5 @@
    }
   }
  },
- "recorded": "2026-10-08"
+ "recorded": "2026-10-23"
 }

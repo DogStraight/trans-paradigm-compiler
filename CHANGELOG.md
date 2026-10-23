@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **T3 部件①实现：Verilog 注释单一声明面 + 工具基线刷新（#60）**：
+  · L1：删 `grammar/verilog/token.toml` 中重复的 `[comment].pairs`（保留
+    `base/_lexer.toml`，与 C 对齐）；修复后删剩余一份 ⇒ `lexer.tokenize("// c")` 无
+    comment token、`tests/engine/lexer` **10 failed**（单一来源承重）。
+  · L2：`tools/structural_score.py --save`（S=1110，Δ+0）与 `tools/feature_sites.py --save`
+    （`check` 预算 16；理由 = C11/C23/CSC/TAG/ENUM/LAB/MAC 检查组件入库 + T1/T2 真实改动）；
+    两者 `--compare` 现 0 增长。
+  · 验证：`tests/engine/lexer|preprocessor|e2e` 751 passed/7 skipped；A/B **0/144**；
+    render **124/124**；doc refs/预算 PASS。
+
+### Added
+
 - **T2d：pre_scan/raw 文档收口（#58，ADR-0024 done）**：
   · 改写 `linter/linter_architecture.md`（收敛 warning/raw 资格 → 退役说明）、
     `grammar/c/README.md`（期别/两期 API/P4 章节）、`gap-c-semantic-base.md`/

@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T3 部件①实现轮——修 L1 方言复制（删 Verilog `token.toml` 的重复 `[comment]`，对齐 C 单一来源；判据 = 删 `base/_lexer.toml` 声明 → 测试红；全量/渲染门禁绿），并按登记理由刷新 L2 工具基线（`structural_score --save` 与 `feature_sites` 预算：C 检查组件、T1/T2 认知点），然后进部件②（parser）。
-- **待验证假设**：Verilog 注释单一声明面等价（token 流/测试零变化）；基线刷新只吸收已解释的真实增长；T3-① 结论（lexer/preprocessor 抽象成立）在 L1 修复后成立。
-- **台账**：T3-① 调查完成（`gap-engine-abstraction-audit.md`「T3 部件①审查记录」：弱信号 0 结构名、判据② 红证、c4 复用；L1 注释双声明、L2 基线漂移）；T2 ✅（#53–#58）；T1 ✅。
+- **意图**：T3 部件②（parser）调查轮——对照 C/Verilog 规则字段面（`register`/`requires_symbol`/`symbol_namespaces`/`is_atom`/`backtrack`）、消歧机制、错误路径；用判据②（删语言包规则字段）与 A/B、`gap-parser-linter-approximation` 出 leak 清单，落矩阵行。
+- **待验证假设**：G4 后 parser 符号面（C）与 Verilog typed_ports 面是否可由同一声明键表达；错误路径（截断/恢复）是否有语言分支；单部件 1 调查 + 1 实现轮可收口。
+- **台账**：T3-① 收口（#59 调查 + #60 修复：Verilog 注释单一声明面；`structural_score` S=1110/`feature_sites` 基线已刷新）；T2 ✅（#53–#58）；T1 ✅。
 
 ## 估算依据（对照锚，可复核）
 

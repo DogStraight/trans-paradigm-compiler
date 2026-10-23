@@ -1,6 +1,6 @@
 # Gap — 引擎能力面抽象审查（主线 1 刻度完成后执行）
 
-- 状态：**执行中（T3，部件①已审 #59）**；触发 = 刻度 7→9 完成 + 作者 2026-10-23 拍板三任务路线图
+- 状态：**执行中（T3：部件①已审并修复 #59/#60）**；触发 = 刻度 7→9 完成 + 作者 2026-10-23 拍板三任务路线图
 - 关联：`ROADMAP.md`「刻度完成后的全项审查」；`policy/collaboration.md`（证据/循环纪律）
 - 参照：—
 
@@ -70,7 +70,7 @@ C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个�
 | 4 | **文件链接 / 入口点** | C 的 `#include` 全链路（`path_forms`、内容进流、行映射、渲染剪枝）；Verilog 的 `module_index` 项目符号可见性；CLI 单文件 vs `ProjectChecker.check(paths)` 多入口 | **新引擎代码**（缺统一 unit graph） | `preprocessor/primitives/include.py`、`pipeline/__init__.py`（include 剪枝）、`analyzer` 的 `module_index`、`ROADMAP.md`「用户侧 CLI 形态」；两门语言各一套索引 | 引擎级 **unit graph / 入口协议**（根文件集 + 解析器声明 + 单位索引 + 链接策略），两门语言的索引收敛为配置 | 待审查（阶段 5 真实 C 语料接入会先逼一遍） |
 | 5 | **容器成员位增量**（轮 #35） | `StructBody = { (@StructMember\|@StructMemberExtra)* }` + 空槽位注入 | **原样**（零引擎改动） | `tests/languages/c/test_c_standard_conformance.py::TestStaticAssertMemberPosition`；门禁变异 101 | —（抽象成立） | 已过 |
 | 7 | **字面量前缀 / 数字形态声明面**（轮 #37/#38） | C 用 `[string] prefixes` + `[[number.based]]`（`suffix` / `base_prefix` / `digit_separator`）按名合并表达 L/u/U/u8、`0b…`、`1'000`；其余语言包不声明即无影响 | **原样**（引擎声明面） | `tests/languages/c/test_c_lexer.py::TestLiteralPrefixes/TestLiteralPrefixTiers/TestDigitSeparator{,Tiers}`；`tests/engine/lexer/test_number_digit_separator.py`；门禁变异 103/104/105/106 | —（抽象成立） | 已过 |
-| 8 | **词法/预处理声明面（T3-①）** | C/Verilog 注释/数字/宏/字符串形态全在包内声明；判据②删声明均红；弱信号 0 结构名；c4 复用同一面 | **原样 + 1 方言复制（Verilog 注释双声明）** | `tools/lang_penetration.py --dirs lexer preprocessor`；删声明探针见上「T3 部件①审查记录」 | 删 Verilog `token.toml` 重复 `[comment]`（下一轮 L1） | 已审（L1/L2 待修） |
+| 8 | **词法/预处理声明面（T3-①）** | C/Verilog 注释/数字/宏/字符串形态全在包内声明；判据②删声明均红；弱信号 0 结构名；c4 复用同一面 | **原样 + 1 方言复制（Verilog 注释双声明）** | `tools/lang_penetration.py --dirs lexer preprocessor`；删声明探针见上「T3 部件①审查记录」 | 删 Verilog `token.toml` 重复 `[comment]`（#60 已做） | 已审（L1/L2 ✅） |
 | 6 | **注释归属**（行中/行尾/前置/容器项间） | 引擎统一槽位模型，各语言布局只消费槽位 | **原样** | `renderer/renderer_architecture.md`（注释处理节）；`tests/engine/renderer/test_comment_slots.py` + C/verilog 渲染门禁 | —（抽象成立） | 已过（本轮 #32/#33 的修复未引入语言分支） |
 
 ## T3 部件①审查记录（lexer / preprocessor，#59）
@@ -90,7 +90,8 @@ C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个�
 | 删 Verilog `base/_lexer.toml` 的 `[comment]` | `tests/engine/lexer` **248 passed（绿）** | 异常，见 L1 深挖 |
 
 **L1 方言复制（leak 候选 → 立项修复）**：Verilog 的 `[comment].pairs` 在
-`base/_lexer.toml:6` 与 `token.toml:16` **各声明一份**（C 只在 `base/_lexer.toml`）。
+`base/_lexer.toml:6` 与 `token.toml:16` **各声明一份**（C 只在 `base/_lexer.toml`）。**已修（#60）**：删 `token.toml` 那份，保留 `base/_lexer.toml`；
+修复后删剩余一份 ⇒ `lexer.tokenize` 无 comment token、`tests/engine/lexer` **10 failed**（单一来源承重）。
 两处都删后 `lexer.tokenize("// c")` 变 `div,div,id`（无 comment token）⇒ 引擎**无**注释兜底，
 绿是重复面所致。修复 = 留 `base/_lexer.toml`（对齐 C 单一声明面）、删 `token.toml` 那份 +
 头注；判据 = 删剩下一份 → 受影响测试红（证明单一来源承重）。
@@ -103,7 +104,9 @@ C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个�
 **L2 工具基线漂移（登记，非 leak）**：`tools/structural_score.py --compare` 报若干新增
 认知点（C 符号/数字/预处理面与 T1/T2 改动带来的真实增长）；`tools/feature_sites.py compare`
 报 `check` 散点 8→16（C 的 ENUM/LAB/MAC/TAG 检查组件入库）⇒ 需**带理由刷新基线**，
-不静默放行；随 L1 下一轮一并处理。
+不静默放行；**已刷新（#60）**：`structural_score --save`（S=1110，Δ+0）与
+`feature_sites --save`（`check` 预算 16，理由 = C11/C23/CSC/TAG/ENUM/LAB/MAC 检查组件入库 +
+T1/T2 真实改动；`--compare` 现 0 增长）。
 
 ## 可实现性（leak 候选的内置化骨架；审查轮细化）
 
