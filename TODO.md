@@ -59,10 +59,9 @@
       接入时 semantic 事实型码仍被收集（或显式登记"benchmark 只对语法完整文件"口径）。
       链：`tests/e2e/eval_benchmark.py`、`docs/gaps/gap-c-preprocessor-scope.md` ㉒
 
-- [ ] **C 真实语料解析回溯成本（性能，主线 2 块 2）**：已定位 = atom 候选对嵌套表达式重复
-      求值（cJSON parse 58.7s、4.17M 次尝试/18.45x 重复）；atom 位置 memo 原型 7.0s、门禁
-      28.6s。实施与判据见 `docs/gaps/gap-parser-backtracking.md`（目标 cJSON ≤5s / 门禁 ≤30s，
-      AST/A-B/corpus 不变）。链：`tests/e2e/eval_diag_baseline_c.py`
+- [ ] **C 真实语料解析回溯成本（性能，主线 2 块 2）**：atom 位置 memo 已实施（#68：同机
+      57.6→8.75s、门禁 31.5s）；目标 cJSON ≤5s / 门禁 ≤30s 仍未达，剩余 = 候选去重与热路径
+      优化；基准/判据见 `docs/gaps/gap-parser-backtracking.md`。链：`tests/e2e/eval_diag_baseline_c.py`
 ## 三、预算与登记（代码结构债 / 功能散点）
 
 - [ ] **功能散点步 2b**：剩余未收敛登记点属**有意保留边界**（收敛一个删一个；清单见

@@ -1,6 +1,6 @@
 # Gap — parser 回溯成本与 atom 位置级 memo（主线 2 块 2）
 
-- 状态：**调查完成（#67，2026-10-23）**；实施待下一轮。目标 = cJSON 单文件 ≤5s、C 语料门禁 ≤30s。
+- 状态：**atom 位置 memo 已实施（#68，2026-10-23，partial）**：同机基线 57.6s → 8.1–9.1s（median 8.75s，6.6x）；门禁 31.3–34.3s（median 31.5s，min 31.3s）。**目标 cJSON ≤5s 未达、门禁 borderline（≤30s）**；继续优化。
 - 关联：`PROGRESS.md` 块 2；`TODO.md`「C 真实语料解析回溯成本」；`tests/e2e/eval_diag_baseline_c.py`
 - 参照：`docs/gaps/gap-parser-linter-approximation.md`（parser 无错误恢复为刻意接受）；linter packrat 记忆化先例
 
@@ -28,6 +28,12 @@
 - 已知未验证：缓存命中复用**同一 Node 对象**——需核验 attrs/注释槽/路径计数是否有
   上下文依赖；作用域门控（`requires_symbol`）与声明回滚期间的位置也可能改变结果。
   故原型只作可行性证据，不当结论。
+
+## 实施记录（#68）
+
+- `_atom_parser_impl` 已按 `(token 位置, 作用域版本)` 缓存 atom 结果；`_ScopeStack` 增加 `version`（register/restore/push/pop 仅在真实状态变化时 +1）；`Parser.parse` 每次清空 memo；`restore` 增加无变化快速路径。
+- 同机对照：pre-memo 57.6s → 8.75s（median，6.6x）；AST 节点名序列 SHA1 与改前一致（25,230 节点）；全量 4377/14、A-B 0/144、门禁 7/7 0 诊断；`COG|_atom_parser_impl` 以性能分支理由进 `tools/structural_kept.json`。
+- 剩余：直接成本仍 ~8–9s；继续优化需降候选/热点开销（见下）。
 
 ## 实施方向（下一轮）
 

@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **块 2：parser atom 位置 memo（#68，partial）**：`_atom_parser_impl` 按
+  `(token 位置, 作用域版本)` 缓存 atom 结果；`_ScopeStack` 版本号仅在真实状态变化时递增；
+  `Parser.parse` 每次清空 memo；`restore` 增加无变化快速路径。消除嵌套括号下
+  `ParenthesizedExpr`/`PostfixExpr`/`CastExpr` 重复解析导致的 2^k 回溯。
+  · 同机对照：pre-memo **57.6s → 8.75s**（median，**6.6x**）；AST 节点名序列一致（25,230）；
+    全量 **4377/14**、A/B **0/144**、语料 7/7 0 诊断；pyright 0。
+  · 目标 cJSON ≤5s 未达、门禁 borderline（31.5s median，min 31.3s）；下一轮继续候选去重/
+    热路径优化；`COG|_atom_parser_impl` 以性能分支理由登记 kept。
+  · 文档：`gap-parser-backtracking.md` 实施记录；PROGRESS 块 2 状态；TODO 同步。
+
+### Added
+
 - **主线 2 刻度立档（12 块：工具化 + 高性能 0.1.4）**：`PROGRESS.md` 改写为新主线刻度
   （块 1 基线清算 → 2 parser 性能 → 3/4 片段模式 P0/P1 → 5 unit graph → 6 精化基座 graph 化 →
   7 增量/编辑器 → 8 诊断粒度 → 9 渲染注释 → 10 工程化缺口 → 11 吞吐基准 → 12 收口）；

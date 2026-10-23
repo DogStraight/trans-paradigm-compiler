@@ -176,6 +176,8 @@ class _ScopeStack:
         self._stack: list[_ScopeEntry] = [_ScopeEntry("__global__", "global")]
         # 撤销日志：(register 时该作用域在 _stack 中的下标, 名字, 注册前的原值/None)
         self._register_log: list[tuple[int, str, str | None]] = []
+        # 状态版本（atom memo 用）：任何符号/作用域变化都 +1，避免跨状态复用结果
+        self.version: int = 0
 
     # ── 快照/恢复（配合 parser 回溯） ──
 
@@ -194,6 +196,11 @@ class _ScopeStack:
         作用域消失），仍存在的作用域则按"原值/无原值"精确还原。
         """
         depth, log_len = state
+        # 快速路径：无变化的快照恢复（回溯失败候选最常见）——不触碰日志/版本
+        if depth == len(self._stack) and log_len == len(self._register_log):
+            return
+        before_depth = len(self._stack)
+        before_log = len(self._register_log)
         while len(self._stack) > depth:
             self._stack.pop()
         for scope_idx, name, prev in reversed(self._register_log[log_len:]):
@@ -205,15 +212,19 @@ class _ScopeStack:
             else:
                 symbols[name] = prev
         del self._register_log[log_len:]
+        if len(self._stack) != before_depth or len(self._register_log) != before_log:
+            self.version += 1
 
     # ── 作用域管理 ──
 
     def push(self, name: str, kind: str) -> None:
         self._stack.append(_ScopeEntry(name, kind))
+        self.version += 1
 
     def pop(self) -> None:
         if len(self._stack) > 1:
             self._stack.pop()
+            self.version += 1
 
     # ── 符号注册与查找 ──
 
@@ -222,6 +233,7 @@ class _ScopeStack:
         entry = self._stack[-1]
         self._register_log.append((len(self._stack) - 1, name, entry.symbols.get(name)))
         entry.symbols[name] = kind
+        self.version += 1
 
     def lookup(self, name: str) -> str | None:
         """沿作用域链查找符号，返回其 kind，未找到返回 None。"""
@@ -272,11 +284,29 @@ def _load_symbol_namespaces() -> dict[str, list[str]]:
 
 
 def _atom_parser_impl(self, _tokens, idx, context):
-    """atom_parser 的实际实现（独立函数避免每次 try_pratt_rule 创建闭包）"""
+    """atom_parser 的实际实现（独立函数避免每次 try_pratt_rule 创建闭包）。
+
+    **atom 位置 memo（性能）**：atom 匹配器按最长匹配尝试全部 atom 规则；嵌套
+    括号下 `ParenthesizedExpr`/`PostfixExpr`/`CastExpr` 会各自重解析同一内层
+    表达式 ⇒ 每层嵌套乘因子（cJSON 实测 2^k，单文件 4.17M 次尝试/58.7s）。
+    以 `(token 位置, 作用域版本)` 为键缓存同一 parse 内的 atom 结果：位置相同
+    ⇒ token 流相同，作用域版本相同 ⇒ 符号门控结果相同；缓存命中直接复用节点。
+    缓存每次 `parse()` 清空；作用域版本在缓存调用前后变化则不写缓存（保守）。
+    """
     del _tokens  # atom_parser 回调协议签名参数 (tokens, idx)，本实现只用 idx/context
+    cache = getattr(self, "_atom_memo", None)
+    key = None
+    if cache is not None:
+        key = (idx, self.scope_stack.version)
+        hit = cache.get(key)
+        if hit is not None:
+            node, consumed = hit
+            context.token_pointer = context.token_pointer
+            return node, consumed
     old_ptr = context.token_pointer
     context.token_pointer = idx
     start_ptr = context.token_pointer
+    version_before = self.scope_stack.version
     # 最长匹配（2026-08-28，层次化引用交错形态）：原子候选按 production
     # 长度降序尝试，取**消费最多**者——`a[0].b` 时 SelectExpr（吃 a[0]）
     # 有进展但残留 `.b`，HierExpr（吃 a[0].b）更长胜出；`a[0]` 纯下标两
@@ -314,8 +344,13 @@ def _atom_parser_impl(self, _tokens, idx, context):
             node.add_attr("_tok_span", (j, j + 1))
             # consumed 从 idx 起算（含跳过的 trivia），与 pratt 的
             # `idx += consumed` 推进约定一致。
-            return node, j + 1 - start_ptr
+            consumed = j + 1 - start_ptr
+            if cache is not None and key is not None and self.scope_stack.version == version_before:
+                cache[key] = (node, consumed)
+            return node, consumed
         return None, 0
+    if cache is not None and key is not None and self.scope_stack.version == version_before:
+        cache[key] = (best_node, best_consumed)
     return best_node, best_consumed
 
 
@@ -907,6 +942,7 @@ class Parser:
         # repeat 迭代深度（B1.3 claim 协调，_repeat_loop 维护）——
         # 跨 parse 复用 Parser 时残留会误判 claim 上下文
         self._repeat_iter_depth = 0
+        self._atom_memo = {}
         self._fail_sites = {}
         self._last_failure_report = None
         self._parse_truncated = False

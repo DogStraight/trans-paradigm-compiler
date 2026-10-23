@@ -16,7 +16,7 @@
 | # | 块 | 状态 |
 |---|----|------|
 | 1 | **基线清算** | ✅ 三探针：S Δ0、feature 0、config_sites PASS（TODO 过期三项已清，`864e472`） |
-| 2 | **parser 性能收口** | ⏳ 调查完成：atom 位置 memo 原型 58.7→7.0s / 门禁 28.6s；实施见 `gap-parser-backtracking.md`（目标 cJSON ≤5s、门禁 ≤30s、A/B 0/144） |
+| 2 | **parser 性能收口** | ⏳ memo 已实施 #68：同机 57.6→8.75s（6.6x，median）、门禁 31.5s（min 31.3）；**cJSON ≤5s 未达/门禁 borderline**；全量/A-B/语料绿 |
 | 3 | **片段模式 P0** | ⏳ 独立 CLI + 显式记号 + bytes identity（LF/CRLF/BOM/无尾）+ 一条真实规则 + dry-run diff + falsification 记录；设计输入 `_drafts/marker-mode-evaluation.md`（未入库） |
 | 4 | **片段模式 P1** | ⏳ `[[island_rules]]` 声明面 + rewriter 能力位 + 多规则/冲突/后验；**契约面需作者批准**（P0 不碰声明面） |
 | 5 | **unit graph 内置能力** | ⏳ `unit_graph.v1`：C include 与 Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分支 |
@@ -32,9 +32,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 2 实施轮——在 `Parser` 内实现每 parse 清空的 atom 位置 memo（键含作用域状态；只缓存无副作用原子），验证 AST 签名/A-B/corpus/render；不足再追加候选去重；目标 cJSON ≤5s、门禁 ≤30s。
-- **待验证假设**：原型 7.0s 的主要收益可保留在正式实现；Node 复用不会改变 attrs/注释/路径；门控规则可用 state 键隔离；verilog 真实语料不回归。
-- **台账**：块 1 ✅（`864e472` + 三探针）；块 2 调查完成（`gap-parser-backtracking.md`：#67，58.7→7.0s、门禁 28.6s、节点名序列一致）；主线 2 当前 1/12。
+- **意图**：块 2 继续——先做**稳定基准**（3 次 median 的 cJSON/gate 探针；减少机器负载方差），再攻剩余 ~8–9s：候选去重（`PostfixExpr`/`ParenthesizedExpr` 同层重复）、生产式/快照热点 micro-opt；目标 cJSON ≤5s、门禁 ≤30s。
+- **待验证假设**：memo 已消除 2^k 主因；剩余为主干解析成本，可由候选去重/热路径优化再降 ~40%；AST/A-B/语料不变。
+- **台账**：块 1 ✅（`864e472`）；块 2 memo 实施 #68（同机 6.6x、全量/AB/语料绿，目标未达）；主线 2 当前 1/12。
 
 ## 估算依据（对照锚，可复核）
 
