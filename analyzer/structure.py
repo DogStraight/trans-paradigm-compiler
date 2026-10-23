@@ -308,13 +308,11 @@ class FilePipeline:
         # raw 位点（P3c/M2，**内部机制**）：紧接 scan 取走本轮"合格位点"，与
         # pipeline 侧**同形**接线（最小通道：纯 dict + 一份源文本，不传 context）。
         # 这里 lint 与词法都作用在**同一份 `source`**（上面的宏展开后文本）⇒ 位点
-        # region 的 token 下标与 parser token 流可比，无需额外同源门。
-        internal_warnings = shared["linter"].internal_warnings()
         if any(d.blocking for d in fr.lint_diags):
             return fr
 
         # 解析（解析期符号由 parser 的 `[Rule.parser] register` 单遍注册；
-        # 预扫描只服务 linter 内部证据，不再喂 parser——#49 删除预扫描残面）
+        # 单遍解析；raw 承载机制已随 T2c 删除）
         from parser import Parser
         from parser.parser_core import ParseError
 
@@ -323,22 +321,6 @@ class FilePipeline:
             rules=shared["rules"],
             rule_selector=shared["rule_selector"],
         )
-        parser.raw_sites = [
-            {
-                "line": int(w.get("line", 0)),
-                "column": int(w.get("column", 0)),
-                "region": (int(w["region"][0]), int(w["region"][1])),
-                "names": list(w.get("symbol_names") or []),
-                "reason": str(w.get("reason", "")),
-                "order": w.get("pos"),
-                # P4 理解路径素材（B③）：同 pipeline 侧（M1 已算出的替换配方）
-                "substitute_type": str(w.get("substitute_type", "")),
-                "trial_rule": str(w.get("trial_rule", "")),
-            }
-            for w in internal_warnings
-            if w.get("eligible") and w.get("region")
-        ]
-        parser.raw_source = source
         try:
             tokens = shared["lexer"].tokenize(source)
             ast = parser.parse(tokens)

@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T2c 切片②——删 parser raw 承载：`parser_core` 的 `raw_sites/raw_source/_raw_sites_consumed/_raw_trial_active`、`block_parser` 的 `RawStatement`/`match_raw_site`/`try_raw_sentence`/`build_raw_candidate`/试建台账、`_production.py::_try_raw_at_statement_start` 接入点、pipeline 的 raw 位点构建/消费日志；随后切片③删 linter M2/`internal_warnings` 旁路与相关测试/变异。
-- **待验证假设**：raw 位点无来源（T2b 后）⇒ parser raw 分支不可达；删后 C 解析/诊断面不变（复合字面量/强转由语法直接建树）；verilog 零变化。
-- **台账**：T2c 切片① ✅ #55（P4/引擎 raw 契约已删，受影响套件+变异+doc refs 绿）；T2b ✅ #54；T1 ✅；主线 1 刻度 9/9。切片②③后补全量冻结树。
+- **意图**：T2c 切片③——删 linter M2 摘诊断（`_apply_narrow_downgrade`）与收敛内部 warning 旁路（lookahead/discovery/scanner/pipeline）及对应测试/变异；随后 T2d 文档收口 + 全量冻结树。
+- **待验证假设**：M2/内部 warning 在 T2b 后已无 eligible 输入、无生产消费者 ⇒ 删除零行为变化；pipeline 的 `ctx.internal_warnings` 可整体删。
+- **台账**：T2c 切片① ✅ #55（P4/引擎 raw 契约）、切片② ✅ #56（parser raw 承载/注入/幂等特例）；受影响套件+pyright+变异绿；余切片③ + 全量 + T2d。
 
 ## 估算依据（对照锚，可复核）
 

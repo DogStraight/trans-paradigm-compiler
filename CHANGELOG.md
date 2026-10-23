@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **T2c 切片②：删除 parser raw 承载（#56，ADR-0024）**：
+  · 删 `block_parser` 的 `RawStatement` 机制（`match_raw_site`/`try_raw_sentence`/
+    `build_raw_candidate`/`_raw_trial_*`/`_verbatim_slice`）、`parser_core` 的 `raw_sites`/
+    `raw_source`/试建台账、`_production` 的 raw 接入点、`analyzer/structure` 位点注入、
+    pipeline 的位点注入/未重定位日志/幂等 raw 特例。
+  · 删 `test_parser_raw_site.py`/`test_raw_corpus.py`；变异 -1（parser raw 兜底条目）。
+  · 验证：parser+preprocessor+C+pipeline 1968 passed/1 skipped；analyzer+C+pipeline
+    1739 passed/1 skipped；pyright 0；变异目标校验通过。
+  · 余：切片③（linter M2/内部 warning 旁路）→ T2d 文档收口 + 全量冻结树。
+
+### Added
+
 - **T2b：删除 lexer 预扫描（pre_scan）机制（#54，ADR-0024）**：
   · 删 `lexer/pre_scan.py` 与导出、两包 `[lexer] pre_scan` 配置与 `base/_pre_scan.toml`、
     `core/global_state` 缓存键与 `core/engine_capabilities` 能力注释。

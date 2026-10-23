@@ -68,10 +68,6 @@ class ParseContext:
         # 符号 store（作用域栈；可选绑定，见 bind_symbol_store）
         self._symbol_store: _ScopeStack | None = None
 
-        # 试建期台账（P4 理解路径判据③；见 block_parser.build_raw_candidate）：
-        # 建了叶子的 token 下标 / pratt 消费但不建叶子的下标。只在试建窗口内非 None
-        # （其余时刻零开销）。**不在快照面内** ⇒ 由试建的 finally 显式复位。
-        self._trial_leaf_indices: set[int] | None = None
         self._trial_pratt_sink: set[int] | None = None
 
     def bind_symbol_store(self, store: "_ScopeStack") -> None:
@@ -412,10 +408,6 @@ from .block_parser import (
     parse_block_body,
     parse_block,
     collect_line_comments,
-    # 歧义位点 raw 暂缓建树（P3c/M2，内部机制）
-    match_raw_site,
-    try_raw_sentence,
-    try_raw_at_statement_start,
 )
 
 
@@ -470,10 +462,6 @@ class Parser:
     _parse_block_body = parse_block_body
     parse_block = parse_block
     _collect_line_comments = collect_line_comments
-    # 歧义位点 raw 暂缓建树（P3c/M2，内部机制）
-    match_raw_site = match_raw_site
-    try_raw_sentence = try_raw_sentence
-    _try_raw_at_statement_start = try_raw_at_statement_start
 
     def __init__(
         self,
@@ -532,14 +520,6 @@ class Parser:
         # （tpc.toml 的 `[parser] symbol_namespaces = { ns = [...] }` 经配置注册表
         #   展平成 `<prefix>.<ns>` 键——按前缀收集；未声明 ⇒ 空表 ⇒ 门控空转）
         self.symbol_namespaces: dict[str, list[str]] = _load_symbol_namespaces()
-        # 歧义位点 raw 暂缓建树（P3c/M2，内部机制）：位点表与源文本由 pipeline 注入
-        # （最小通道：纯 dict 列表 + 一段文本，不把 pipeline context 塞进 parser）。
-        # 默认空表 ⇒ 机制关闭（零影响）。
-        self.raw_sites: list[dict] = []
-        self.raw_source: str = ""
-        self._raw_sites_consumed: list[dict] = []
-        # 试建期标志（候选子树试建期间抑制 raw 钩子自身，防递归自噬）
-        self._raw_trial_active: bool = False
 
     # ── 解析期符号（声明式注册 + 规则门控；语言知识在 TOML）──
 
@@ -930,9 +910,6 @@ class Parser:
         self._fail_sites = {}
         self._last_failure_report = None
         self._parse_truncated = False
-        # raw 位点本轮消费记录（每次 parse 重置；供 pipeline 幂等复跑按同一条件重放）
-        self._raw_sites_consumed = []
-        self._raw_trial_active = False
         # 符号 store（作用域栈）每次 parse 重建：跨 parse 复用 Parser 时，上一轮
         # 留在 root 作用域里的注册（同深度、不会随 pop 消失）会让本轮 `lookup`
         # 读到过期符号。重建 + 绑定给 context ⇒ 快照/回滚连带覆盖符号（见

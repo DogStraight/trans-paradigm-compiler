@@ -84,6 +84,21 @@ verilog 真实语料基线 **无增长**；A/B **0/144**；pyright **0**；`chec
 **全量验证（#54 收口）**：`pytest tests` **4454 passed / 38 skipped**（删测后 skip 由 75 降）；
 T2c（raw 管线大删：M2 摘诊断/parser raw 承载/P4 理解提升/E002·E003 + 剩余 skip 测试）待启动。
 
+## T2c 实施记录（切片）
+
+- **切片① ✅ #55**：删 C P4（`_raw_understand`/`_raw_transform`/`_raw_bridge`/`_p4_query`
+  与组件理解/transform 声明）、引擎 raw 契约（`analyzer/raw_contract.py`、
+  `primitives/_raw_validate.py`、traversal raw 内建配置）；删 4 个 p4/raw 测试，新增
+  `test_c_compound_literal.py` 承接 T2a 判据；变异 -2。验证：analyzer+C 1585、linter+
+  pipeline+e2e 509、pyright 0、doc refs PASS。
+- **切片② ✅ #56**：删 parser raw 承载（`RawStatement`/`match_raw_site`/`try_raw_sentence`/
+  `build_raw_candidate`/试建台账、`parser_core` 位点表/`_production` 接入点、
+  `analyzer/structure` 位点注入、pipeline 注入/未重定位日志与幂等 raw 特例）；删
+  `test_parser_raw_site.py`/`test_raw_corpus.py`；变异 -1。验证：parser+preprocessor+C+
+  pipeline 1968 passed/1 skipped、analyzer+C+pipeline 1739/1、pyright 0。
+- **切片③（下一轮）**：删 linter M2 `_apply_narrow_downgrade`、`internal_warnings` 收敛旁路
+  与剩余测试/变异；随后 full suite + T2d。
+
 ## 权衡
 
 **得到**：删两条死机制（预扫描 + raw 管线）、一个引擎阶段旋钮、两包配置与四处测试面；

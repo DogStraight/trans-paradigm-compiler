@@ -829,11 +829,6 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
 
     parsed_node = Node(token_type)
     parsed_node.add_attr("value", current_token.content)
-    # 台账（P4 理解路径判据③）：试建期记录"建了叶子"的 token 下标
-    # （无 sink = 非试建期，零开销）
-    leaf_sink = getattr(context, "_trial_leaf_indices", None)
-    if leaf_sink is not None:
-        leaf_sink.add(context.token_pointer)
     context.advance_token()
 
     # 收集紧随当前 token 的 inline comment（注释节点模型 2b-2，C5 重构提取）
@@ -1041,11 +1036,6 @@ def parse_call(self, node: dict, context: ParseContext) -> Node | None:
     result_node = self._try_rule_productions(context, target_rule)
     if result_node is None:
         context.restore_snapshot(snapshot)
-        # 歧义位点 raw 兜底（内部机制；位点表为空 ⇒ 恒 None）：单元素 `@Stmt` 与
-        # `@Stmt*` 迭代项都经这里（不走 `parse_sentence`）。只在正常建树失败后尝试。
-        raw_node = self._try_raw_at_statement_start(context)
-        if raw_node is not None:
-            return raw_node
         return None
 
     return result_node
