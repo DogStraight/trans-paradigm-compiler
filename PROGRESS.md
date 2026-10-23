@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T2c 切片③——删 linter M2 摘诊断（`_apply_narrow_downgrade`）与收敛内部 warning 旁路（lookahead/discovery/scanner/pipeline）及对应测试/变异；随后 T2d 文档收口 + 全量冻结树。
-- **待验证假设**：M2/内部 warning 在 T2b 后已无 eligible 输入、无生产消费者 ⇒ 删除零行为变化；pipeline 的 `ctx.internal_warnings` 可整体删。
-- **台账**：T2c 切片① ✅ #55（P4/引擎 raw 契约）、切片② ✅ #56（parser raw 承载/注入/幂等特例）；受影响套件+pyright+变异绿；余切片③ + 全量 + T2d。
+- **意图**：T2d 收口——清理 gap/README/MODEL_INDEX 中 pre_scan/raw 历史叙述与幽灵引用，核对 `ctx.raw_source` 等残留命名；跑全量冻结树；随后进 T3（双包抽象对照按部件审查，先 lexer/preprocessor 部件，用判据②删声明/③lang_penetration 探针出 leak 清单）。
+- **待验证假设**：T2c 后 raw/pre_scan 生产路径无消费者（M2/内部 warning 已无输入）；文档清理后 `check_doc_refs`/预算/all grep 归零；T3 首部件可在 1 调查轮内出矩阵。
+- **台账**：T2c ✅（切片①#55/②#56/③#57；全量 4374 passed/14 skipped，pyright/变异绿）；T2a/T1 ✅；主线 1 刻度 9/9。
 
 ## 估算依据（对照锚，可复核）
 

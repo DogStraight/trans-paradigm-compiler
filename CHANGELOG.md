@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **T2c 切片③：删除 linter M2 与候选收敛内部 warning 旁路（#57，ADR-0024）**：
+  · 删 `scanner` 的 M2 摘诊断（`_DOWNGRADABLE_CODES`/`_apply_narrow_downgrade`）、
+    `internal_warnings` 状态/取用；删 lookahead 收敛判定面（`_record_convergence`/
+    `_member_only`/`_allowed_in_context`/内部 warning 列表）、discovery 转发与容器位点扫描、
+    pipeline `ctx.internal_warnings`。
+  · 删 `test_lint_internal_warnings.py`/`test_linter_symbol_hints.py`/lookahead 收敛用例；
+    变异 -1。**T2c 完成**：raw 管线（P4/引擎契约/parser 承载/linter 资格与摘诊断）全部删除。
+  · 验证：linter+pipeline+C 1585 passed/7 skipped；全量 **4374 passed/14 skipped**；
+    pyright 0；变异目标校验通过；`core/global_state` 清 raw 契约登记 2 条。
+  · 余：T2d 文档收口 + 全量冻结树 → T3。
+
+### Added
+
 - **T2c 切片②：删除 parser raw 承载（#56，ADR-0024）**：
   · 删 `block_parser` 的 `RawStatement` 机制（`match_raw_site`/`try_raw_sentence`/
     `build_raw_candidate`/`_raw_trial_*`/`_verbatim_slice`）、`parser_core` 的 `raw_sites`/

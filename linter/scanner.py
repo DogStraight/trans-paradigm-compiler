@@ -18,7 +18,7 @@ Doc: linter/linter_architecture.md
 
 import os
 
-from core.define import GrammarRule, Token
+from core.define import GrammarRule
 from core.config_registry import ConfigRegistry, declare_cfg
 from core.errors import ConfigError
 from core.token_protocol import (
@@ -31,7 +31,7 @@ from lexer import Lexer
 from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
 
-from . import LintDiagnostic, Position, token_pos
+from . import LintDiagnostic, Position
 from .grammar_slicer import build_slice_tree
 from .discovery import Discovery
 from .checker import CheckerRegistry
@@ -42,11 +42,6 @@ from .macro_syntax import macro_syntax_diagnostics
 from .checkers.statement import StatementChecker
 from .checkers.expression import ExpressionChecker
 from .checkers.style import StyleChecker
-
-# M2 窄档可摘的**结构类**诊断码（判据见 `LinterScanner._apply_narrow_downgrade`）：
-# 只这两类"语句/未识别"结构码；`phase1-boundary`（块配对）、`lexer-error`、宏卫生与
-# ST* 样式码一律保留 ⇒ 真错不被摘（R6/R7 反例锁定）。
-_DOWNGRADABLE_CODES = frozenset({"phase-statement", "phase-unrecognized"})
 
 # linter.macro_hygiene
 #   #sym:config = [macro_hygiene]
@@ -231,9 +226,6 @@ class LinterScanner:
         self.enable_phase0 = enable_phase0
         self.enable_phase1 = enable_phase1
         self.enable_phase2 = enable_phase2
-        # 内部 warning 旁路（用户不可见；scan() 每次按次重置后填充）
-        self._internal_warnings: list[dict] = []
-
     # ── 动态 block delimiter 收集 ─────────────────
 
     @staticmethod
@@ -278,10 +270,7 @@ class LinterScanner:
         """扫源文本产出诊断。
 
         ⚠ **返回值只含用户诊断**。另有一路**内部 warning 旁路**（候选未收敛位点，
-        用户不可见、不进 `--json`/exit code/落盘）：每次 scan 开头按次重置，
-        由 `internal_warnings()` 取用（消费链见该方法 docstring）。
         """
-        self._internal_warnings = []
         errors: list = []
         try:
             macro_defs, func_macros, _, _, _, clean_source, _ = scan_directives(
@@ -389,9 +378,6 @@ class LinterScanner:
             for node in self._discovery.discover(tokens):
                 register(node)
 
-        # 内部 warning 旁路快照（用户不可见）：候选未收敛位点，供 pipeline → P3 消费。
-        self._internal_warnings = self._discovery.internal_warnings()
-
         # 未识别语句诊断（发现阶段记录）与各 Checker 诊断合并输出。
         # 宏定义的**形式化语法**约束在此层（AST 前）：指令行已被扫指令消费、不进 lint
         # 流，故必须对**原始源码**检查；语言包未声明 `[macro_syntax]` ⇒ 空（语言无关）。
@@ -400,58 +386,6 @@ class LinterScanner:
         errors += registry.validate_all(tokens)
         # M2 窄档摘诊断（与 parser 侧 raw 承载**同批**）：只摘 `eligible` 位点 region
         # 内的两类**结构类**码；其余码（phase1-boundary / lexer-error / 宏卫生 / ST*）
-        # 一律保留 ⇒ 真错不被静默。两批缺一不可（只摘不 raw ⇒ 更差的含糊截断报错）。
-        return self._apply_narrow_downgrade(errors, tokens)
+        # 一律保留 ⇒ 真错不被静默。
+        return errors
 
-    def _apply_narrow_downgrade(
-        self, errors: list[LintDiagnostic], tokens: list[Token]
-    ) -> list[LintDiagnostic]:
-        """窄档摘诊断：`eligible` 位点 region 内的**结构类**诊断摘成内部 warning。
-
-        三条同时成立才摘（缺一不摘 ⇒ 保持 blocking）：
-          ① 位点条目 `eligible=True`（资格判定，见 `lookahead._record_convergence`；
-             含 raw 互斥 ④：关键字触发的声明类候选句一律不 eligible）；
-          ② 诊断码 ∈ `_DOWNGRADABLE_CODES`（结构类；样式/宏卫生/边界/lexer 一律不动）；
-          ③ 诊断起点落在该位点的**句子区间** `region` 内（token 下标；`region` 由
-             `lookahead._find_boundary` → `_stmt_ends` 推导——与 parser 侧区间等式同源）。
-        被摘的诊断不返回 ⇒ 不再阻断管线；位点由内部 warning 旁路承载（`downgraded`/
-        `suppressed` 回填），pipeline 同批把位点交给 parser 走 raw 暂缓建树。安全网 =
-        P4 的 analyze 精确符号面校验（校验不过 ⇒ 报错，不静默）。
-        """
-        sites = [w for w in self._internal_warnings if w.get("eligible") and w.get("region")]
-        if not sites:
-            return errors
-        kept: list[LintDiagnostic] = []
-        for diag in errors:
-            hit = None
-            if diag.code in _DOWNGRADABLE_CODES:
-                start_pos = diag.range[0]
-                for w in sites:
-                    start, end = int(w["region"][0]), int(w["region"][1])
-                    # 位置比对统一走 `token_pos`（token 1-based → LSP 0-based）。
-                    if any(
-                        token_pos(t) == start_pos
-                        for t in tokens[start : min(end + 1, len(tokens))]
-                    ):
-                        hit = w
-                        break
-            if hit is None:
-                kept.append(diag)
-            else:
-                hit["downgraded"] = True
-                hit["suppressed"] = int(hit.get("suppressed", 0)) + 1
-        return kept
-
-    def internal_warnings(self) -> list[dict]:
-        """本次 `scan()` 的内部 warning（拷贝；**用户不可见**）。
-
-        消费链：`LookaheadTable`（Level 2 收敛判定，按次重置）→ `Discovery` →
-        `LinterScanner.scan()` → `pipeline._stage_lint` → `_PipelineContext.
-        internal_warnings`（后续"歧义位点 raw 暂缓建树"按行/列消费）。
-
-        与 `scan()` 返回值的边界：本列表**不进** `LintDiagnostic`、不进
-        `tpc lint --json` / LSP 输出、不影响 exit code、不落盘——用户可见面
-        与本次机制引入前逐字节相同。条目形态见
-        `lookahead.LookaheadTable._record_convergence`。
-        """
-        return list(self._internal_warnings)

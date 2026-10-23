@@ -134,24 +134,11 @@ class Discovery:
     def discover(self, tokens: list[Token]) -> list[DiscoveredNode]:
         """扫描 token 流，递归发现嵌套节点，返回树（children 填充）。"""
         self._unrecognized = []
-        # 内部 warning 按次重置（同 _unrecognized 的"每次 discover 清空"纪律）
-        self._lookahead.reset_internal_warnings()
         return self._discover_range(tokens, 0, len(tokens), CTX_TOP, 0)
 
     def unrecognized_diagnostics(self) -> list[LintDiagnostic]:
         """本次 discover 期间记录的"未识别语句"诊断。"""
         return list(self._unrecognized)
-
-    def internal_warnings(self) -> list[dict]:
-        """本次 discover 累积的**内部 warning**（候选未收敛；用户不可见）。
-
-        与 `unrecognized_diagnostics()` 的分工：后者是**用户诊断**（最终并入
-        `LinterScanner.scan()` 返回值）；本方法只服务内部机制（pipeline →
-        后续"歧义位点 raw 暂缓建树"），不进 `LintDiagnostic` / `--json`。
-        条目形态见 `lookahead._record_convergence`。
-        """
-        return self._lookahead.internal_warnings()
-
 
     def dump_nodes(
         self,
@@ -324,39 +311,8 @@ class Discovery:
                     nodes.append(
                         self._make_stmt_node(self._rule_of(candidates), i, e, context)
                     )
-                # P3c 前置切片：括号定界容器体（C `CompoundStmt = { @Stmt* }`）的
-                # **位点发现**——体区间走 record=False（不注册节点 ⇒ 诊断面不变）。
-                self._scan_container_sites(tokens, i, e, candidates[0], context, depth)
                 return e
         return self._skip_balanced(tokens, i, end)
-
-    def _scan_container_sites(
-        self,
-        tokens: list[Token],
-        i: int,
-        e: int,
-        rule: "str | list",
-        context: str,
-        depth: int,
-    ) -> None:
-        """括号定界容器体的位点发现（P3c 前置切片；只记内部 warning）。
-
-        触发（两条同时成立）：
-          ① `rule` 是**引用式容器**（`_is_nested_container`：production 含语句/块
-             引用——配置驱动，如 C `CompoundStmt = { @Stmt* }`）；
-          ② 该语句以**括号开启符**起始 ⇒ 括号配对直接给出体区间 `[i+1, close)`，
-             语言无关、不依赖 production 匹配（不必区分 `{`/`begin`）。
-        体区间交给 `_discover_range(record=False)`：分类/边界/递归仍是**同一套**
-        实现，只是不产出节点、不报未识别 ⇒ 诊断面零变化；句子结束仍由既有
-        `_statement_end`（→ `_derived_end_case` → `_lookahead._stmt_ends`）推导，
-        与位点条目的 `region`（`_find_boundary`）**同源**。
-        """
-        if not isinstance(rule, str) or not self._is_nested_container(rule):
-            return
-        close = self._skip_balanced(tokens, i, e)
-        if close - 1 <= i + 1:
-            return
-        self._discover_range(tokens, i + 1, close - 1, context, depth + 1, record=False)
 
     def _discover_block(
         self,

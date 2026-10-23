@@ -320,64 +320,6 @@ def _elem_called_rules(feat: dict | None) -> set[str]:
     return set()
 
 
-def _tree_callers(tree: dict) -> dict[str, set[str]]:
-    """被调用规则 → **直接** `@call` 它的规则名集合（production 级调用图）。"""
-    callers: dict[str, set[str]] = {}
-    for name, info in tree.items():
-        if not isinstance(info, dict):
-            continue
-        for prod in info.get("prods") or []:
-            for callee in _elem_called_rules(prod):
-                callers.setdefault(callee, set()).add(name)
-    return callers
-
-
-def _inline_dispatchers(tree: dict) -> set[str]:
-    """inline 语句分派器名集合（判据同 `_is_inline_dispatcher`，语言无关）。"""
-    out: set[str] = set()
-    for name, info in tree.items():
-        if isinstance(info, dict) and _is_inline_dispatcher(
-            info, info.get("prods") or []
-        ):
-            out.add(name)
-    return out
-
-
-def _collect_member_only(tree: dict) -> set[str]:
-    """「容器成员专用语句」集合——上下文允许候选集的判据核心（语言无关）。
-
-    R 入集当且仅当三条同时成立：
-      ① `is_statement(R)` —— 语法声明它是语句；
-      ② 存在 caller（有规则在 production 里 `@call` 它）；
-      ③ **没有** caller 是 inline 语句分派器（`inline=true` + 单 choice，如
-         C 的 `Stmt`）。
-    ⇒ R 只能作为**某个具体容器的成员**出现（例：C 的 `StructMember` 只被
-    `StructBody` 的 `@StructMember*` 调用，从不出现在语句序列里），故在
-    **语句位**判定"候选是否收敛"时它不算候选——否则顶层 `myint v;` 会被
-    这个伪候选带成"未收敛"（实测：`Declaration` 与 `StructMember` 都
-    `errs=0/consumed=3`）。
-
-    不受影响的反例（留在集合外，仍是合法候选）：
-      · `FuncDef`：无任何 caller（顶层直接以语句形式出现）；
-      · `Declaration` / `ExprStmt`：由语句分派器 `Stmt` `@call`。
-
-    已知限制（写在此防"看起来支持"）：只识别"直接被分派器调用"的一层——
-    若某语言把语句分派器再包一层（分派器调用分派器），成员判定仍以**直接**
-    caller 为准；当前 4 个语言包（verilog/c/c4/yaml）均满足该前提。
-    """
-    callers = _tree_callers(tree)
-    dispatchers = _inline_dispatchers(tree)
-    out: set[str] = set()
-    for name, info in tree.items():
-        if not isinstance(info, dict) or not info.get("is_statement"):
-            continue
-        cs = callers.get(name)
-        if not cs or (cs & dispatchers):
-            continue
-        out.add(name)
-    return out
-
-
 class LookaheadTable:
     """从规则树预计算的前瞻消歧表。"""
 
@@ -404,44 +346,8 @@ class LookaheadTable:
         # 试解析精确筛选，context 参数不参与筛选）
         self.ident_candidates: list[dict] = []
         self._build()
-        # 上下文允许候选集：容器成员专用语句（判据见 `_collect_member_only`）。
-        # 只用于「候选是否收敛」判定，**不**改变 classify 返回的候选（用户可见面零变化）。
-        self._member_only: set[str] = _collect_member_only(tree)
-        # 内部 warning 旁路（用户不可见）：候选未收敛位点。
-        # 按次重置 + 显式取用（同 `Discovery._unrecognized` 的模式）；
-        # 不进 LintDiagnostic / --json / exit code / 落盘。
-        self._internal_warnings: list[dict] = []
 
     # ── 内部 warning 旁路（候选未收敛） ──
-
-    def reset_internal_warnings(self) -> None:
-        """清空内部 warning（每次 discover/scan 开始时调用——按次重置）。"""
-        self._internal_warnings = []
-
-    def internal_warnings(self) -> list[dict]:
-        """本次扫描累积的内部 warning（拷贝）。
-
-        消费链：`LookaheadTable` → `Discovery` → `LinterScanner.scan()` →
-        `pipeline._stage_lint` → `_PipelineContext.internal_warnings`（供后续
-        "歧义位点 raw 暂缓建树"消费）。条目形态见 `_record_convergence`。
-        """
-        return list(self._internal_warnings)
-
-    def _allowed_in_context(self, name: str, context: str) -> bool:
-        """候选是否属于该上下文**允许的语句集**（判据见 `_collect_member_only`）。
-
-        `context` 是预留的上下文钩子（位点后续按上下文/行列表述）：今天
-        discovery 的语句位上下文恒为 `CTX_TOP`（块内递归沿用同一值，
-        `checker.py:22` 记着"context 仅作归属标记"），故各取值共用同一判据；
-        容器级上下文细化留给后续分片。
-
-        非语句候选（块规则等）不参与"语句位收敛"判定 ⇒ 返回 False。
-        """
-        del context  # 预留：容器级上下文细化在后续分片
-        info = self._tree.get(name)
-        if not isinstance(info, dict) or not info.get("is_statement"):
-            return False
-        return name not in self._member_only
 
     @staticmethod
     def _rule_end_tokens(info: dict) -> set[str]:
@@ -816,70 +722,7 @@ class LookaheadTable:
             trials.append((errs, consumed, entry["name"]))
             if _prefer_trial(best, errs, consumed):
                 best = (errs, consumed, entry["name"])
-        self._record_convergence(tokens, i, trials, context, entries, limit)
         return self._decide_best(best, allow_partial)
-
-    def _record_convergence(
-        self,
-        tokens: list[Token],
-        i: int,
-        trials: list[tuple[int, int, str]],
-        context: str,
-        entries: list[dict],
-        limit: int,
-    ) -> None:
-        """收敛判定 → 未收敛时累积一条内部 warning（判据见 `_try_parse` docstring）。
-
-        条目形态（T2b 后只留收敛证据；raw 资格字段已随 pre_scan 退役删除）：
-            {"kind": "candidate-not-converged", "reason": ...,
-             "context": ..., "pos": i, "line": .., "column": .., "token": ..,
-             "tied": [并列候选名，仅 ambiguous_full_match],
-             "allowed": [...], "all": [...],
-             "region": [起, 止]}          # 位点句子区间
-
-        同一 token 位点只记首条（`_try_parse` 可能在 fallback 路径被重复调用）。
-        """
-        allowed = [t for t in trials if self._allowed_in_context(t[2], context)]
-        if not allowed:
-            return
-        full = [t for t in allowed if t[0] == 0]
-        tied: list[str] = []
-        if full:
-            top = max(t[1] for t in full)
-            ties = [t for t in full if t[1] == top]
-            if len(ties) < 2:
-                return
-            reason = "ambiguous_full_match"
-            tied = [t[2] for t in ties]
-        else:
-            reason = "no_full_match"
-        if any(w["pos"] == i for w in self._internal_warnings):
-            return
-        tok = tokens[i] if 0 <= i < len(tokens) else None
-        use_line = getattr(tok, "line", 0)
-        use_column = getattr(tok, "column", 0)
-        end = min(self._find_boundary(tokens, i + 1, len(tokens)), len(tokens))
-        self._internal_warnings.append(
-            {
-                "kind": "candidate-not-converged",
-                "reason": reason,
-                "context": context,
-                "pos": i,
-                "line": use_line,
-                "column": use_column,
-                "token": getattr(tok, "content", ""),
-                "tied": tied,
-                "allowed": [
-                    {"name": n, "errs": e, "consumed": c} for e, c, n in allowed
-                ],
-                "all": [{"name": n, "errs": e, "consumed": c} for e, c, n in trials],
-                "region": [i, end],
-            }
-        )
-        self._trace_out(
-            f"  internal-warning {reason} @pos={i} "
-            f"allowed={[t[2] for t in allowed]} tied={tied}"
-        )
 
     def _trial_parse(
         self, matcher, entry: dict, tokens: list[Token], i: int, limit: int

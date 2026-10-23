@@ -96,8 +96,14 @@ T2c（raw 管线大删：M2 摘诊断/parser raw 承载/P4 理解提升/E002·E0
   `analyzer/structure` 位点注入、pipeline 注入/未重定位日志与幂等 raw 特例）；删
   `test_parser_raw_site.py`/`test_raw_corpus.py`；变异 -1。验证：parser+preprocessor+C+
   pipeline 1968 passed/1 skipped、analyzer+C+pipeline 1739/1、pyright 0。
-- **切片③（下一轮）**：删 linter M2 `_apply_narrow_downgrade`、`internal_warnings` 收敛旁路
-  与剩余测试/变异；随后 full suite + T2d。
+- **切片③ ✅ #57**：删 linter M2 `_apply_narrow_downgrade`（`_DOWNGRADABLE_CODES`）、
+  候选收敛内部 warning 旁路（lookahead `_record_convergence`/`_member_only`/`_allowed_in_context`、
+  discovery 转发与容器位点扫描、scanner `internal_warnings`、pipeline `ctx.internal_warnings`）；
+  删 `test_lint_internal_warnings.py`/`test_linter_symbol_hints.py`/lookahead 收敛用例；变异 -1。
+  验证：linter+pipeline+C 1585 passed/7 skipped；全量 **4374 passed/14 skipped**；pyright 0；
+  变异目标校验通过；`core/global_state` 清 raw 契约登记 2 条。**T2c 完成**（raw 管线全删：P4/契约/parser 承载/linter 资格与摘诊断面）。
+- **T2d（余）**：文档收口——gap/README/MODEL_INDEX 的 pre_scan/raw 历史叙述清理、
+  `ctx.raw_source` 命名与残留注释核对；随后全量冻结树。
 
 ## 权衡
 
