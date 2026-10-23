@@ -29,7 +29,7 @@
 
 ## 二、工具与门禁基础设施（非主线，收口时按影响做）
 
-- [ ] **yaml 渲染对真实 workflow 不幂等（无门禁覆盖）**：仓库自己的 `.github/workflows/*.yml` 两遍渲染，
+- [ ] **yaml 渲染对真实 workflow 不幂等（#75 已定位：块末独占注释挂 IndentBlock trailing）**：仓库自己的 `.github/workflows/*.yml` 两遍渲染，
       第二遍把 `shell: pwsh` 后的注释**上提一行**（offset≈2349）⇒ `format(format(x)) != format(x)`；与渲染器
       接线无关。判据：该文件两遍逐字相同 + `tests/languages/yaml` 全绿。
       链：`docs/gaps/gap-formatter-line-behavior.md` 条目 6

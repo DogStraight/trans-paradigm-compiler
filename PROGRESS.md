@@ -24,7 +24,7 @@
 | 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |
 | 8 | **诊断粒度** | ✅ 块内 2 坏语句 → 2 条位置正确 `phase-statement`（#71；父容器粗诊断让位）；`test_c_block_diagnostics.py` |
 | 9 | **渲染/注释遗留** | ⏳ #72 调查：LineSuffix 吞 token 根因=flatten；强制 group broken 修 C 但 yaml 往返回归，已回退；需源行感知方案 |
-| 10 | **工程化缺口** | ⏳ A/B inproc ✅ #73；C→V→C postpass ✅ #74（缓存命中重建组件注册表）；yaml 幂等、cp1252、eval_benchmark 待 |
+| 10 | **工程化缺口** | ⏳ A/B inproc ✅ #73；C→V→C ✅ #74；yaml 幂等 #75 调查（块末注释挂 IndentBlock trailing）；cp1252、eval_benchmark 待 |
 | 11 | **吞吐/基准** | ⏳ fuzz 40→100 iter/s；parser 2.5x；benchmark 阈值进 CI |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 

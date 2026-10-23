@@ -90,6 +90,21 @@
   当前单测面见下（`test_column_align.py` 的方向保留 4 例）。
 - 1/2/3：设计选择，不改（如需段落式重排属新能力，非修复）。
 
+## 条目 6 调查：yaml 两遍渲染幂等失败（#75，2026-10-24，未修）
+
+- 复现：`.github/workflows/ci.yml` 用 `grammar/yaml` 解析+渲染两遍；第一遍输出
+  `shell: pwsh # wheel 安装验证：…`（注释被并到上一行），第二遍把下一行
+  `# 防止"editable 模式…"` 再并进同一行，`format(format(x)) != format(x)`。
+- 根因（AST 实测）：源第 78 行独占注释挂在 **`IndentBlock` 的 `_comment_slots["trailing"]`**
+  （该块末项 `shell: pwsh` 所在 steps 块），而不是父 `Document` body 的 `Comment` 迭代项。
+  渲染器按 LineSuffix 落行尾 → 注释并到块末项行；第二遍该注释已在 `shell` 行，
+  下一行独占注释再被当尾注合并。
+- 方向：parser 注释归属——块结束后的**独占行注释**（尤其隔着空行/缩进回退）应上浮为父
+  容器 body 的 `Comment` 项，而不是挂块节点 trailing；同型判据可复用 `_lift_gap_comments`
+  的源行窗口，但需覆盖"块末项之后、父级下一项之前"的窗口。修后判据 = ci.yml/nightly.yml
+  两遍全文逐字相同 + `tests/languages/yaml/test_yaml_plain.py` 全绿。
+- 当前状态：缺口保留（TODO 条目仍在），本轮只定位不改。
+
 ## 关联条目
 
 - `grammar/verilog/plugins/formatter/README.md`（世界 B：数据流/带结构行/引擎内建遍）
