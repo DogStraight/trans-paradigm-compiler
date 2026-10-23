@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **T3 部件⑥：pipeline/config 审查 + C uses 漂移修复（#66；T3 收口 #59–#66）**：
+  · L1：C `[engine].uses` 删除 T2c 遗留的 `transform.slots.v1`（C 已无任何 transform 声明；
+    `grep grammar/c transform` = 0；policy + C 套件 1238 passed 绿）。
+  · 判据②：删 C `analyzer.primitives.v1` → `test_engine_capabilities` 1 failed（声明门禁）；
+    删 Verilog pipeline unit `slots` → pipeline/e2e 20 failed（声明承重）。
+  · 弱信号：`lang_penetration --dirs pipeline core` 结构名 2 处 `"L"` 为诊断格式化误报；
+    `core/_protocol` 端口常量命名（L2）登记接受。`config_sites check` PASS；
+    `feature_sites`/`structural_score` Δ0；A/B 0/144。
+  · **T3 矩阵六部件全审**：①②③④⑥ 无行为 leak（接受/已修方言复制、uses 漂移），
+    ⑤ L1 已修；接受项 = `inst_sites` 命名、`core/_protocol` 端口常量名（触发条件 = 第二门
+    语言用 structure/typed_ports 面时复议）。T3 收口、T1–T3 路线图完成。
+
+### Added
+
 - **T3 部件⑤实现：transform 成品行属性声明化（#65，L1 修复）**：
   · `transform/_semantic_mapping.py` 去掉 `attr == "ports"` / `sym.attrs["resolved_ports"]`
     硬编码，改读 mapping entry 的声明键 `source.resolved_attr`；helper 更名

@@ -65,12 +65,6 @@
       判据：全量语料门禁 ≤30s 且解析结果不变。链：`tests/e2e/eval_diag_baseline_c.py`
 ## 三、预算与登记（代码结构债 / 功能散点）
 
-- [ ] **T3 双包抽象对照按部件审查**（三任务路线图，多轮）：C/Verilog 逐部件查抽象泄露，部件序
-      lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config；每部件
-      用判据②声明面缺失探针 + ③弱信号 + 第二语言复用实验，输出 leak 清单（修复立项/登记接受）
-      并回填矩阵。判据/路线见 `docs/gaps/gap-engine-abstraction-audit.md`。
-
-
 - [ ] **结构欠账 S 有 71 项新增未下结论**：`python tools/structural_score.py --compare` 实测 **基线 0 →
       当前 1341（Δ +1341，新增 71 项，exit 1）**——新代码（`linter/lookahead.py` 类体、`preprocessor/macro_expand.py`、
       `tools/feature_sites.py`、循环 #21 的 `preprocessor/macro_timeline.py` / `map_invocations_to_source` 等）未按 R6

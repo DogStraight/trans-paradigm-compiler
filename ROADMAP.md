@@ -21,7 +21,7 @@
 > linter 侧最大耦合面；T3 在架构稳定后逐部件查抽象泄露。每项独立判据/独立提交：
 > · T1 = `docs/gaps/gap-preprocessor-macro-timeline.md`（A1 host 时序 + A2 include 内预展开）——✅ #51 主体 + **#52 门禁**：真实语料 7/7、0 诊断（`real_c_ref` + policy）
 > · T2（**✅ 收口 #53–#58**）= `P2.9` + `docs/decisions/0024-two-phase-lint-prescan-retirement.md`（pre_scan/raw 管线全删；skip 由 75→14）
-> · T3 = `docs/gaps/gap-engine-abstraction-audit.md`（执行路线/矩阵）+ `gap-language-penetration.md`（判据②声明面缺失探针）；部件序 lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config
+> · T3（**✅ 完成 #59–#66**）= `docs/gaps/gap-engine-abstraction-audit.md`（执行路线/矩阵）+ `gap-language-penetration.md`（判据②声明面缺失探针）；部件序 lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config
 >
 > **架构基本定型**：除非编译理论出现重大突破，不再做架构级重构——**指部件结构稳定**（子系统划分
 > 与接口边界）。**插件形态与插件能力是架构中持续增长的位置**（AST 后插件开放），新增插件形态

@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T3 部件⑥（pipeline/config/plugin 契约）调查轮——审 `[engine] uses`/声明键→消费点/空转检测/双路径：用 `tools/config_sites.py`、`feature_sites.py`、`structural_score.py` 与判据②（删声明键）出 leak 清单，落矩阵最后一行；随后 T3 收口（回顾矩阵/未修项/T3 总结）。
-- **待验证假设**：两包 `[engine] uses` 与 pipeline units 声明同构；配置键消费点无空转/双读；`structural_score`/`feature_sites` 基线保持 0 增长；T3 六部件矩阵可完整收口。
-- **台账**：T3-⑤ 收口（#64 审 + #65 修：L1 声明化，引擎字面量 0；全量 4377/14、A/B 0/144）；T3-①②③④ ✅；T2 ✅；T1 ✅。
+- **意图**：T1–T3 全部收口（T3 六部件 #59–#66 完成）；无新任务——目标按 objective 标记完成，等待作者下一轮输入。
+- **待验证假设**：T3 矩阵六部件结论/接受项已落档（`gap-engine-abstraction-audit.md`）；全量/门禁/工具基线均绿；T2/T1 证据链完整。
+- **台账**：T1 ✅（#51/#52）、T2 ✅（#53–#58）、T3 ✅（#59–#66）；全量 4377/14、A/B 0/144、render 124/124、c_acceptance 49/0、S Δ0。
 
 ## 估算依据（对照锚，可复核）
 
