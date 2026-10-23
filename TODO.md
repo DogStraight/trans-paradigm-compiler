@@ -65,6 +65,9 @@
       判据：全量语料门禁 ≤30s 且解析结果不变。链：`tests/e2e/eval_diag_baseline_c.py`
 ## 三、预算与登记（代码结构债 / 功能散点）
 
+- [ ] **T3-① 修复**（lexer/preprocessor）：删 Verilog `token.toml` 的重复 `[comment]`（L1，单一来源）；
+      按理由刷新 `structural_score`/`feature_sites` 基线（L2，C 检查组件与 T1/T2 认知点）。判据见
+      `gap-engine-abstraction-audit.md`「T3 部件①审查记录」。
 - [ ] **T3 双包抽象对照按部件审查**（三任务路线图，多轮）：C/Verilog 逐部件查抽象泄露，部件序
       lexer/preprocessor → parser → linter → analyzer → transform/renderer → pipeline/config；每部件
       用判据②声明面缺失探针 + ③弱信号 + 第二语言复用实验，输出 leak 清单（修复立项/登记接受）
