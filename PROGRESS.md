@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T3 部件②（parser）调查轮——对照 C/Verilog 规则字段面（`register`/`requires_symbol`/`symbol_namespaces`/`is_atom`/`backtrack`）、消歧机制、错误路径；用判据②（删语言包规则字段）与 A/B、`gap-parser-linter-approximation` 出 leak 清单，落矩阵行。
-- **待验证假设**：G4 后 parser 符号面（C）与 Verilog typed_ports 面是否可由同一声明键表达；错误路径（截断/恢复）是否有语言分支；单部件 1 调查 + 1 实现轮可收口。
-- **台账**：T3-① 收口（#59 调查 + #60 修复：Verilog 注释单一声明面；`structural_score` S=1110/`feature_sites` 基线已刷新）；T2 ✅（#53–#58）；T1 ✅。
+- **意图**：T3 部件③（linter）调查轮——对照 C/Verilog linter 声明面（L1/L2 规则、宏检查/宏卫生、消歧表）、错误路径与诊断面；用判据②（删 linter 声明段）与 `lint accuracy`、A/B 出 leak 清单，落矩阵行。
+- **待验证假设**：T2 删除 raw 资格后 linter 只剩用户诊断面（两包声明面应同构）；宏检查/样式检查的分包差异是语言策略而非引擎方言；单部件 1 调查 + 1 实现轮可收口。
+- **台账**：T3-② 完成（parser 无 leak；协议节点名登记接受；判据② 6/16/6 红证；A/B 0/144）；T3-① ✅；T2 ✅；T1 ✅。
 
 ## 估算依据（对照锚，可复核）
 

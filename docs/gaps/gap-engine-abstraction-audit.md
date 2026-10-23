@@ -70,6 +70,7 @@ C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个�
 | 4 | **文件链接 / 入口点** | C 的 `#include` 全链路（`path_forms`、内容进流、行映射、渲染剪枝）；Verilog 的 `module_index` 项目符号可见性；CLI 单文件 vs `ProjectChecker.check(paths)` 多入口 | **新引擎代码**（缺统一 unit graph） | `preprocessor/primitives/include.py`、`pipeline/__init__.py`（include 剪枝）、`analyzer` 的 `module_index`、`ROADMAP.md`「用户侧 CLI 形态」；两门语言各一套索引 | 引擎级 **unit graph / 入口协议**（根文件集 + 解析器声明 + 单位索引 + 链接策略），两门语言的索引收敛为配置 | 待审查（阶段 5 真实 C 语料接入会先逼一遍） |
 | 5 | **容器成员位增量**（轮 #35） | `StructBody = { (@StructMember\|@StructMemberExtra)* }` + 空槽位注入 | **原样**（零引擎改动） | `tests/languages/c/test_c_standard_conformance.py::TestStaticAssertMemberPosition`；门禁变异 101 | —（抽象成立） | 已过 |
 | 7 | **字面量前缀 / 数字形态声明面**（轮 #37/#38） | C 用 `[string] prefixes` + `[[number.based]]`（`suffix` / `base_prefix` / `digit_separator`）按名合并表达 L/u/U/u8、`0b…`、`1'000`；其余语言包不声明即无影响 | **原样**（引擎声明面） | `tests/languages/c/test_c_lexer.py::TestLiteralPrefixes/TestLiteralPrefixTiers/TestDigitSeparator{,Tiers}`；`tests/engine/lexer/test_number_digit_separator.py`；门禁变异 103/104/105/106 | —（抽象成立） | 已过 |
+| 9 | **parser 声明面（T3-②）** | C 的 `register`/`requires_symbol`/`symbol_namespaces` 与 Verilog 的规则字段（`is_atom`/块边界）全走同一引擎字段；协议节点名（Root/Comment/MacroCall/pratt 产物）为引擎契约 | **原样（+协议面接受）** | `tools/lang_penetration.py --dirs parser`；判据② 见上「T3 部件②审查记录」；A/B 0/144 | —（无 leak） | 已审 ✅ |
 | 8 | **词法/预处理声明面（T3-①）** | C/Verilog 注释/数字/宏/字符串形态全在包内声明；判据②删声明均红；弱信号 0 结构名；c4 复用同一面 | **原样 + 1 方言复制（Verilog 注释双声明）** | `tools/lang_penetration.py --dirs lexer preprocessor`；删声明探针见上「T3 部件①审查记录」 | 删 Verilog `token.toml` 重复 `[comment]`（#60 已做） | 已审（L1/L2 ✅） |
 | 6 | **注释归属**（行中/行尾/前置/容器项间） | 引擎统一槽位模型，各语言布局只消费槽位 | **原样** | `renderer/renderer_architecture.md`（注释处理节）；`tests/engine/renderer/test_comment_slots.py` + C/verilog 渲染门禁 | —（抽象成立） | 已过（本轮 #32/#33 的修复未引入语言分支） |
 
@@ -107,6 +108,34 @@ C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个�
 不静默放行；**已刷新（#60）**：`structural_score --save`（S=1110，Δ+0）与
 `feature_sites --save`（`check` 预算 16，理由 = C11/C23/CSC/TAG/ENUM/LAB/MAC 检查组件入库 +
 T1/T2 真实改动；`--compare` 现 0 增长）。
+
+## T3 部件②审查记录（parser，#61）
+
+**弱信号**：`python tools/lang_penetration.py --dirs parser` → 结构名字面量 **11 处**，逐条核对
+全为引擎**协议节点名**：`Root`/`Comment`（`parser/_constants.py`）、`MacroCall`（宏占位）、
+`UnaryOp`/`BinaryOp`/`TernaryOp`/`Number`/`Identifier`（pratt 产物）。语言包只消费同名
+渲染/规则声明（如 C `[CompoundLiteral.renderer.layout]`），不是引擎"按名认语言结构"。
+Tier A **0**；Tier B 63 仅计数。⇒ 协议面**接受**（登记，不是 leak）。
+
+**声明面对照**：C 用 `[parser] symbol_namespaces` + `[Rule.parser] register`（3 处）+
+`requires_symbol`（1 处，`CastTypedefName` 门控）；Verilog **无**这些字段——其类型信息走
+`typed_ports` 插件在 analyze 面处理。引擎字段通用、无语言分支（`grep parser` 仅注释提及
+verilog/C 兼容说明）。
+
+**判据②（临时删声明 → G4 判据测试；测后还原）**：
+
+| 探针 | 结果 |
+|---|---|
+| 删 C `[parser] symbol_namespaces` | `test_c_typedef_cast_symbols.py` **6 failed** |
+| 删 C `[Rule.parser] register`（全 3 处） | **16 failed** |
+| 删 C `requires_symbol`（CastTypedefName） | **6 failed** |
+
+**错误路径/消歧**：`_production.py`/`block_parser.py`/`rule_selector.py` 无语言分支；
+A/B **0/144**；`structural_score --compare` S=1110（Δ0）、`feature_sites compare` 0。
+
+**leak 清单**：无。C 的 parser 符号字段是通用声明面（供任何包声明，Verilog 选择插件面是
+语言策略，不是引擎方言）；协议节点名是引擎契约。**第二语言复用实验**：无 leak 候选 ⇒
+按止损不做（观察，未对照）。
 
 ## 可实现性（leak 候选的内置化骨架；审查轮细化）
 
