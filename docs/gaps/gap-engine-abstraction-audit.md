@@ -3,7 +3,6 @@
 - 状态：**执行中（T3：部件①已审并修复 #59/#60）**；触发 = 刻度 7→9 完成 + 作者 2026-10-23 拍板三任务路线图
 - 关联：`ROADMAP.md`「刻度完成后的全项审查」；`policy/collaboration.md`（证据/循环纪律）
 - 参照：—
-
 ## 缺口是什么
 
 C 包的价值之一是**抽象压力测试**：每出现一次"这台语言要单独处理"，就暴露一个未审查的抽象；
@@ -12,7 +11,6 @@ C 包的价值之一是**抽象压力测试**：每出现一次"这台语言要�
 
 本档是审查台账：**方法 + 矩阵 + 每行证据**。日常循环碰到新的语言特化处理就在此补一行
 （调查轮性质，不单独汇报）；刻度完成后按矩阵一次性出结论与立项清单。
-
 ## 审查方法（唯一判据：能力 × 语言矩阵 + 第二语言复用实验）
 
 矩阵每格四态（按"为表达它，引擎改了什么"分类）：
@@ -31,7 +29,6 @@ C 包的价值之一是**抽象压力测试**：每出现一次"这台语言要�
 2. 只改配置即成立 ⇒ 抽象成立，候选撤销；
 3. 引擎必须再改一次 ⇒ 记 leak，写内置化方向与判据（落 `TODO.md` 或 `ROADMAP.md` 立项）；
 4. 复现命令/临时包位置写回本行——**没有复现的记录按观察计**。
-
 ## 执行路线（T3，作者 2026-10-23 拍板）
 
 C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个部件、独立判据/独立提交。
@@ -55,7 +52,6 @@ C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个�
    `feature_sites compare` 不新增未登记散点。
 **止损**：每部件最多 1 调查 + 1 实现轮；第二语言复用实验需要临时语言包（不提交，
 位置写回本档行）；不能证伪的候选按"观察，未对照"记，不进实现清单。
-
 ## 当前矩阵（按证据状态；调查轮顺带维护）
 | # | 能力面 | 语言现状 | 四态 | 证据 / 复现 | 内置化方向 | 状态 |
 |---|---|---|---|---|---|---|
@@ -65,12 +61,12 @@ C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个�
 | 4 | **文件链接 / 入口点** | C 的 `#include` 全链路（`path_forms`、内容进流、行映射、渲染剪枝）；Verilog 的 `module_index` 项目符号可见性；CLI 单文件 vs `ProjectChecker.check(paths)` 多入口 | **新引擎代码**（缺统一 unit graph） | `preprocessor/primitives/include.py`、`pipeline/__init__.py`（include 剪枝）、`analyzer` 的 `module_index`、`ROADMAP.md`「用户侧 CLI 形态」；两门语言各一套索引 | 引擎级 **unit graph / 入口协议**（根文件集 + 解析器声明 + 单位索引 + 链接策略），两门语言的索引收敛为配置 | 待审查（阶段 5 真实 C 语料接入会先逼一遍） |
 | 5 | **容器成员位增量**（轮 #35） | `StructBody = { (@StructMember\|@StructMemberExtra)* }` + 空槽位注入 | **原样**（零引擎改动） | `tests/languages/c/test_c_standard_conformance.py::TestStaticAssertMemberPosition`；门禁变异 101 | —（抽象成立） | 已过 |
 | 7 | **字面量前缀 / 数字形态声明面**（轮 #37/#38） | C 用 `[string] prefixes` + `[[number.based]]`（`suffix` / `base_prefix` / `digit_separator`）按名合并表达 L/u/U/u8、`0b…`、`1'000`；其余语言包不声明即无影响 | **原样**（引擎声明面） | `tests/languages/c/test_c_lexer.py::TestLiteralPrefixes/TestLiteralPrefixTiers/TestDigitSeparator{,Tiers}`；`tests/engine/lexer/test_number_digit_separator.py`；门禁变异 103/104/105/106 | —（抽象成立） | 已过 |
+| 12 | **transform/renderer（T3-⑤）** | C 无 transform 段、渲染 117 layout；Verilog typed_ports transform + 111 layout；renderer 全声明式 | **原样 + L1 硬编码**（transform `resolved_ports` 特判） | 判据② 22/8/rc2 红证；`_uses_resolved_ports` 变异 8 failed；render_coverage 100% | L1：mapping entry 声明 `resolved_attr`（下一轮） | 已审（L1 待修） |
 | 11 | **analyzer/elaboration（T3-④）** | C：`c_symbol_collect`+`c_symbols` postpass+check 插件；Verilog：typed_ports symbol/scope/postpass + elaboration 插件；引擎 analyzer/elaboration 无语言分支 | **原样**（L1 `inst_sites` 命名为协议面，接受） | `lang_penetration --dirs analyzer`（0 结构名）；判据② 7/1/4 红证 | —（无行为 leak） | 已审 ✅ |
 | 10 | **linter 声明面（T3-③）** | C：`[macro_syntax]` + 插件 check 规则；Verilog：`[linter] macro_hygiene`/`style_check`；宏检查/样式消费点均为引擎通用、无语言分支 | **原样** | `lang_penetration --dirs linter`（0 结构名）；判据② 5/6/6 红证；lint accuracy 33/fp0；A/B 0/144 | —（无 leak） | 已审 ✅ |
 | 9 | **parser 声明面（T3-②）** | C 的 `register`/`requires_symbol`/`symbol_namespaces` 与 Verilog 的规则字段（`is_atom`/块边界）全走同一引擎字段；协议节点名（Root/Comment/MacroCall/pratt 产物）为引擎契约 | **原样（+协议面接受）** | `tools/lang_penetration.py --dirs parser`；判据② 见上「T3 部件②审查记录」；A/B 0/144 | —（无 leak） | 已审 ✅ |
 | 8 | **词法/预处理声明面（T3-①）** | C/Verilog 注释/数字/宏/字符串形态全在包内声明；判据②删声明均红；弱信号 0 结构名；c4 复用同一面 | **原样 + 1 方言复制（Verilog 注释双声明）** | `tools/lang_penetration.py --dirs lexer preprocessor`；删声明探针见上「T3 部件①审查记录」 | 删 Verilog `token.toml` 重复 `[comment]`（#60 已做） | 已审（L1/L2 ✅） |
 | 6 | **注释归属**（行中/行尾/前置/容器项间） | 引擎统一槽位模型，各语言布局只消费槽位 | **原样** | `renderer/renderer_architecture.md`（注释处理节）；`tests/engine/renderer/test_comment_slots.py` + C/verilog 渲染门禁 | —（抽象成立） | 已过（本轮 #32/#33 的修复未引入语言分支） |
-
 ## T3 部件①审查记录（lexer / preprocessor，#59）
 **弱信号探针**：`python tools/lang_penetration.py --dirs lexer preprocessor` →
 ① 结构名字面量 **0 处**；② Tier A 命中 11 处**全为 `width`**（LSP 诊断列宽/渲染宽度，
@@ -99,7 +95,6 @@ C 与 Verilog 两个主语言包**按部件逐轮**对照审查；每轮一个�
 不静默放行；**已刷新（#60）**：`structural_score --save`（S=1110，Δ+0）与
 `feature_sites --save`（`check` 预算 16，理由 = C11/C23/CSC/TAG/ENUM/LAB/MAC 检查组件入库 +
 T1/T2 真实改动；`--compare` 现 0 增长）。
-
 ## T3 部件②审查记录（parser，#61）
 **弱信号**：`python tools/lang_penetration.py --dirs parser` → 结构名字面量 **11 处**，逐条核对
 全为引擎**协议节点名**：`Root`/`Comment`（`parser/_constants.py`）、`MacroCall`（宏占位）、
@@ -121,7 +116,6 @@ A/B **0/144**；`structural_score --compare` S=1110（Δ0）、`feature_sites co
 **leak 清单**：无。C 的 parser 符号字段是通用声明面（供任何包声明，Verilog 选择插件面是
 语言策略，不是引擎方言）；协议节点名是引擎契约。**第二语言复用实验**：无 leak 候选 ⇒
 按止损不做（观察，未对照）。
-
 ## T3 部件③审查记录（linter，#62）
 **弱信号**：`python tools/lang_penetration.py --dirs linter` → 结构名字面量 **0 处**；
 Tier A 23 处逐条核对全为误报：`width`/`_max_width`（样式页宽）、`reset_atom_memo`
@@ -143,7 +137,6 @@ Tier A 23 处逐条核对全为误报：`width`/`_max_width`（样式页宽）�
 `structural_score --compare` S=1110（Δ0）；`feature_sites compare` 0。
 **leak 清单**：无。T2 删除 raw 资格后 linter 只剩**用户诊断**面（两包同构）；检查分包差异
 属语言策略/插件契约（④ 部件继续审 `checks.rules.v1`）。第二语言复用实验无候选 ⇒ 不做。
-
 ## T3 部件④审查记录（analyzer / elaboration，#63）
 **弱信号**：`lang_penetration --dirs analyzer` → 结构名 **0**；Tier A 6 处
 `inst_sites`/`inst_module_name` = 引擎结构提取协议的**数据字段名**（规则/字段由语言包
@@ -160,7 +153,24 @@ enhanced_render **4 failed / 34 passed**。
 **引擎面**：`analyzer/` 无语言分支（grep 仅注释/示例）。**leak 清单**：无行为 leak；
 L1（`inst_sites` 命名）登记接受。第二语言复用：C 无 `[structure]` 能力 ⇒ 不适用
 （观察，未对照）。
-
+## T3 部件⑤审查记录（transform / renderer，#64）
+**弱信号**：`lang_penetration --dirs transform renderer` → 结构名 **0**；Tier A 21 处：
+renderer 18 处 `width`/`max_width`（布局列宽，误报）；transform 3 处 `_uses_resolved_ports`
+（**真 leak 信号**，见 L1）。Tier B 仅计数。
+**声明面**：C 无 transform 段（T2c 已删 P4 变换；检查走 analyze postpass），Verilog
+`typed_ports` 声明 `[transform] handlers` + 4 个 `[[pipeline.units]]`；渲染两侧均声明式：
+C 117 / Verilog 111 个 `[*.renderer.layout]`；覆盖 100%（`render_coverage`）。
+**判据②（删声明 → 受影响测试）**：删 C `[Number.renderer.layout]` → C 渲染套件
+**22 failed**；删 Verilog `[Root.renderer.layout]` → `test_render_restore_boundary`
+**8 failed**；删 Verilog typed_ports `[transform] handlers` → 配置 fail-fast（rc=2）。
+**L1 leak（立项修复）**：`transform/_semantic_mapping.py::_uses_resolved_ports` /
+`_entry_source` **硬编码** `attr == "ports"` 与 `sym.attrs["resolved_ports"]`——Verilog
+typed_ports 的属性名进了引擎。变异（关闭特判）→ Verilog 套件 **8 failed**（load-bearing）。
+修复 = mapping entry 增加声明键 `source.resolved_attr = "resolved_ports"`，引擎只读该键；
+判据 = 引擎源码无 `ports`/`resolved_ports` 字面量 + 去掉 Verilog 声明键 → 8 failed；
+渲染/保真/A/B 不变（下一轮实现）。
+**leak 清单**：L1（唯一）；renderer 无 leak（布局全声明）。第二语言复用：C 无 transform
+能力 ⇒ 不适用（观察，未对照）。
 ## 可实现性（leak 候选的内置化骨架；审查轮细化）
 
 - **入口/链接（#4）**：包声明 → 根文件集 + `include`/`import` 解析器 + 单位种类；引擎维护
@@ -174,7 +184,6 @@ L1（`inst_sites` 命名）登记接受。第二语言复用：C 无 `[structure
   当前判据 = 两包（C / verilog）现状与该判据吻合（verilog 9 个 grammar 组件全在清单里）。
 - **拼写别名（#2）**：先统计包内复制量（规则数/节点名数），再评估"别名表"声明面是否值得；
   移植成本 > 收益则显式接受（登记在 `gap-language-pack-scope`「接受域现状」）。
-
 ## 关联条目
 
 - `ROADMAP.md`「刻度完成后的全项审查」；`PROGRESS.md`（刻度 7→9 = 触发条件）

@@ -46,9 +46,9 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：T3 部件⑤（transform/renderer）调查轮——对照 C/Verilog transform 声明（`[Rule.transform]`/`[transform]` handlers/插件 manifest）与渲染声明面（layout 原语、注释/宏 splice、归一化）；判据②（删 transform/render 声明）+ 渲染保真/幂等门禁出 leak 清单。
-- **待验证假设**：两包 transform 均走插件契约 + 声明式 layout；`transform/slot_runner`、`renderer` 引擎无语言分支；C 的 raw splice 已删后渲染面仅剩宏区间/注释槽（通用）；单部件 1 调查 + 1 实现轮可收口。
-- **台账**：T3-④ 完成（analyzer/elaboration 无行为 leak；`inst_sites` 命名接受；判据② 7/1/4 红证）；T3-①②③ ✅；T2 ✅；T1 ✅。
+- **意图**：T3 部件⑤实现轮——修 L1 引擎硬编码：`transform/_semantic_mapping.py` 改为读 mapping entry 的声明键 `source.resolved_attr`，Verilog `_mapping.py` 声明 `resolved_attr = "resolved_ports"`；判据 = 引擎无 `ports`/`resolved_ports` 字面量、去掉声明键 → Verilog 套件 8 failed、全量/A-B/渲染门禁绿。
+- **待验证假设**：resolved_ports 路径完全由 typed_ports 配置承载（变异已证 8 failed）；改声明键后行为等价；随后进部件⑥（pipeline/config）审 `[engine] uses`/声明键消费/空转检测。
+- **台账**：T3-⑤ 审查完成（renderer 无 leak；L1 transform 硬编码已立项；判据② 22/8/rc2 红证）；T3-①②③④ ✅；T2 ✅；T1 ✅。
 
 ## 估算依据（对照锚，可复核）
 
