@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **块 3 片段模式 P0（#70）**：独立 CLI `tpc fragment` + `tools/fragment_rewrite.py`：
+  显式行注释记号（`// tpc:fragment id=<id> begin` … `// tpc:fragment end`，单层/显式 id）圈定区域，
+  纯语法规则 `always @(*)` → `always @*`；默认 dry-run diff、`--write` 落盘。
+  · bytes identity 四例（LF/CRLF/BOM/无尾）逐字节不变；字符串/块注释假记号忽略；条件编译死分支
+    记号按 condition_blocks 排除；未闭合/嵌套/错配 fail-closed。
+  · 10 单测；真实文件 1 命中 0 误改；真实语料 259 个 .v/.sv 无记号 **0 文件变化**（9.1s）。
+  · **不新增 TOML 段/能力位**（P1 需作者批准后再做）；文档 `docs/gaps/gap-fragment-mode.md`；
+    PROGRESS 块 3 ✅（3/12）。
+
+### Added
+
 - **块 2 收口：parser 回溯优化——atom memo + 规则级 FIRST 早拒（#68/#69）**：
   · atom 位置 memo（`(token 位置, 作用域版本)`；`_ScopeStack.version` 仅在真实状态变化时递增；
     `restore` 无变化快速路径）消除嵌套括号下重复解析的 2^k。

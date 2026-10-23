@@ -17,7 +17,7 @@
 |---|----|------|
 | 1 | **基线清算** | ✅ 三探针：S Δ0、feature 0、config_sites PASS（TODO 过期三项已清，`864e472`） |
 | 2 | **parser 性能收口** | ✅ atom memo + FIRST 早拒（#68/#69）：cJSON 57.6→**2.98s**（19.3x）；门禁 **20–23s**；A/B 0/144、全量 4377/14、7/7 0 诊断 |
-| 3 | **片段模式 P0** | ⏳ 独立 CLI + 显式记号 + bytes identity（LF/CRLF/BOM/无尾）+ 一条真实规则 + dry-run diff + falsification 记录；设计输入 `_drafts/marker-mode-evaluation.md`（未入库） |
+| 3 | **片段模式 P0** | ✅ 独立 `tpc fragment` + 显式记号 + bytes identity 四例 + `always @(*)` 规则 + dry-run diff；10 单测、真实语料 259 文件 0 变化；`gap-fragment-mode.md`（#70） |
 | 4 | **片段模式 P1** | ⏳ `[[island_rules]]` 声明面 + rewriter 能力位 + 多规则/冲突/后验；**契约面需作者批准**（P0 不碰声明面） |
 | 5 | **unit graph 内置能力** | ⏳ `unit_graph.v1`：C include 与 Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分支 |
 | 6 | **精化基座 graph 化** | ⏳ elaboration 只消费 graph 原子/边；T3 接受项 `inst_sites` 命名关闭 |
@@ -28,13 +28,13 @@
 | 11 | **吞吐/基准** | ⏳ fuzz 40→100 iter/s；parser 2.5x；benchmark 阈值进 CI |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 
-**当前 2 / 12**。基线锚：全量 4377/14、A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、feature 0。
+**当前 3 / 12**。基线锚：全量 4377/14、A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、feature 0。
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 3 片段模式 P0——先读 `_drafts/marker-mode-evaluation.md` 的 P0/falsification 条款，定独立 CLI（dry-run diff）+ 显式记号 + bytes identity 四例 + 一条真实规则（纯语法）；不碰新声明段/能力位（P1 待作者批准）。
-- **待验证假设**：P0 可复用 lexer token 流与现有 matcher（文本级）完成，不需改 parser 阻断语义；identity gate 覆盖 LF/CRLF/BOM/无尾；一条规则在真实 C/Verilog 文件上命中/误改统计可复现。
-- **台账**：块 1 ✅（#67/#68 之前的清算）、块 2 ✅（#68/#69：cJSON 2.98s、门禁 20–23s、全量 4377/14）；主线 2 当前 2/12。
+- **意图**：块 4 片段模式 P1 **需作者批准契约面**（`[[island_rules]]` + `island_rewriter` 能力位）；未批前转块 8 诊断粒度（引擎/语言包内、不依赖新声明面），批后 P1 插入块 4。
+- **待验证假设**：P1 的声明段/能力位是框架级（新 schema/组件类型），须先批；P0 独立工具已证明 identity/死分支/假记号/幂等安全判据；块 8 的块内多错误恢复可独立推进。
+- **台账**：块 1 ✅、块 2 ✅（cJSON 2.98s/门禁 20–23s）、块 3 ✅（#70：10 单测、259 文件 0 变化）；主线 2 当前 3/12；P1 契约问题见 `gap-fragment-mode.md`。
 
 ## 估算依据（对照锚，可复核）
 

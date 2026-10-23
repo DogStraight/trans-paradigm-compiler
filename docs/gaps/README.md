@@ -71,4 +71,5 @@
 | `gap-c-real-corpus.md` | C 真实语料接入与误报基线（#43 调查轮：候选语料/许可、harness 前置、实测误报面、两类 linter FP 最小复现、方案 A/B/C 与门禁判据草案） |
 | `gap-verification-engineering.md` | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
 | `gap-engine-abstraction-audit.md` | 引擎能力面抽象审查（能力×语言矩阵 + 第二语言复用判据；刻度 7→9 完成后执行，日常循环顺带补行） |
+| `gap-fragment-mode.md` | 片段模式 P0（记号模式 / island rewrite 原型：显式记号、bytes identity、死分支/假记号 fail-closed；P1 声明面/能力位待批准） |
 | `gap-feature-scatter.md` | 功能散点与上游契约耦合（一处功能 N 处登记；P-A/P-B/P-C + 步 2 收敛目标与接受边界） |

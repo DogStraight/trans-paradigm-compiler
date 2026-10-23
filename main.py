@@ -578,6 +578,27 @@ def _add_config_parser(sub) -> None:
     p_dump.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
 
+def _add_fragment_parser(sub) -> None:
+    p_frag = sub.add_parser(
+        "fragment", help="P0 片段变换（显式记号，dry-run diff；--write 落盘）"
+    )
+    p_frag.add_argument("file", help="Path to source file")
+    p_frag.add_argument(
+        "--rules-dir", default="grammar/verilog", help="Language pack dir"
+    )
+    p_frag.add_argument("--write", action="store_true", help="落盘（默认 dry-run）")
+
+
+def _cmd_fragment(args: argparse.Namespace) -> None:
+    """tpc fragment — P0 原型：显式记号区域 always @(*) → always @*。"""
+    from tools.fragment_rewrite import _print_diff, rewrite_file
+
+    result = rewrite_file(args.file, args.rules_dir, args.write)
+    _print_diff(args.file, result)
+    if result.errors:
+        raise SystemExit(1)
+
+
 # 子命令 → 注册函数（与 _dispatch 的映射同名同序）
 _SUBCOMMAND_PARSERS = (
     ("format", _add_format_parser),
@@ -587,6 +608,7 @@ _SUBCOMMAND_PARSERS = (
     ("trace", _add_trace_parser),
     ("pipeline", _add_pipeline_parser),
     ("config", _add_config_parser),
+    ("fragment", _add_fragment_parser),
 )
 
 
@@ -610,6 +632,7 @@ def _dispatch(args) -> None:
         "lint": _cmd_lint,
         "check": _cmd_check,
         "pipeline": _cmd_pipeline,
+        "fragment": _cmd_fragment,
     }
     if args.command == "config":
         dispatch["config"] = {
