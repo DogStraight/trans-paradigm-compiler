@@ -27,6 +27,25 @@ class SharedComponents:
 
     _CACHE: dict[str, dict] = {}
 
+    @staticmethod
+    def _component_signature() -> tuple[tuple[str, str], ...]:
+        """当前全局组件注册表的语言身份：(组件名, 组件目录)。
+
+        组件名集合可能跨语言重名（都是开放声明集），单看名字会把"另一个语言"
+        误认成本语言；目录参与签名后，语言身份是注册表内容关系而非名单。
+        """
+        from core.plugin_loader import _loaded_components
+
+        return tuple(
+            sorted(
+                (
+                    name,
+                    str((info.get("meta") or {}).get("_dir", "")),
+                )
+                for name, info in _loaded_components.items()
+            )
+        )
+
     @classmethod
     def _activate(cls, rules_dir: str, ext_dirs: list[str]) -> None:
         """把全局组件注册表重建为 `rules_dir` 对应语言（缓存命中路径用）。"""
@@ -62,9 +81,7 @@ class SharedComponents:
             # 缓存命中只复用规则/词法对象还不够——组件注册表（postpass/原语/
             # capability）必须**重新建立为本语言**，否则第二次 C 检查的
             # CSC/LAB/MAC 全部静默丢失（C→verilog→C 实测）。
-            from core.plugin_loader import _active_components
-
-            if set(_active_components) != set(cached.get("component_names", ())):
+            if cls._component_signature() != cached.get("component_signature", ()):
                 cls._activate(rules_dir, ext_dirs)
             return cached
 
@@ -114,10 +131,8 @@ class SharedComponents:
                 rules_dir=full_dir,
                 line_comment_starts=lexer.line_terminating_comment_starts(),
             ),
-            "component_names": (),
+            "component_signature": (),
         }
-        from core.plugin_loader import _active_components
-
-        shared["component_names"] = tuple(_active_components)
+        shared["component_signature"] = cls._component_signature()
         cls._CACHE[rules_dir] = shared
         return shared

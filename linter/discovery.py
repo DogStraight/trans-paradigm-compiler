@@ -449,7 +449,9 @@ class Discovery:
                         tokens[i].type,
                     )
                 if fallback:
-                    candidates = fallback[:1]
+                    # 候选集是开放的：全部交给 StatementChecker 按错误数取优，
+                    # 不靠"列表第一项"猜（顺序变化会换诊断形态）。
+                    candidates = fallback
             if not candidates:
                 if record:
                     self._record_unrecognized(tokens, i)

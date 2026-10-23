@@ -20,8 +20,8 @@ from core.define import (
 )
 from core.config_registry import declare_cfg
 from core.errors import ConfigError
-from core.token_protocol import MACRO_CALL_TOKEN_TYPE, TRIVIA_TOKEN_TYPES
 from ._constants import COMMENT_TOKEN_TYPE, IDENTIFIER_TOKEN_TYPE, ROOT_RULE_NAME
+from core.token_protocol import TRIVIA_TOKEN_TYPES
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # parser.operator_defs
@@ -532,9 +532,9 @@ class Parser:
         self._init_rule_selector(rules_dir, rule_selector)
         # 规则级早拒用 FIRST（保守子集；见 build_rule_first_map）
         self._rule_first_tokens = build_rule_first_map(self.grammar_rules)
-        # 早拒豁免：trivia/skip/宏/占位 token 可能出现在任意规则位（配置/宏机制）
+        # 早拒豁免：trivia/skip token＋**全部 `macro.*`**（宏 token 名是开放集，
+        # 不能只列 macro.call；前缀判据见 _early_reject_exempt）
         self._first_reject_special = set(self.skip_types) | set(TRIVIA_TOKEN_TYPES)
-        self._first_reject_special.add(MACRO_CALL_TOKEN_TYPE)
         # 停点/trace 过滤器（set_trace 设置，按规则名或 token 位置）
         self._trace_rule: str | None = None
         self._trace_token_pos: int | None = None

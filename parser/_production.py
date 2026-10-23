@@ -14,6 +14,7 @@ from core.define import Node, Token, GrammarRule, CHILDREN_FIELD, block_end_of
 from core.token_protocol import BRACKET_R_PREFIX
 from .parser_core import ParseContext
 from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE
+from core.token_protocol import MACRO_PREFIX
 from .rule_selector import analyze_production_features, flatten_production_features
 from .follow import token_in_follow
 from ._comment_trivia import comment_leave_to_expression, is_line_only
@@ -503,6 +504,15 @@ def _claim_if_line_start(
     _claim_head_comments(parser, node, end_line)
 
 
+def _early_reject_exempt(parser, tok_type: str) -> bool:
+    """token 类型是否豁免 FIRST 早拒（开放集：trivia/skip + 任意 macro.*）。
+
+    宏 token 名由语言包/指令名生成（`macro.<name>`，开放集）——早拒表里只列
+    `macro.call` 会让后加宏指令被误拒；用前缀判据建模，不靠枚举。
+    """
+    return tok_type.startswith(MACRO_PREFIX) or tok_type in parser._first_reject_special
+
+
 def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:
     """普通规则匹配链：production 匹配 → 属性绑定 → FOLLOW 检查 → inline。
 
@@ -535,7 +545,7 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             allowed is not None
             and tok is not None
             and tok.type not in allowed
-            and tok.type not in self._first_reject_special
+            and not _early_reject_exempt(self, tok.type)
         ):
             return None
     self._log_state(

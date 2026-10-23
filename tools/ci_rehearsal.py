@@ -74,11 +74,12 @@ def _py_env(argv: list[str], env_extra: dict | None = None) -> dict:
 
     `PYTHONUTF8=1` 只在开发机有；显式 `PYTHONIOENCODING=cp1252` 优先于它
     （已由 CI 排练事故验证），让"本地绿、远端红"的编码差在排练里暴露。
+    对所有子进程统一设置（非 Python 忽略），不枚举 Python 可执行文件名。
     """
     env = {**os.environ, **(env_extra or {})}
-    exe = os.path.basename(argv[0]).lower()
-    if exe.startswith("python"):
-        env["PYTHONIOENCODING"] = "cp1252"
+    # 不按可执行文件名猜 Python（open set：py/pythonw/venv 别名/pypy…）：排练
+    # 环境整体声明 cp1252，非 Python 子进程忽略该变量，Python 子进程全部继承。
+    env["PYTHONIOENCODING"] = "cp1252"
     return env
 
 
