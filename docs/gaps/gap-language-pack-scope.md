@@ -160,6 +160,20 @@ render → 与源比对，七条：
     digit_separator`，引擎零语言判断；
   · **绕不开** = 形态只由**核心 token** 组成：`_Static_assert(1)`（#41）与 `enum e : int`
     （#42）——修法都是"门控 + c23 插件规则注入核心空槽位/交替"，正是 ADR-0023 的立项原因。
+## 行尾注释 LineSuffix 调查（#72，2026-10-23，未修）
+
+- 复现：`struct S { int // c\nx; };` → 渲染 `int // c x;`（`x` 被并进行注释）。
+- 根因：`renderer/doc.py::flatten` 把 `LineSuffix(line_ending=True)` 直接变 `Text`；
+  该节点 doc 被 `group()` 包成 Union 的 **flat 支**时，注释已在构造期变 Text，
+  后续 token 同行。`_resolve_line_suffix` 只是事后重写，无法恢复行终止语义。
+- 尝试 1（已回退）：`group()` 对含行终止 LineSuffix 的 doc 强制 broken（`_forces_break`）。
+  · C 修复：token 序列保持 + 幂等（输出把注释规范化到下一行点，`int x; // c`）；
+  · **回归**：`.github/workflows/nightly.yml` 往返结构不一致（多一个 `MappingEntry`），
+    全量 4391 passed/1 failed —— yaml 注释布局被强制断行改变，不可接受，已 `git checkout` 回退。
+- 结论：需要**源行感知**的落地（注释源行 vs 下一个换行点；只在该行确实还有后续
+  token 时才强制断），或对语言包布局提供"注释后必须断"的声明面；单纯全局 group 断开
+  不是语言无关解。下一轮按此方向再试；当前行为保持原样（缺口仍在）。
+
 ## 关联条目
 
 - ROADMAP「SystemVerilog 语言包（远期 backlog）」/「C 语言包」（预处理阶段 4 / 切片 1b）
