@@ -57,19 +57,6 @@ endmodule
     assert r["idempotent"]
 
 
-def test_escaped_keyword_name():
-    """转义名不受关键字限制（\\always 是合法标识符）。"""
-    src = r"""module m;
-    wire \always ;
-    assign \always = 1'b0;
-endmodule
-"""
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert r"wire \always ;" in r["output"]
-    assert r["idempotent"]
-
-
 def test_escaped_multi_decl():
     """转义名在逗号列表与表达式引用中。"""
     src = r"""module m;
@@ -113,54 +100,77 @@ endmodule
     assert r["idempotent"]
 
 
-def test_assign_strength_delay():
-    """strength + delay 组合前缀。"""
-    src = """module m;
-    assign (strong1, pull0) #(1, 2) y = a & b;
-endmodule
-"""
+# ── 一批「解析 + 渲染保真 + 幂等」用例（参数化）────────────────────
+# 全部同构：喂源码 → 断言 success + 渲染保真片段 + 二次跑稳定。
+# 新形态只加一行 param，不再复制一份测试函数（原 11 个同构函数）。
+_FIDELITY_CASES = [
+    pytest.param(
+        "module m;\n    wire \\always ;\n    assign \\always = 1'b0;\nendmodule\n",
+        'wire \\always ;',
+        id='escaped_keyword_name',
+    ),
+    pytest.param(
+        'module m;\n    assign (strong1, pull0) #(1, 2) y = a & b;\nendmodule\n',
+        'assign (strong1, pull0) #(1, 2) y = a & b;',
+        id='assign_strength_delay',
+    ),
+    pytest.param(
+        'module m;\n    assign y = a & b;\nendmodule\n',
+        'assign y = a & b;',
+        id='assign_plain_kept',
+    ),
+    pytest.param(
+        'module m;\n    always #5 clk = ~clk;\nendmodule\n',
+        'always #5 clk = ~clk;',
+        id='always_delay_control',
+    ),
+    pytest.param(
+        'module m;\n    always begin\n        clk = ~clk;\n    end\nendmodule\n',
+        'always begin',
+        id='always_plain_block',
+    ),
+    pytest.param(
+        'module m;\n    genvar i, j;\n    generate\n        for (i = 0; i < 4; i = i + 1) begin : g\n            wire w;\n        end\n    endgenerate\nendmodule\n',
+        'genvar i, j;',
+        id='genvar_list_with_generate',
+    ),
+    pytest.param(
+        'module m;\n    (* keep = 1, dont_touch = 1 *) foo u1 ();\nendmodule\n',
+        '(* keep = 1, dont_touch = 1 *) foo u1 (',
+        id='attr_on_module_inst',
+    ),
+    pytest.param(
+        'module m;\n    (* keep = 1 *) and g1 (y, a, b);\nendmodule\n',
+        '(* keep = 1 *) and',
+        id='attr_on_gate',
+    ),
+    pytest.param(
+        'module m;\n    (* keep = 1 *) reg [3:0] x;\nendmodule\n',
+        '(* keep = 1 *) reg [3:0] x;',
+        id='attr_on_decl_kept',
+    ),
+    pytest.param(
+        'library lib "cells.v" -incdir "inc1", "inc2";\n',
+        'library lib "cells.v" -incdir "inc1", "inc2";',
+        id='library_incdir',
+    ),
+    pytest.param(
+        'include "defs.v";\n',
+        'include "defs.v";',
+        id='include_statement',
+    ),
+]
+
+
+@pytest.mark.parametrize("src,expect", _FIDELITY_CASES)
+def test_parse_render_fidelity_and_idempotent(src, expect):
+    """2005 语法扩展：解析成功 + 渲染含期望片段 + 输出可再次稳定解析。"""
     r = _run(src)
     assert r["success"], r.get("error", "")
-    assert "assign (strong1, pull0) #(1, 2) y = a & b;" in r["output"]
+    assert expect in r["output"]
     assert r["idempotent"]
-
-
-def test_assign_plain_kept():
-    """裸 assign 保持（既有形态不回归）。"""
-    src = "module m;\n    assign y = a & b;\nendmodule\n"
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert "assign y = a & b;" in r["output"]
-    assert r["idempotent"]
-
 
 # ── always 无事件控制（A.6.2）────────────────────────────────
-
-
-def test_always_delay_control():
-    """always 后直接跟 timing control 语句（always #5 ...）。"""
-    src = """module m;
-    always #5 clk = ~clk;
-endmodule
-"""
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert "always #5 clk = ~clk;" in r["output"]
-    assert r["idempotent"]
-
-
-def test_always_plain_block():
-    """always 后直接跟 begin/end 块（无事件控制）。"""
-    src = """module m;
-    always begin
-        clk = ~clk;
-    end
-endmodule
-"""
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert "always begin" in r["output"]
-    assert r["idempotent"]
 
 
 def test_always_with_event_kept():
@@ -236,60 +246,7 @@ endmodule
     assert r["idempotent"]
 
 
-def test_genvar_list_with_generate():
-    """genvar 列表与 generate 循环配合。"""
-    src = """module m;
-    genvar i, j;
-    generate
-        for (i = 0; i < 4; i = i + 1) begin : g
-            wire w;
-        end
-    endgenerate
-endmodule
-"""
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert "genvar i, j;" in r["output"]
-    assert r["idempotent"]
-
-
 # ── 实例/门级 attribute 前缀（A.4.1/A.3.1）──────────────────
-
-
-def test_attr_on_module_inst():
-    """(* ... *) 前缀模块实例。"""
-    src = """module m;
-    (* keep = 1, dont_touch = 1 *) foo u1 ();
-endmodule
-"""
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert "(* keep = 1, dont_touch = 1 *) foo u1 (" in r["output"]
-    assert r["idempotent"]
-
-
-def test_attr_on_gate():
-    """(* ... *) 前缀门级原语。"""
-    src = """module m;
-    (* keep = 1 *) and g1 (y, a, b);
-endmodule
-"""
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert "(* keep = 1 *) and" in r["output"]
-    assert r["idempotent"]
-
-
-def test_attr_on_decl_kept():
-    """声明级 attribute 保持（既有形态不回归）。"""
-    src = """module m;
-    (* keep = 1 *) reg [3:0] x;
-endmodule
-"""
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert "(* keep = 1 *) reg [3:0] x;" in r["output"]
-    assert r["idempotent"]
 
 
 # ── library 声明（A.1.1）────────────────────────────────────
@@ -308,21 +265,3 @@ endmodule
     assert "module top" in r["output"]
     assert r["idempotent"]
 
-
-def test_library_incdir():
-    """library -incdir 可选段。"""
-    src = """library lib "cells.v" -incdir "inc1", "inc2";
-"""
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert 'library lib "cells.v" -incdir "inc1", "inc2";' in r["output"]
-    assert r["idempotent"]
-
-
-def test_include_statement():
-    """include file_path_spec ;"""
-    src = 'include "defs.v";\n'
-    r = _run(src)
-    assert r["success"], r.get("error", "")
-    assert 'include "defs.v";' in r["output"]
-    assert r["idempotent"]

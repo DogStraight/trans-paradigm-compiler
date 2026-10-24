@@ -33,82 +33,50 @@ def _flat(text: str) -> str:
     return "".join(text.split())
 
 
-# ── RHS 交错形态（A.9.3 形式化宽进） ────────────────────────────────
+# ── 交错形态用例表（A.9.3 形式化宽进） ──────────────────────────────
+# 全部用例同构：喂一段源码，断言管线成功 + 渲染后的扁平文本含期望片段。
+# 新形态只加一行 param——不再复制一份测试函数（原来 9 个同构函数）。
+_CASES = [
+    pytest.param(
+        "module m;\n    assign x = a[0].b;\nendmodule\n", "x=a[0].b;",
+        id="rhs_member_after_index"),
+    pytest.param(
+        "module m;\n    assign x = a.b[0].c;\nendmodule\n", "x=a.b[0].c;",
+        id="rhs_member_between_indexes"),
+    pytest.param(
+        "module m;\n    assign x = mem[i].field;\nendmodule\n", "x=mem[i].field;",
+        id="rhs_array_field"),
+    pytest.param(
+        "module m;\n    assign x = a[0].b[1].c;\nendmodule\n", "x=a[0].b[1].c;",
+        id="rhs_fully_interleaved"),
+    pytest.param(
+        "module m;\n    assign x = y[a[0].b];\nendmodule\n", "x=y[a[0].b];",
+        id="rhs_inside_select_suffix"),
+    pytest.param(
+        "module m;\n    assign a[0].b = 1;\nendmodule\n", "a[0].b=1;",
+        id="lhs_continuous_assign_member_after_index"),
+    pytest.param(
+        "module m;\n    always @(*) mem[i].field <= x;\nendmodule\n", "mem[i].field<=x;",
+        id="lhs_nba_arraymember"),
+    pytest.param(
+        "module m;\n    always @(*) a.b <= x;\nendmodule\n", "a.b<=x;",
+        id="lhs_nba_hier_existing_defect"),
+    pytest.param(
+        "module m;\n    always @(*) a.b = x;\nendmodule\n", "a.b=x;",
+        id="lhs_blocking_hier"),
+]
 
 
-def test_rhs_member_after_index():
-    """`a[0].b`（成员在下标后）RHS 解析 + 渲染保真。"""
-    src = "module m;\n    assign x = a[0].b;\nendmodule\n"
+@pytest.mark.parametrize("src,expect", _CASES)
+def test_interleaved_hier_ref_forms(src, expect):
+    """层次化引用「成员 / 下标任意交错」在各位置均解析 + 渲染保真。
+
+    覆盖 RHS 表达式位与 LHS 赋值目标位（连续赋值 / 非阻塞 / 阻塞），
+    以及嵌套在别的下标内的形态。
+    """
     r = _run(src)
-    assert r["success"]
-    assert "x=a[0].b;" in _flat(r.get("output", ""))
-
-
-def test_rhs_member_between_indexes():
-    """`a.b[0].c`（下标在成员间）RHS 解析 + 渲染保真。"""
-    src = "module m;\n    assign x = a.b[0].c;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "x=a.b[0].c;" in _flat(r.get("output", ""))
-
-
-def test_rhs_array_field():
-    """`mem[i].field`（数组元素成员访问）RHS 解析。"""
-    src = "module m;\n    assign x = mem[i].field;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "x=mem[i].field;" in _flat(r.get("output", ""))
-
-
-def test_rhs_fully_interleaved():
-    """`a[0].b[1].c`（多段交错）RHS 解析 + 顺序保真。"""
-    src = "module m;\n    assign x = a[0].b[1].c;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "x=a[0].b[1].c;" in _flat(r.get("output", ""))
-
-
-def test_rhs_inside_select_suffix():
-    """交错形态嵌套在别的下标内（`y[a[0].b]`）。"""
-    src = "module m;\n    assign x = y[a[0].b];\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "x=y[a[0].b];" in _flat(r.get("output", ""))
-
-
-# ── LHS 交错形态 ─────────────────────────────────────────────────────
-
-
-def test_lhs_continuous_assign_member_after_index():
-    """`assign a[0].b = 1;`（连续赋值目标位）。"""
-    src = "module m;\n    assign a[0].b = 1;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "a[0].b=1;" in _flat(r.get("output", ""))
-
-
-def test_lhs_nba_arraymember():
-    """`mem[i].field <= x;`（非阻塞赋值目标位）。"""
-    src = "module m;\n    always @(*) mem[i].field <= x;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "mem[i].field<=x;" in _flat(r.get("output", ""))
-
-
-def test_lhs_nba_hier_existing_defect():
-    """既有缺陷回归：`a.b <= x;`（NBA target 为层级引用，无下标）。"""
-    src = "module m;\n    always @(*) a.b <= x;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "a.b<=x;" in _flat(r.get("output", ""))
-
-
-def test_lhs_blocking_hier():
-    """`a.b = x;`（阻塞赋值目标位层级引用）。"""
-    src = "module m;\n    always @(*) a.b = x;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "a.b=x;" in _flat(r.get("output", ""))
+    assert r["success"], "解析失败"
+    assert expect in _flat(r.get("output", "")), "渲染不保真"
 
 
 # ── 既有形态回归（形状稳定） ─────────────────────────────────────────

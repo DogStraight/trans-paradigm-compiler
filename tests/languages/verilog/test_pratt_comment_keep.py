@@ -33,6 +33,50 @@ def _flat(text: str) -> str:
     return "".join(text.split())
 
 
+# ── 各位置注释保留（参数化）──────────────────────────────────────
+# 全部同构：喂源码 → 断言管线成功 + 扁平文本含注释在正确邻接位置。
+# 新形态只加一行 param，不再复制一份测试函数（原 6 个同构函数）。
+_COMMENT_POSITION_CASES = [
+    pytest.param(
+        'module m;\n    assign x = /* 前缀 */ b;\nendmodule\n',
+        '/*前缀*/b',
+        id='assign_rhs_prefix_comment',
+    ),
+    pytest.param(
+        'module m;\n    assign x = - /* 负号后 */ a;\nendmodule\n',
+        '-/*负号后*/a',
+        id='unary_prefix_operand_comment',
+    ),
+    pytest.param(
+        'module m;\n    assign x = cond ? /* 真 */ a : b;\nendmodule\n',
+        'cond?/*真*/a:b',
+        id='ternary_true_branch_comment',
+    ),
+    pytest.param(
+        'module m;\n    assign x = cond ? a : /* 假 */ b;\nendmodule\n',
+        'cond?a:/*假*/b',
+        id='ternary_false_branch_comment',
+    ),
+    pytest.param(
+        'module m;\n    assign x = a /* 中缀前 */ + b;\nendmodule\n',
+        'a/*中缀前*/+b',
+        id='infix_lhs_comment',
+    ),
+    pytest.param(
+        "module m;\n    always @(*) case (sel)\n        2'b00: y = a && /* 与 */ b;\n        default: y = 0;\n    endcase\nendmodule\n",
+        'a&&/*与*/b',
+        id='comment_kept_in_case_expression',
+    ),
+]
+
+
+@pytest.mark.parametrize("src,expect", _COMMENT_POSITION_CASES)
+def test_comment_kept_at_semantic_position(src, expect):
+    """pratt / 赋值 / 三目各间隙的注释保留在语义位置（非行尾化）。"""
+    r = _run(src)
+    assert r["success"], r.get("error", "")
+    assert expect in _flat(r.get("output", "")), "注释未保留在原位置"
+
 def test_infix_rhs_comment_kept():
     """中缀右操作数前注释保留且落在原语义位置（`+` 与 `b` 之间）。"""
     src = "module m;\n    assign x = a + /* 中缀后 */ b;\nendmodule\n"
@@ -44,55 +88,9 @@ def test_infix_rhs_comment_kept():
     assert not out.rstrip().endswith("/*中缀后*/")
 
 
-def test_assign_rhs_prefix_comment_kept():
-    """赋值 RHS 前缀注释保留（锚 = `=`，渲染在 `=` 与 `b` 之间）。"""
-    src = "module m;\n    assign x = /* 前缀 */ b;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "/*前缀*/b" in _flat(r.get("output", ""))
-
-
-def test_unary_prefix_operand_comment_kept():
-    """一元前缀操作数前注释保留（`-` 与 `a` 之间）。"""
-    src = "module m;\n    assign x = - /* 负号后 */ a;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "-/*负号后*/a" in _flat(r.get("output", ""))
-
-
-def test_ternary_true_branch_comment_kept():
-    """三目 true 分支注释保留（锚 = `?`）。"""
-    src = (
-        "module m;\n"
-        "    assign x = cond ? /* 真 */ a : b;\n"
-        "endmodule\n"
-    )
-    r = _run(src)
-    assert r["success"]
-    assert "cond?/*真*/a:b" in _flat(r.get("output", ""))
-
-
-def test_ternary_false_branch_comment_kept():
-    """三目 false 分支注释保留（锚 = `:`）。"""
-    src = (
-        "module m;\n"
-        "    assign x = cond ? a : /* 假 */ b;\n"
-        "endmodule\n"
-    )
-    r = _run(src)
-    assert r["success"]
-    assert "cond?a:/*假*/b" in _flat(r.get("output", ""))
     # 注：同行多注释（`cond ? /* 真 */ a : /* 假 */ b`）受 restore 单行单插
     # 局限（第二条退化行尾），属既有能力边界，不在本修复范围（修复前
     # pratt 吞注释是直接丢失）。
-
-
-def test_infix_lhs_comment_kept():
-    """中缀左操作数后注释（外层机制收集，回归守卫不丢失）。"""
-    src = "module m;\n    assign x = a /* 中缀前 */ + b;\nendmodule\n"
-    r = _run(src)
-    assert r["success"]
-    assert "a/*中缀前*/+b" in _flat(r.get("output", ""))
 
 
 def test_comment_survives_idempotent_rerun():
@@ -121,21 +119,6 @@ def test_comment_mounted_on_binary_op():
     assert not hits, "pratt operator 间隙注释不应进锚点通道（挂 BinaryOp 节点）"
     # 渲染后注释保留在 + 与 b 之间
     assert "/*锚点*/b" in _flat(r.get("output", ""))
-
-
-def test_comment_kept_in_case_expression():
-    """case 比较表达式内注释保留（原子/选择表达式组合场景）。"""
-    src = (
-        "module m;\n"
-        "    always @(*) case (sel)\n"
-        "        2'b00: y = a && /* 与 */ b;\n"
-        "        default: y = 0;\n"
-        "    endcase\n"
-        "endmodule\n"
-    )
-    r = _run(src)
-    assert r["success"]
-    assert "a&&/*与*/b" in _flat(r.get("output", ""))
 
 
 def _find_node(node, name, out=None):
