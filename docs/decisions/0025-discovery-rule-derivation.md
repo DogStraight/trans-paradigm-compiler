@@ -104,10 +104,11 @@ keywords = ["keyword.else", "keyword.default"]
 
 > Impl: linter/discovery.py（`_derive_attr_openers` / `_is_bracket_stmt_container` /
 > `_derive_continuation_openers`）· linter/scanner.py（`_is_pure_stmt_container`）
-> （待立项新增声明段 `grammar/<lang>/base/_discovery.toml`——本 ADR 为未立项设计输入，
-> 该文件尚不存在，故不作 Impl 锚）
 > Test: tests/engine/linter/test_linter_discovery.py ·
 > tests/languages/c/test_c_block_diagnostics.py · tests/languages/c4/test_c4_linter.py
+
+新增的声明段（本 ADR 为未立项设计输入，文件尚不存在，故不列为 Impl 锚）：
+语言包 `base/_discovery.toml`，内容形态见上文「决策」节草案。
 
 ## 分期（立项后）
 

@@ -57,8 +57,8 @@
 | 档案 | 主题 |
 |------|------|
 | `gap-tpc-check-external-checker.md` | tpc-check 外部 checker 插件协议（接入 veryl/verible/slang + 自管场景；ROADMAP P2.6） |
-| `gap-lexer-capture-boundaries.md` | lexer 捕获边界（块标量折叠/chomping 不语义化、触发条件限声明式） |
-| `gap-preprocessor-comment-scan.md` | 预处理器注释扫描（行级状态机近似：字符串内定界符、注释后同行指令） |
+| `gap-comment-string-span-consistency.md` | 注释/字符串跨度判定两套实现（词法捕获器 A 侧：块标量折叠/触发谓词未闭环；预处理器行级状态机 B 侧：字符串内定界符误判、注释后同行指令不识别，接受） |
+| `gap-parser-backtracking.md` | parser 回溯成本与 atom 位置级 memo（块 2 收口：cJSON 57.6s→2.98s；atom memo + 规则级 FIRST 早拒） |
 | `gap-parser-linter-approximation.md` | parser/linter 错误处理近似（无恢复 + 启发式） |
 | `gap-formatter-line-behavior.md` | formatter 行行为边界（宽度折行/保留行/对齐/幂等） |
 | `gap-language-pack-scope.md` | 语言包范围与 yaml 边界（规模/SV/增强语法）+ C 包接受域现状 / 渲染保真现状 / `enabled` 档位边界 |
