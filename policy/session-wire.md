@@ -2,7 +2,7 @@
 
 > 适用：**多个 DSH 会话**在同一工作区（`E:\project\tpc_compiler`）协作时的消息交接。
 > 不适用于 tpc 产品本身——它是协作层，不改语言/引擎行为。
-> 机器执行者：`_drafts/session/tools/wirex.py`（前门）+ `_drafts/session/tools/wire.py`（校验器，vendored）。
+> 机器执行者：`_drafts/session/tools/wirex.py`（前门）+ `_drafts/session/wire.py`（校验器，vendored）。
 > 记录落在 `.scratch/wire/`（**不进库、不受门禁**）；教义（本文件）进库、受评审。
 
 ## 为什么记录不进库
@@ -16,7 +16,7 @@
 | 路径 | 作用 |
 |---|---|
 | `.scratch/wire/<thread>/NNN-<from>-<id6>.wire` | 消息树；一条消息一个文件，字典序即时间序 |
-| `_drafts/session/tools/wire.py` | 校验器/生成器，**逐仓 vendored**（与上游同版本；校验器必须匹配自己树里的消息） |
+| `_drafts/session/wire.py` | 校验器/生成器，**逐仓 vendored**（与上游同版本；校验器必须匹配自己树里的消息）。位置受「vendor 深度契约」约束 |
 | `_drafts/session/tools/wirex.py` | tpc 前门：花名册解析 + 版本自检 + 委托校验器 |
 | `_drafts/session/roster.toml` | 花名册：`label -> session id -> role`（**地址只能来自这里**） |
 | `_drafts/session/roster.py` | 从 DSH 会话库生成本工作区的会话清单（查 id 用） |
@@ -81,9 +81,46 @@ python $S\read_reply.py --session <对方 id> --after-turn <N> --wait 300
 4. **同源分叉**：分叉方必须声明 `forked_from`，且**不继承父会话的 `session=`**；
    父会话的未决义务不属于分叉方；度量原子附 git rev（分叉工作树会漂移）。
 5. **意见预算**：无锚也无判定的原子记作意见，≤2 条或 ≤25%。
+6. **`new` 已 fail-closed**：前门写完立即 `check`，红则移入 `<thread>/.rejected/` 并退出 3。
+   `new` 的静默成功**不是**合格证明（实测：2026-10-24 review session 报 `new` 对非法原子 rc=0，
+   一条缺 `rev=`/`silent=` 的 ASK 就这样躺在树里冒充记录）。vendored 校验器因此仍逐字节不变，
+   这条策略只活在前门。
 
 ## 已知缺口（继承自上游 WIRE.md，勿当成已解决）
 
 - 没有强制传输层：校验器只管内容，不保证送达/被读。
 - `ttl` 过期不会自动执行默认值。
 - "谁**应当**回答"由花名册解决了一半；下发任务时仍须在消息里写清 `by=`。
+
+## 谁该用它：审计循环里的三类外部问题
+
+审计制度要求「判断不可外包」，但**同一个人不能既提结论又当证伪者**。三类问题只能跨会话问：
+
+| 问题 | 找谁 | 自己为什么答不了 |
+|---|---|---|
+| 我这个探针代理的**还是**当前那条性质吗（`invalidated_if` 发生了吗） | 无利害关系的另一个会话 | 自证：作者对自己写的探针总是宽容 |
+| 另一仓/另一会话的实测事实（上游行为、用户口径） | 该仓/该会话 | 本仓没有那份事实，只有它的转述 |
+| 制度要不要改（决策权归属） | 作者 | 授权不在我手里 |
+
+**不该用它的地方**：同步等待（wire 没有阻塞原语，`read_reply --wait` 不是锁）；搬大段正文
+（写文件 + `~path:`/`~ext:`，消息里只放判定句）；闲聊。
+
+### 提问模板（四行够用）
+
+```
+#W1 from=<我> to=<完整 session id> thread=t.<主题> session=<我的 id> re=<键>
+? q.<键> by=<我> = 一句话、一次一个、必须能用一个事实回答 ~path:<证据文件>
++ ask.<键> = 我拿这个答案去决定什么（对方据此判断该给多细）
+> by=<我> rev=n silent=hold then=<我先做什么> = 回答请指证据路径，不接受散文结论
+```
+
+**判据**：好的跨会话问题，对方答完你就能**删掉一个探针**或**冻结/解冻一个维度**；
+答完还要你再解释一遍的，是没问清。
+
+## vendor 深度契约（实测代价）
+
+`wire.py` 用 `REPO_ROOT = Path(__file__).resolve().parents[2]` 认仓库根，而 `check` 的
+`~path:` 一律按**它**解析——`--repo` 只喂给 `thread/who/quorum`，**不传给** `ref_finding`。
+所以 vendored 副本必须落在**仓库根下恰好两级**：本仓因此是 `_drafts/session/wire.py`。
+曾下沉到 `_drafts/session/tools/wire.py`，结果 `~path:README.md` 全红——**红的是工具的位置，
+不是引用**。改位置后同一字节（SHA256 相同）的副本立刻判绿。
