@@ -1,1 +1,2 @@
 {"at": "2026-10-24T16:57:07+08:00", "roots": ["."], "total": 77, "by_severity": {"HIGH": 0, "MEDIUM": 7, "LOW": 70}, "by_kind": {"word_list": 69, "branch_chain": 7, "string_predicate": 1}, "listed_items": 514}
+{"at": "2026-10-24T19:26:28+08:00", "roots": ["."], "total": 112, "by_severity": {"HIGH": 0, "MEDIUM": 18, "LOW": 94}, "by_kind": {"word_list": 71, "dispatch_dict": 21, "branch_chain": 15, "regex_alternation": 2, "string_predicate": 3}, "listed_items": 942}

@@ -7,6 +7,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **审计工具自身的枚举幻觉（修 `~/.agents/skills/enumeration-illusion-audit`）**：
+  用该 skill 的判据审它自己，修 7 处"自己也在枚举"的实现：
+  · **命名参与打分 → 删除**：原 `OPEN_HINTS`/`CLOSED_HINTS` 给分数 ±0.25/−0.35，
+    等于用词表判断"是否开放集"；实测**反向错判**——`DANGEROUS_CMDS`（危险命令
+    denylist，开放集）因 `cmd` 命中 CLOSED_HINTS 被判 `0.00` + 理由"命名像协议枚举"。
+    改为命名只作报告观察，不参与判定。
+  · **AST 覆盖补三类**：`match/case`（Python 3.10+ 分派，此前整体漏检）、`Enum`
+    /`StrEnum` 类（开放集枚举）、`x in {..}` 的成员判定改挂 `visit_Compare`
+    （此前只在赋值右侧扫，`return`/`if` 位置漏检；owner 名字修正）。
+  · **正则与 dict 去掉中文前置条件**：英文词表交替、英文键 allowlist/mapping
+    此前整体漏检；改按内容形态判（`|` 切分后词形分支 ≥3 / 短字符串键 ≥8），
+    中文比例只影响理由文案。
+  · **`PUNCT_CHARS` 手抄 → `unicodedata` 类别谓词**：原表**漏了 ASCII `-`**，
+    导致运算符交替 `<=|>=|==|!=|-|/|<|>` 被判成词表（假阳）；集合封闭 ≠ 手抄不会漏。
+  · **文件发现改 `git ls-files`**：原按 14 个扩展名过滤，`.pyi`/`.vue`/`.svelte`/`.zig`
+    等静默跳过；未知扩展名现在**打印提示**（可见而非静默）。
+  · **回归**：6 形态混合探针 2/6（且两条判错）→ **6/6**；中文强项不变
+    （`DANGLING_TAILS` HIGH 0.88 / 中文正则 HIGH 0.90）；运算符正则假阳 MEDIUM → LOW 0.05。
+  · **局限已写回 skill 文档**（`SKILL.md`「自审记录与已知局限」）：英文开放集严重度
+    偏保守、`branch_chain` 无法区分分派/堆规则、规模信号会抬高字符级封闭映射、
+    未做使用面分析。
+  · **账本**：`docs/enumeration-ledger.jsonl` 追加改造后基线
+    （0 HIGH / 18 MEDIUM / 94 LOW / 条目 **514 → 942**）。⚠ 该跳变是**工具召回提升**
+    所致（match/Enum/英文词表/dict 四类新可见），不是仓库一夜间变差；解读趋势时以
+    同版本工具的前后对比为准。
+  · 顺带自查结论：本仓 `lexer/number_gen._CHAR_CATEGORY`（42 个单字符→类别）判
+    ✅ 封闭集；`tools/lang_penetration.TIER_A/TIER_B` 判 🟡（探测用弱信号词表，
+    非正确性路径）。
+
+### Added
+
 - **枚举幻觉审计（按 `enumeration-illusion-audit` skill 正式流程补做，含自纠）**：
   上一轮我只从 #78 提交信息反推判据、未走 skill 工作流（未用扫描器/账本/三分类）；
   本轮按 skill 补齐：扫描本次会话改动的 23 个 .py → 候选 2 条 / 清单条目 45。
