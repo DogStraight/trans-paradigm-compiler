@@ -103,6 +103,35 @@ TOKEN_ALLOWLIST: dict[str, str] = {
     "bool": "token 类别谓词名（pratt_parser 的 is_bool/_check('bool', …)），与 C23 关键字同名",
 }
 
+# 规则 6 allowlist：引擎协议里的 **token 前缀/族**（不是具体语言名字）。
+# `core/token_protocol.py` 定义的前缀常量族是引擎词汇（KEYWORD_PREFIX 等），
+# 引擎按前缀族判断形态是正当的；写死某个具体名字（`symbol.base.colon`）才是语言知识。
+PREFIX_FAMILY_ALLOWLIST: dict[str, str] = {
+    "symbol.": "token 协议前缀族（core/token_protocol.py SYMBOL_PREFIX）",
+    "bracket.l_": "token 协议前缀族（BRACKET_L_PREFIX）",
+    "bracket.r_": "token 协议前缀族（BRACKET_R_PREFIX）",
+    "keyword.": "token 协议前缀族（KEYWORD_PREFIX）",
+    "symbol.base": "词法层构造 category 前缀（lexer 按 [symbol.base] 表扫描，非具体 token）",
+    "symbol.extend": "词法层构造 category 前缀（lexer 按 [symbol.extend] 表扫描）",
+}
+
+# 规则 6 allowlist：按**文件**豁免的已知例外（须逐条给理由）。
+# 判定原则：引擎可以持有"引擎协议词"（见上），但不应持有某个语言的具体 token 名。
+R6_FILE_ALLOWLIST: dict[tuple[str, str], str] = {
+    ("parser/rule_selector.py", "symbol.base.colon"):
+        "`if __name__ == \"__main__\"` 下的手工调试样例（非生产路径、不被任何模块执行）",
+    ("linter/discovery.py", "bracket.l_parentheses"):
+        "**已知债，ADR-0025 D2 消除**：`_derive_attr_openers` 从 production 结构推导"
+        "属性对（`(* ... *)`）时把 Verilog 的两个 token 名写死。属「同形不同意图无法推导」"
+        "（见 ADR-0025「为什么是声明而不是更好的推导」），待声明面 `[discovery.prefix_pairs]` 落地后改读声明",
+    ("linter/discovery.py", "symbol.base.multiple"):
+        "同上：ADR-0025 D2 消除（属性对的第二个 token）",
+    ("linter/scanner.py", "symbol.base.colon"):
+        "**引擎协议**：推导「opener 前驱排除」时把「子句分隔符」认作 `:` 形态——"
+        "这是 §clause 分隔的引擎概念，配合 `st.startswith(KEYWORD_PREFIX)` 使用，"
+        "不指向某个语言的具体规则；待 ADR-0025 声明面落地后改读声明",
+}
+
 # 规则 2 allowlist：文档化的默认语言引导路径（产品决策：verilog 为默认
 # 语言包，用户配置缺失时回退；editable/wheel 双模式定位，两处均有注释）。
 PATH_ALLOWLIST: dict[str, str] = {
@@ -172,6 +201,9 @@ def collect_grammar_keywords(root: Path) -> set[str]:
             if isinstance(value, str):
                 vocab.add(value)
     return vocab - PY_KEYWORDS
+
+
+_CONCRETE_TOKEN_PREFIXES: tuple[str, ...] = ("bracket.", "symbol.", "keyword.")
 
 
 def _iter_engine_files(root: Path) -> Iterator[Path]:
@@ -308,6 +340,42 @@ def _rule4_grammar_imports(root: Path) -> list[Finding]:
     return findings
 
 
+def _rule6_concrete_token_names(root: Path) -> tuple[list[Finding], list[Finding]]:
+    """规则 6：引擎代码里写死**具体语言 token 名**（`bracket.l_parentheses`、
+    `symbol.base.colon` 这种）。返回 (违规, allowlist 跳过)。
+
+    R1 只扫"grammar 词表里的关键字"，对 `bracket.*` / `symbol.*` 组合是盲区
+    （`language-penetration` 的真实缺口）：`discovery.py` 曾把 Verilog 属性对
+    `(* ... *)`、`scanner.py` 曾把 `:` 写死进引擎。本规则按**前缀族 vs 具体名**
+    划线——`"symbol."`（协议前缀）放行，`"symbol.base.colon"`（具体 token）报错。
+    """
+    violations: list[Finding] = []
+    skipped: list[Finding] = []
+    for rel in _iter_engine_files(root):
+        text = (root / rel).read_text(encoding="utf-8")
+        for line_no, lit in _iter_code_literals(text):
+            if not lit.startswith(_CONCRETE_TOKEN_PREFIXES):
+                continue
+            if lit in PREFIX_FAMILY_ALLOWLIST:
+                skipped.append(
+                    Finding("R6", str(rel), line_no, f"token 前缀族 '{lit}'",
+                            PREFIX_FAMILY_ALLOWLIST[lit])
+                )
+                continue
+            rel_key = str(rel).replace("\\", "/")
+            reason = R6_FILE_ALLOWLIST.get((rel_key, lit))
+            if reason is not None:
+                skipped.append(
+                    Finding("R6", str(rel), line_no, f"token '{lit}'", reason)
+                )
+            else:
+                violations.append(
+                    Finding("R6", str(rel), line_no,
+                            f"引擎写死具体语言 token 名 '{lit}'（应取语言包声明）")
+                )
+    return violations, skipped
+
+
 def _rule5_no_chdir_in_tests(root: Path) -> list[Finding]:
     """规则 5：测试文件直接 `os.chdir`（进程级 CWD 泄漏）。
 
@@ -350,6 +418,7 @@ def collect_findings(root: Path) -> CheckReport:
     vocab = collect_grammar_keywords(root)
     r1_viol, r1_skip = _rule1_token_literals(root, vocab)
     r2_viol, r2_skip = _rule2_grammar_paths(root)
+    r6_viol, r6_skip = _rule6_concrete_token_names(root)
     return CheckReport(
         vocab=vocab,
         results={
@@ -358,6 +427,7 @@ def collect_findings(root: Path) -> CheckReport:
             "R3": RuleResult(_rule3_doc_headers(root), []),
             "R4": RuleResult(_rule4_grammar_imports(root), []),
             "R5": RuleResult(_rule5_no_chdir_in_tests(root), []),
+            "R6": RuleResult(r6_viol, r6_skip),
         },
     )
 
@@ -387,8 +457,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _gate_rule_ids(args: argparse.Namespace) -> set[str]:
-    """gate 规则集：R1/R2/R5 常驻，R3/R4 由 --strict-* 升格。"""
-    gate: set[str] = {"R1", "R2", "R5"}
+    """gate 规则集：R1/R2/R5/R6 常驻，R3/R4 由 --strict-* 升格。"""
+    gate: set[str] = {"R1", "R2", "R5", "R6"}
     if args.strict_doc:
         gate.add("R3")
     if args.strict_import:
@@ -410,7 +480,7 @@ def _print_rule_reports(report: CheckReport, gate: set[str], quiet: bool) -> Non
             f"[tpc 约定门禁] 词表 {len(report.vocab)} 个关键字"
             "（grammar/ 提取，剔除 Python 关键字）"
         )
-    for rule_id in ("R1", "R2", "R3", "R4", "R5"):
+    for rule_id in ("R1", "R2", "R3", "R4", "R5", "R6"):
         res = report.results[rule_id]
         if not quiet:
             print(f"── 规则 {rule_id} [{_rule_label(rule_id, gate)}]")

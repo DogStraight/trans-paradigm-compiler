@@ -1,4 +1,4 @@
-"""check_hardcode.py 自测：引擎约定门禁（规则 1-5）的单元 + 真实仓库回归。
+"""check_hardcode.py 自测：引擎约定门禁（规则 1-6）的单元 + 真实仓库回归。
 
 单元用例在 tmp_path 上构造最小语法包（grammar/*/token.toml 的 [id.keyword]）
 与引擎文件（core/*.py），验证规则触发/豁免边界；回归用例直接跑真实仓库根，
@@ -197,15 +197,51 @@ def test_main_r5_is_gate(tmp_path: Path) -> None:
     assert checker.main(["--root", str(root), "--quiet"]) == 1
 
 
+# ── 规则 6：引擎写死具体语言 token 名 ──────────────────────────────────────
+
+def _r6(tmp_path: Path) -> list:
+    return checker.collect_findings(tmp_path).results["R6"].violations
+
+
+def test_rule6_flags_concrete_token_name(tmp_path: Path) -> None:
+    """具体 token 名（bracket./symbol. 后代）判红——R1 的词表盲区。"""
+    root = _make_tree(tmp_path, 'x = "symbol.base.colon"\n')
+    assert [f.line for f in _r6(root)] == [1]
+
+
+def test_rule6_flags_bracket_name(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path, 'x = "bracket.l_parentheses"\n')
+    assert len(_r6(root)) == 1
+
+
+def test_rule6_allows_prefix_family(tmp_path: Path) -> None:
+    """协议前缀族（`"symbol."` / `"bracket.l_"`）是引擎词汇，不报。"""
+    root = _make_tree(tmp_path, 'a = "symbol."\nb = "bracket.l_"\nc = "keyword."\n')
+    assert _r6(root) == []
+
+
+def test_rule6_ignores_comment_and_docstring(tmp_path: Path) -> None:
+    """注释/docstring 里讨论 token 名是文档，不是硬编码。"""
+    code = '"""说明：symbol.base.colon 这种写法应改声明。"""\n# x = "symbol.base.colon"\ny = 1\n'
+    root = _make_tree(tmp_path, code)
+    assert _r6(root) == []
+
+
+def test_rule6_is_gate(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path, 'x = "keyword.module"\n')
+    assert checker.main(["--root", str(root), "--quiet"]) == 1
+
+
 # ── 真实仓库回归：门禁规则零违规 ──────────────────────────────────
 
 def test_repo_gate_clean() -> None:
-    """真实仓库根：R1/R2/R5 必须零违规（约定即门禁进测试套件）。"""
+    """真实仓库根：R1/R2/R5/R6 必须零违规（约定即门禁进测试套件）。"""
     root = Path(__file__).resolve().parent.parent.parent
     report = checker.collect_findings(root)
     assert report.results["R1"].violations == []
     assert report.results["R2"].violations == []
     assert report.results["R5"].violations == []
+    assert report.results["R6"].violations == []
     # 词表来自真实 grammar/（防提取逻辑回归）
     assert "module" in report.vocab
     assert "if" not in report.vocab  # Python 关键字已剔除
