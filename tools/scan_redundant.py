@@ -151,15 +151,33 @@ def _reference_hits(needle_prefix: str) -> list[dict]:
     return hits
 
 
+def _is_convention_mention(target: str) -> bool:
+    """是否只是"草稿区在哪"的**约定陈述**（`_drafts/` 裸目录名），不是具体文件指针。
+
+    判定依据：政策/README 里"讨论草稿放 `_drafts/`"这类句子在草稿清空后**照旧成立**
+    （草稿区本就是"用完即删"），不是悬空引用（判据 B3 指的是指向**具体文件**的失锚）。
+    """
+    return target.rstrip("/") in SCRATCH_DIRS
+
+
 def scan_refs() -> dict:
-    """引用体检：仍存在的草稿被谁引用（live）+ 已悬空引用（dangling）。"""
-    live, dangling = [], []
+    """引用体检：仍存在的草稿被谁引用（live）+ 已悬空引用（dangling）。
+
+    裸目录名（`_drafts/`）的提及算**约定陈述**，单独归入 `conventions`，不计悬空——
+    否则政策文档会被长期误报，真正该修的失锚反而被噪音淹没。
+    """
+    live, dangling, conventions = [], [], []
     for d in SCRATCH_DIRS:
         for h in _reference_hits(d + "/"):
             exists = (ROOT / h["target"]).exists()
             h["exists"] = exists
-            (live if exists else dangling).append(h)
-    return {"live": live, "dangling": dangling}
+            if exists:
+                live.append(h)
+            elif _is_convention_mention(h["target"]):
+                conventions.append(h)
+            else:
+                dangling.append(h)
+    return {"live": live, "dangling": dangling, "conventions": conventions}
 
 
 def _fmt(n: int) -> str:
@@ -169,7 +187,9 @@ def _fmt(n: int) -> str:
 def _report_refs(refs: dict, live: bool) -> None:
     """引用体检段：悬空引用（B3）+ 可选"仍被引用"清单。"""
     dang = refs["dangling"]
-    print(f"\n[dangling] 已悬空引用（删除判据 B3）：{len(dang)} 条")
+    conv = refs.get("conventions") or []
+    print(f"\n[dangling] 已悬空引用（删除判据 B3）：{len(dang)} 条"
+          f"（另 {len(conv)} 条为「草稿区在哪」的约定陈述，不计）")
     for h in dang:
         print(f"  - {h['file']}:{h['line']} -> {h['target']} (不存在)")
     if not live:
