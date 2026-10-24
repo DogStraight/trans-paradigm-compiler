@@ -18,7 +18,6 @@ strict 语境约定：
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any, cast
 
 from core.define import Token
 from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia, split_token_types
