@@ -9,7 +9,7 @@
     python tools/audit_cycle.py --dim D2         # 只跑一个维度
     python tools/audit_cycle.py --ledger docs/audit-ledger.jsonl
     python tools/audit_cycle.py --list           # 只看注册表
-Doc: policy/audit_loop.md（循环协议）
+Doc: policy/collaboration.md（任务循环六步 + 审计维度轮）
 """
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     failed = sum(1 for r in results if r["status"] == "fail")
     print(f"\n探针 {ran}/{len(results)} 有结果；失败 {failed}；无探针 {len(results) - ran}")
     print("注意：PASS 只表示'探针命令返回 0'，**不等于该维度已关闭**——"
-          "关闭需按 policy/audit_loop.md S6 的四条判据。")
+          "关闭需按 policy/collaboration.md「审计维度轮」的四条判据。")
     if args.ledger:
         _write_ledger(args.ledger, results)
     return 1 if failed else 0

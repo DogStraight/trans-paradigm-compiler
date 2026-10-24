@@ -1,13 +1,13 @@
 """审计维度注册表门禁：防"todo 黑洞"与"没探针就宣布关闭"。
 
-规则（对应 policy/audit_loop.md）：
+规则（对应 policy/collaboration.md「审计维度轮」）：
   R1 每条维度必须有 id / name / origin / closure / status
   R2 id 唯一且形如 D<N>
   R3 probe = "todo" 必须有 trigger（否则是"以后再说"的黑洞）
   R4 status = "closed" 必须有真实探针（无探针不得宣布关闭）
   R5 probe 指向的脚本必须存在（防锚点腐烂）
   R6 新增维度必须声明 origin（user / agent），便于回溯"谁想到的"
-Doc: policy/audit_loop.md
+Doc: policy/collaboration.md
 """
 
 import re

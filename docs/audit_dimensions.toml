@@ -8,7 +8,7 @@
 #   · todo 维度必须有 trigger（否则它就是"以后再说"的黑洞）
 #
 # origin：user = 用户提的 4 个核心任务；agent = 审计中发现的新维度
-# Doc: policy/audit_loop.md（循环协议）
+# Doc: policy/collaboration.md（任务循环六步 + 审计维度轮）
 
 [[dimension]]
 id = "D1"
