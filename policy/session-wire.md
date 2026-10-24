@@ -26,6 +26,12 @@
 - `--to` 必须是**完整 session id**，或 `roster.toml` 里登记的 label。
 - label 解析不到 → `E-NO-SESSION-BEHIND-LABEL`（退出码 2），**拒写**，不静默变成坏地址。
 - 这是实测过的失败：一个没有 session id 支撑的名字，写出去谁也不会收到。
+- 这是第二次实测的失败（2026-10-24）：`main` 这个 label 指向的是**另一个**会话
+  （标题「了解项目概况」），而用户口中"main loop"是 `session-40b92e73`（255 turns）。
+  两条消息都"投递成功"（turns 涨、inbox 清空），只是发给了一个不会做事的会话。
+  **"发对了机制、发错了人"不会报错，只会安静地没人执行。**
+- 因此：label 必须**字面等于**会话标题，或被标题唯一覆盖；花名册必须按**会话缓存**枚举
+  （`roster.py` 原先按 `sessions/` 目录枚举，漏掉了 main loop，于是"没列出来"被读成"不存在"）。
 
 ```powershell
 python _drafts/session/tools/wirex.py who        # label / id / role / turns / running
