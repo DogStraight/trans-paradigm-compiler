@@ -38,6 +38,7 @@
   （analyzer 语义检查插槽已就近 `analyzer/semantic_checks.md`，见 analyzer/README）
   （renderer 世界 A 架构已就近 `renderer/renderer_architecture.md`，见 renderer/README）
   （引擎总览叙事 `engine_overview.md`：跨子系统一条线 + 全局骨架，改任何子系统前先读）
+  （审计制度 `audit_system.md`：可插拔审计管线 + 维度注册表 + 证据规则，改门禁/开工审计轮前先读）
 - 决策：`decisions/README.md`（入档纪律 + 编号 + 模板；完成即删——历史 git log，
   现存档由 `MODEL_INDEX.md` 指向的机制文档承载，不另设 ADR 清单）
 - 参考：`references.md`（外部调研/设计来源落档：静态检查器功能调研见其「静态检查器功能调研」节）
