@@ -49,6 +49,16 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:  # noqa: BLE001 — 受限环境无 reconfigure，忽略
         pass
 
+# ── 解析失败可见通道（D6 fail-open 修复）───────────────────────────────────
+# 门禁最容易"假绿"的地方：文件解析失败时静默跳过 ⇒ 该文件零检查、门禁仍报干净。
+# 纪律：任何"跳过但未检查"都必须留下痕迹（fail-closed 的最小形态）。
+PARSE_FAILURES: list[tuple[str, str]] = []
+
+
+def _record_parse_failure(path: object, reason: str) -> None:
+    PARSE_FAILURES.append((str(path), reason))
+
+
 # ── 扫描范围 ────────────────────────────────────────────────────────────────
 # 引擎目录（通用骨架，语言知识禁止进入）；grammar/ 下语言插件代码不在范围。
 ENGINE_DIRS: tuple[str, ...] = (
@@ -187,7 +197,8 @@ def collect_grammar_keywords(root: Path) -> set[str]:
         try:
             with toml_path.open("rb") as f:
                 data = tomllib.load(f)
-        except (tomllib.TOMLDecodeError, OSError):
+        except (tomllib.TOMLDecodeError, OSError) as exc:
+            _record_parse_failure(toml_path, f"TOML 解析失败: {exc}")
             continue
         id_cfg = data.get("id") or {}
         for value in (id_cfg.get("keyword") or {}).values():
@@ -272,7 +283,7 @@ def _iter_test_files(root: Path) -> Iterator[Path]:
             yield Path(rel)
 
 
-def _iter_code_literals(text: str) -> Iterator[tuple[int, str]]:
+def _iter_code_literals(text: str, where: str = "<src>") -> Iterator[tuple[int, str]]:
     """逐行产出代码中的字符串字面量内容（tokenize 精确区分代码/注释/docstring）。
 
     用标准库 tokenize 取 STRING token：
@@ -281,22 +292,23 @@ def _iter_code_literals(text: str) -> Iterator[tuple[int, str]]:
       ``如 "grammar/c4"``）是文档；
     - f-string 等非常量字面量跳过（ast.literal_eval 失败）。
     """
-    text = text.lstrip("\ufeff")
+    # 注意：try 必须包住**迭代**——generate_tokens 是生成器，TokenError 在 for 取值时才抛。
+    # 旧实现只包了生成器创建 ⇒ 那个 except 是死代码；坏文件会让整条门禁崩掉。
     try:
-        tokens = tokenize.generate_tokens(io.StringIO(text).readline)
-    except (tokenize.TokenError, IndentationError, SyntaxError):
+        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+            if tok.type != tokenize.STRING:
+                continue
+            if tok.string.startswith(('"""', "'''")):
+                continue  # docstring（单行/多行均排除）
+            try:
+                value = ast.literal_eval(tok.string)
+            except (ValueError, SyntaxError):
+                continue  # f-string 等非常量字面量
+            if isinstance(value, str):
+                yield tok.start[0], value
+    except (tokenize.TokenError, IndentationError, SyntaxError) as exc:
+        _record_parse_failure(where, f"tokenize 失败: {exc}")
         return
-    for tok in tokens:
-        if tok.type != tokenize.STRING:
-            continue
-        if tok.string.startswith(('"""', "'''")):
-            continue  # docstring（单行/多行均排除）
-        try:
-            value = ast.literal_eval(tok.string)
-        except (ValueError, SyntaxError):
-            continue  # f-string 等非常量字面量
-        if isinstance(value, str):
-            yield tok.start[0], value
 
 
 # ── 规则实现 ────────────────────────────────────────────────────────────────
@@ -307,7 +319,7 @@ def _rule1_token_literals(root: Path, vocab: set[str]) -> tuple[list[Finding], l
     skipped: list[Finding] = []
     for rel in _iter_engine_files(root):
         text = (root / rel).read_text(encoding="utf-8")
-        for line_no, lit in _iter_code_literals(text):
+        for line_no, lit in _iter_code_literals(text, str(rel)):
             if lit not in vocab:
                 continue
             if lit in TOKEN_ALLOWLIST:
@@ -327,7 +339,7 @@ def _rule2_grammar_paths(root: Path) -> tuple[list[Finding], list[Finding]]:
     skipped: list[Finding] = []
     for rel in _iter_engine_files(root):
         text = (root / rel).read_text(encoding="utf-8")
-        for line_no, lit in _iter_code_literals(text):
+        for line_no, lit in _iter_code_literals(text, str(rel)):
             if not _PATH_LITERAL_RE.match(lit):
                 continue
             if lit in PATH_ALLOWLIST:
@@ -410,7 +422,7 @@ def _rule6_concrete_token_names(root: Path) -> tuple[list[Finding], list[Finding
     families, protocol_names = _protocol_vocabulary(root)
     for rel in _iter_engine_files(root):
         text = (root / rel).read_text(encoding="utf-8")
-        for line_no, lit in _iter_code_literals(text):
+        for line_no, lit in _iter_code_literals(text, str(rel)):
             hit = _classify_token_literal(
                 lit, str(rel).replace("\\", "/"), families, protocol_names
             )
@@ -436,7 +448,8 @@ def _rule5_no_chdir_in_tests(root: Path) -> list[Finding]:
     for rel in _iter_test_files(root):
         try:
             tree = ast.parse((root / rel).read_text(encoding="utf-8"))
-        except SyntaxError:
+        except SyntaxError as exc:
+            _record_parse_failure(rel, f"AST 解析失败: {exc}")
             continue
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -500,6 +513,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=None, help="扫描根目录（默认仓库根；测试/诊断用）")
     parser.add_argument("--strict-doc", action="store_true", help="规则 3 升为 gate")
     parser.add_argument("--strict-import", action="store_true", help="规则 4 升为 gate")
+    parser.add_argument("--strict-parse", action="store_true",
+                        help="解析失败即判门禁失败（默认仅打印告警）")
     parser.add_argument("--quiet", action="store_true", help="只输出违规与结论")
     return parser
 
@@ -537,6 +552,18 @@ def _print_rule_reports(report: CheckReport, gate: set[str], quiet: bool) -> Non
             _print_findings(f"{rule_id} allowlist 跳过", res.skipped)
 
 
+def _report_parse_failures(strict: bool) -> int:
+    """解析失败可见通道 → 返回是否应判失败（1/0）。"""
+    if not PARSE_FAILURES:
+        return 0
+    print(f"[告警] {len(PARSE_FAILURES)} 处文件未能解析，**未纳入检查**：")
+    for path, reason in PARSE_FAILURES[:10]:
+        print(f"  {path}: {reason}")
+    if len(PARSE_FAILURES) > 10:
+        print(f"  ...另有 {len(PARSE_FAILURES) - 10} 处")
+    return 1 if strict else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_arg_parser().parse_args(argv)
 
@@ -546,6 +573,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     _print_rule_reports(report, gate, args.quiet)
 
+    if _report_parse_failures(args.strict_parse):
+        print("[FAIL] 存在解析失败的文件（--strict-parse）")
+        return 1
     gate_findings = sum(len(report.results[r].violations) for r in gate)
     if gate_findings:
         print(f"[FAIL] 门禁违规 {gate_findings} 处（{', '.join(sorted(gate))}）")

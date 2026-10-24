@@ -301,3 +301,32 @@ def test_rule3_doc_header_beyond_2000_chars(tmp_path: Path) -> None:
     assert len(code) > 2000, "夹具本身要长过 2000 字符，否则测不到该路径"
     root = _make_tree(tmp_path, code)
     assert checker.collect_findings(root).results["R3"].violations == []
+
+
+# ── D6 fail-open：解析失败必须留下可见痕迹（不得静默跳过）──────────────
+
+def test_broken_grammar_toml_is_recorded(tmp_path: Path) -> None:
+    """grammar TOML 解析失败 ⇒ 记录到 PARSE_FAILURES（否则词表悄悄变小=假绿）。"""
+    root = _make_tree(tmp_path, "x = 1\n")
+    (root / "grammar" / "v" / "broken.toml").write_text("[[[ not toml", encoding="utf-8")
+    checker.PARSE_FAILURES.clear()
+    checker.collect_findings(root)
+    assert any("broken.toml" in p for p, _ in checker.PARSE_FAILURES), checker.PARSE_FAILURES
+
+
+def test_broken_engine_source_is_recorded(tmp_path: Path) -> None:
+    """引擎源码无法 tokenize ⇒ 记录（否则该文件 R1/R6 零检查、门禁仍绿）。"""
+    root = _make_tree(tmp_path, "def f(:\n    pass\n")
+    checker.PARSE_FAILURES.clear()
+    checker.collect_findings(root)
+    assert any("a.py" in p for p, _ in checker.PARSE_FAILURES), checker.PARSE_FAILURES
+
+
+def test_strict_parse_turns_failures_into_gate_failure(tmp_path: Path) -> None:
+    """--strict-parse：有解析失败即非零（默认仅告警）。"""
+    root = _make_tree(tmp_path, "x = 1\n")
+    (root / "grammar" / "v" / "broken.toml").write_text("[[[ not toml", encoding="utf-8")
+    checker.PARSE_FAILURES.clear()
+    assert checker.main(["--root", str(root), "--strict-parse", "--quiet"]) == 1
+    checker.PARSE_FAILURES.clear()
+    assert checker.main(["--root", str(root), "--quiet"]) == 0
