@@ -7,6 +7,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **审查任务 4：gap 档案冗余审查（合并 1 对 + 修 D4 孤儿）**：对 `docs/gaps/` 18 档做
+  内容级相似度扫描（词元集合 Jaccard + 包含度），结论：**不存在"同一件事的不同侧面"
+  式的实质重复**——最高相似度仅 J=0.131（主题相邻但材料各自独立），故不做成批合并。
+  · **合并 1 对（真同根因）**：`gap-lexer-capture-boundaries.md` +
+    `gap-preprocessor-comment-scan.md` → `gap-comment-string-span-consistency.md`。
+    理由：两者是"注释/字符串跨度判定"的两套实现（词法捕获器 A 侧边界 / 预处理器
+    行级状态机 B 侧近似），且 B 侧的闭环方案恰好是"向 A 侧要跨度"——分开建档会让
+    真正的决策点被拆散。合并前确认两档除 README 表外**零外部引用**（安全）。
+  · **修 D4 孤儿**：`gap-parser-backtracking.md` 长期未被 README 档案表登记
+    （`check_doc_refs` D4 唯一告警项）→ 补登。文档门禁 **D3/D4 首次全 0**。
+  · **顺带修 ADR-0025 的失效 Impl 锚**：`Impl:` 续行里提到尚不存在的声明段文件，
+    被 D3 判为反向引用失效 → 该说明移出 Impl 块。
+  · **保留判断（有证据，非遗漏）**：7 个已收口/已实施档案不删——它们被代码
+    `Doc:` 大量反向引用（`grammar/c/*.toml`、`core/define.py`、多个测试与 README，
+    共 30+ 处），删则制造大面积判据 B3 悬空引用。其过程叙述占比仅 4–18%，且多为
+    代码引用的设计依据。**但 3 档已顶到 200 行预算上限**（`gap-c-semantic-base` 200、
+    `gap-c-preprocessor-scope` 197、`gap-c-real-corpus` 196），后续动这几档时优先
+    把"交付叙述/实测过程"搬回 git log 换回余量。
+  · 验证：`check_doc_refs` D1–D4 全 0；`tests/policy` 566 passed。
+
+### Added
+
 - **审查任务 3：测试用例正交性（同构冗余参数化）**：新增
   `tools/scan_test_redundancy.py`——按 AST 骨架抹掉字面量/名字后比对，
   找出**同一文件/类内、仅数据不同**的测试函数组（参数化候选，不是"可删覆盖"）；
