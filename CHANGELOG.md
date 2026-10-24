@@ -7,24 +7,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **枚举幻觉审计（按 `enumeration-illusion-audit` skill 正式流程补做）**：
+- **枚举幻觉审计（按 `enumeration-illusion-audit` skill 正式流程补做，含自纠）**：
   上一轮我只从 #78 提交信息反推判据、未走 skill 工作流（未用扫描器/账本/三分类）；
-  本轮补齐——扫描本次会话改动的 23 个 .py（候选 2 条，清单条目 45）：
-  · 🔴 **`PY_KEYWORDS` 手写 35 项 Python 关键字表 → 从 `keyword.kwlist` 派生**。
-    性质＝"实现语言的关键字集合"是**语言定义**的封闭集，但手写副本会随 Python
-    版本漂移（新增硬关键字 → 静默漏剔除 → R1 对引擎代码误报）。机制 L1（派生，
-    实测与旧表 35/35 完全一致，行为零变化）。
-  · ✅ **`main_lexer._scan_one` 10 分支链判为合法封闭集**：按**词法类别**固定优先级
+  本轮按 skill 补齐：扫描本次会话改动的 23 个 .py → 候选 2 条 / 清单条目 45。
+  **按 `references/field-notes.md` 的标尺复核后，更正上一轮的过度声称**：
+  · ✅ **`main_lexer._scan_one` 10 分支链**＝合法封闭集：按**词法类别**固定优先级
     分派（换行→空白→capture→plain→数字→符号→括号→转义标识符→标识符→兜底），
-    类别由 lexer 自身设计封闭、分支顺序即语义（优先级），非"一案例一分支"。
-  · 全仓基线扫描（排除 vendored/构建产物）：**77 候选 / 0 HIGH / 7 MEDIUM / 70 LOW，
-    清单条目总数 514**；7 个 MEDIUM 全为词法/插件分派链（同上 ✅ 类）。
-  · **落账**：新增 `docs/enumeration-ledger.jsonl`（首条基线），供后续 `--trend`
-    看"清单条目总数"是否只增不减。
-  · 补丁比（skill 反身性指标）：新增枚举条目 5 / 机制化改动 3 ≈ 1.67（>1）——
-    **本轮仍含补丁成分**，已记账：`LEXER_CATEGORY_PREFIXES`(2)、
-    `LOCAL_CONFIG_SECTIONS`(2)、`R6_FILE_ALLOWLIST`(+1) 是"显式分类清单"，
-    属 fail-closed 门禁的必要显式性；其中前两者可从 TOML 表名派生（后续项）。
+    类别由 lexer 自身设计封闭、分支顺序即语义（优先级）。field-notes 明确把
+    "解析器/词法器的 if/elif 链（按 token 类型分派）"列为 ✅ 典型。
+  · ✅→**单源化改进（非修幻觉）**：`PY_KEYWORDS`（35 项 Python 关键字）在
+    field-notes 里本就属 ✅ 合法封闭集（语言定义）；但仍改为从 `keyword.kwlist`
+    派生，理由是**防版本漂移**（新增硬关键字 → 静默漏剔除 → R1 假红），
+    实测 35/35 与旧表一致、行为零变化。**不记为"修枚举幻觉"。**
+  · **更正上一轮的 R6 判定**：`("bracket.","symbol.","keyword.")` 不是"开放集当
+    封闭集"，而是**封闭集的陈旧副本**（协议族本就是 `core/token_protocol.py` 的
+    7 个常量）——真实缺陷是**单一来源违反/漂移**，机制仍是派生，但标签应更正。
+  · **本轮新增的 3 处显式清单判 🟡 配置型（可控）**：`LEXER_CATEGORY_PREFIXES`(2)、
+    `LOCAL_CONFIG_SECTIONS`(2)、`R6_FILE_ALLOWLIST`(+1)——对应 field-notes 的
+    `IGNORE_DIRS` 同类；触发条件 = 条目再增长或再次出事故时机制化
+    （前两者可从 TOML 表名派生）。
+  · **本轮真·枚举幻觉：0**（校准后）。全仓基线扫描（排除 vendored/构建产物）：
+    **77 候选 / 0 HIGH / 7 MEDIUM / 70 LOW，清单条目总数 514**；7 个 MEDIUM 全为
+    词法/插件分派链（✅ 类）——与 field-notes "解析器/编译器项目里 branch_chain
+    大量误报"的结论一致。
+  · **落账**：新增 `docs/enumeration-ledger.jsonl`（首条基线），供 `--trend`
+    看"清单条目总数"是否只增不减（field-notes 警告：危险信号是"表在正确性路径上
+    + 正在增长"，而非"有一张表"）。
   · 验证：check_doc_refs D1–D4 全 0；check_hardcode PASS；tests/policy 572 passed；
     structural S 1110 → 1018（新增 0 项）。
 
