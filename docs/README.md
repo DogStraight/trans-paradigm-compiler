@@ -78,6 +78,9 @@
   设计型（方向已定、**暂缓**）：`decisions/0024-two-phase-lint-prescan-retirement.md`
   （退役 lexer 预扫描与 raw 管线：**已执行完毕**（#53–#57），见 ADR-0024；
   取回入口见 `ROADMAP.md` P2.9）。
+  设计型（**未立项**）：`decisions/0025-discovery-rule-derivation.md`
+  （语句发现改为声明式形态推导：消除 C 花括号容器引发的 6+ 处引擎特例补丁，
+  恢复开闭原则；D1–D4 分期见该档）。
 - **长期暂缓项/触发条件（策略）** → `decisions/` 的**策略型 ADR**（"长期项不列待办" +
   「结论/为什么不做/触发条件」表，现存 `decisions/0021-long-term-deferral-strategy.md`）；
   **不进 TODO**——触发出现时按体量取回 TODO/ROADMAP，
