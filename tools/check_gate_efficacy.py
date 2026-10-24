@@ -1186,6 +1186,40 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "",
         "test": "tests/languages/verilog/test_typed_ports.py",
     },
+
+    # ── 符号表快照/回滚（task-22 三条自证 + parse 重建；原 _drafts/task22_revert.py）──
+    {
+        "why": "快照不含符号 store（回到第 7 位恒 None 的旧语义）⇒ pratt 内提前注册的"
+               "符号不随回滚撤销，规则退出后残留在符号表（跨规则串味）",
+        "file": "parser/parser_core.py",
+        "old": "            self._symbol_store.snapshot() if self._symbol_store is not None else None,\n",
+        "new": "            None,  # 变异：快照不含符号 store\n",
+        "test": "tests/engine/parser/test_symbol_rollback.py",
+    },
+    {
+        "why": "restore 只截栈、不撤销同深度 register ⇒ 同深度重注册的符号回滚后仍生效"
+               "（`_register_log` 存在但没用上）",
+        "file": "parser/parser_core.py",
+        "old": "        for scope_idx, name, prev in reversed(self._register_log[log_len:]):\n",
+        "new": "        for scope_idx, name, prev in []:  # 变异：不撤销同深度 register\n",
+        "test": "tests/engine/parser/test_symbol_rollback.py",
+    },
+    {
+        "why": "pratt 规则不再推作用域帧 ⇒ 寄存器名在表达式解析期间泄漏到外层作用域，"
+               "退出（含失败）后不清理",
+        "file": "parser/_production.py",
+        "old": "    if getattr(rule, \"pratt\", False):\n        scope_pushed = _push_rule_scope(self, rule)\n",
+        "new": "    if getattr(rule, \"pratt\", False):\n        scope_pushed = False  # 变异：不推作用域帧\n",
+        "test": "tests/engine/parser/test_symbol_rollback.py",
+    },
+    {
+        "why": "parse() 不重建/不绑定符号 store ⇒ 跨 parse 复用时上一轮 root 作用域注册"
+               "残留，本轮 `lookup` 读到过期符号",
+        "file": "parser/parser_core.py",
+        "old": "        self.scope_stack = _ScopeStack()\n        context = ParseContext(tokens)\n        context.bind_symbol_store(self.scope_stack)\n",
+        "new": "        context = ParseContext(tokens)  # 变异：不重建、不绑定符号 store\n",
+        "test": "tests/engine/parser/test_symbol_rollback.py",
+    },
 ]
 
 
