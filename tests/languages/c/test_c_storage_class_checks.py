@@ -10,7 +10,7 @@
   2. 真实语料零误报（附命令与计数）
   3. 语法宽进不回归（负样本仍能解析出 AST；新增诊断不含 error ⇒ 管线 success 面不变）
   4. 多声明符去重（`static extern int a, b;` 只报 1 条）
-  5. 缺陷态变红见 `_drafts/task36_defect.py`（去掉例外表 / 去掉去重）
+  5. 缺陷态变红见 `tools/check_gate_efficacy.py --list` 的 CSC 变异（去掉例外表 / 去掉去重）
   6. 按影响范围测试（命令见报告）
   7. pyright strict（本文件与 handler）0
 

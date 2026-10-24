@@ -11,7 +11,7 @@ L2 handler `rules/_tag_check.py`，输入面 = 包侧 `tag_capture` 挂的符号
   3. **TAG001 反例（硬要求）**：`struct ring; struct ring *p; struct ring { int a; };` ⇒ 0 报
      （naive"同 tag ≥2 次即报"实测会一次误报 24 条：语料 9 条带体定义 + 24 条无体引用）
   4. 语法宽进不回归：负样本仍解析 + 无 error 级诊断
-  5. 缺陷态变红见 `_drafts/task38_defect.py`（去"双方带体" / 去作用域判定）
+  5. 缺陷态变红见 `tools/check_gate_efficacy.py --list` 的 TAG 变异（去"双方带体" / 去作用域判定）
   6. 按影响范围测试（命令见报告）
   7. pyright strict（本文件与 handler）0
 """

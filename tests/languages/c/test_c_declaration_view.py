@@ -9,9 +9,9 @@
   1. 视图语义：`void proto(int px); void defn(int arg){ int local; } static void stat_def(void){}` ⇒
      `proto`/`defn`/`stat_def` 的文件域声明位、`px`/`arg` 的参数位、`local` 的块位；
   2. **产物零变化（硬要求）**：记录仍是**恰好 7 字段**且取值冻结（本文件冻结快照）；
-     改前/改后的逐字节对照由 `_drafts/probe_n1n2_view.py --compare`（11 源 76 记录全 IDENTICAL）给证据；
+     改前/改后的逐字节对照见该轮报告（11 源 76 记录全 IDENTICAL）；
   3. `test_c_symbol_collection.py` **一个字不改**（它是"零契约面风险"的证据面）；
-  4. 两个 S2 场景（**缺陷态变红**见 `_drafts/task47_defect.py`）：
+  4. 两个 S2 场景（**缺陷态变红**见 `tools/check_gate_efficacy.py --list` 的派生视图变异）：
      ① `void f(void); static void f(void){}` ⇒ 两条声明的 `decl_scope` 都是文件域（否则漏报）；
      ② `static int x; void f(int x);` ⇒ 形参不进文件域声明集（否则误报）。
 """

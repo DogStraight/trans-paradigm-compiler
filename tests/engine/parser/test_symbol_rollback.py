@@ -10,7 +10,7 @@
   ③ pratt 分支的作用域帧必须配对（`try_rule_productions`）：声明了 `scope` 的 pratt
      规则在 pratt 内提前注册的符号，规则退出（含失败）后不得留在符号表里。
 
-反向自证：三处修复各自被回退时本文件必须变红（ps：`_drafts/task22_revert.py`）。
+反向自证：三处修复各自被回退时本文件必须变红（变异已登记在 `tools/check_gate_efficacy.py`，`--only` 可单独抽查）。
 """
 
 import importlib

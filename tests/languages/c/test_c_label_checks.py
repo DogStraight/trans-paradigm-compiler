@@ -13,7 +13,7 @@
   3. **语料零误报（硬要求）**：`ring_buffer.c`（FuncDef 9 / LabelStmt 1 / GotoStmt 1 / CaseLabel 2 /
      DefaultLabel 1）**必须 0 报**——只收 `LabelStmt` 才做得到
   4. 语法宽进不回归：负样本仍解析 + 无 error 级诊断
-  5. 缺陷态变红见 `_drafts/task41_defect.py`（把 case/default 当普通 label / 去掉两遍扫描）
+  5. 缺陷态变红见 `tools/check_gate_efficacy.py --list` 的 labels 变异（把 case/default 当普通 label / 去掉两遍扫描）
   6. 按影响范围测试（命令见报告）
   7. pyright strict（本文件与 postpass）0
 """
