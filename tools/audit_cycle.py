@@ -26,9 +26,28 @@ REGISTRY = ROOT / "docs" / "audit_dimensions.toml"
 TODO = "todo"
 
 
+def load_registry() -> dict:
+    return tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
+
+
 def load_dimensions() -> list[dict]:
-    data = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
-    return data.get("dimension", [])
+    return load_registry().get("dimension", [])
+
+
+def slot_state(slot: str) -> bool:
+    """槽位的装载状态：True = 本轮启用，False = 已卸载（仍在册）。"""
+    for item in load_registry().get("pipeline", []):
+        if item.get("slot") == slot:
+            return bool(item.get("enabled", True))
+    return True
+
+
+def _print_pipeline() -> None:
+    rows = load_registry().get("pipeline", [])
+    on = [r["slot"] for r in rows if r.get("enabled", True)]
+    off = [r["slot"] for r in rows if not r.get("enabled", True)]
+    print(f"[管线] 装载 {len(on)} 槽：{', '.join(on) or '—'}")
+    print(f"[管线] 卸载 {len(off)} 槽（仍在册）：{', '.join(off) or '—'}")
 
 
 def _last_line(text: str) -> str:
@@ -88,33 +107,64 @@ def _write_ledger(path: Path, results: list[dict], judgement: str = "") -> None:
     print(f"已写入账本: {path}")
 
 
+def _collect(dims: list[dict]) -> list[dict]:
+    """按 collect 槽装载状态跑探针；卸载时返回空（不报失败）。"""
+    _print_pipeline()
+    if not slot_state("collect"):
+        print("[卸载] collect 槽本轮未启用——跳过全部探针（仍可落账/自省）")
+        return []
+    print(f"[审计循环] {len(dims)} 个维度")
+    return [run_dimension(d) for d in dims]
+
+
+def _print_summary(results: list[dict]) -> None:
+    ran = sum(1 for r in results if r["status"] != "no_probe")
+    failed = sum(1 for r in results if r["status"] == "fail")
+    print(f"\n探针 {ran}/{len(results)} 有结果；失败 {failed}；无探针 {len(results) - ran}")
+    print("注意：PASS 只表示'探针命令返回 0'，**不等于该维度已关闭**——"
+          "关闭需按 policy/collaboration.md「审计维度轮」的四条判据。")
+
+
+RETRO = ROOT / "docs" / "audit-retro.jsonl"
+
+
+def _write_retro(note: str) -> None:
+    """retro 槽：记录制度改进候选（**只记录，不立即改制度**）。"""
+    row = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "retro": note}
+    with RETRO.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    print(f"已写入自省账本: {RETRO}")
+
+
+def _finish(args, results: list[dict]) -> None:
+    if args.judgement:
+        print(f"人判（探针有效性）：{args.judgement}")
+    if args.ledger:
+        _write_ledger(args.ledger, results, args.judgement)
+    if slot_state("retro") and args.retro:
+        _write_retro(args.retro)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="审计循环执行器（只收集，不裁决）")
     ap.add_argument("--dim", action="append", default=[], help="只跑指定维度 id")
     ap.add_argument("--list", action="store_true", help="只列注册表")
     ap.add_argument("--ledger", type=Path, help="把本轮结果追加到 JSONL 账本")
     ap.add_argument("--judgement", default="",
-                    help="人判的「探针有效性复核」结论（每轮开局必写，见 collaboration.md）")
+                    help="人判的「探针有效性复核」结论（每轮开局必写）")
+    ap.add_argument("--retro", default="",
+                    help="retro 槽：本轮制度改进候选（只记录，不立即改制度；可写「无」）")
     args = ap.parse_args(argv)
 
     dims = _select(load_dimensions(), args.dim)
     if args.list:
         _list_dimensions(dims)
         return 0
-
-    print(f"[审计循环] {len(dims)} 个维度")
-    results = [run_dimension(d) for d in dims]
+    results = _collect(dims)
     _print_rows(dims, results)
-    ran = sum(1 for r in results if r["status"] != "no_probe")
-    failed = sum(1 for r in results if r["status"] == "fail")
-    print(f"\n探针 {ran}/{len(results)} 有结果；失败 {failed}；无探针 {len(results) - ran}")
-    print("注意：PASS 只表示'探针命令返回 0'，**不等于该维度已关闭**——"
-          "关闭需按 policy/collaboration.md「审计维度轮」的四条判据。")
-    if args.judgement:
-        print(f"人判（探针有效性）：{args.judgement}")
-    if args.ledger:
-        _write_ledger(args.ledger, results, args.judgement)
-    return 1 if failed else 0
+    _print_summary(results)
+    _finish(args, results)
+    return 1 if any(r["status"] == "fail" for r in results) else 0
 
 
 if __name__ == "__main__":

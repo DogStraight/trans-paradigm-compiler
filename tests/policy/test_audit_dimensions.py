@@ -77,3 +77,49 @@ def test_every_dimension_states_a_closure() -> None:
     """closure 必须能判断'关没关'——太短的就是口号。"""
     for d in _dims():
         assert len(d["closure"].strip()) >= 12, d["id"]
+
+
+# ── 槽位化（可插拔管线）──────────────────────────────────────────
+
+def _pipeline() -> list[dict]:
+    return tomllib.loads(REGISTRY.read_text(encoding="utf-8")).get("pipeline", [])
+
+
+def test_pipeline_slots_are_legal() -> None:
+    """槽位三态：file（路径必须存在）/ external（外部能力）/ todo（必须带 trigger）。"""
+    slots = _pipeline()
+    assert slots, "pipeline 为空——制度必须声明槽位"
+    seen = set()
+    for s in slots:
+        assert s.get("slot"), "槽位缺 slot 名"
+        assert s["slot"] not in seen, f"重复槽位: {s['slot']}"
+        seen.add(s["slot"])
+        assert isinstance(s.get("enabled"), bool), f"{s['slot']} 的 enabled 必须是布尔"
+        assert s.get("purpose"), f"{s['slot']} 缺 purpose"
+        kind = s.get("impl_kind")
+        assert kind in ("file", "external", "todo"), (s["slot"], kind)
+        if kind == "file":
+            assert (ROOT / s["impl"]).is_file(), f"{s['slot']} 实现不存在: {s['impl']}"
+        elif kind == "todo":
+            assert s.get("trigger"), f"{s['slot']} 是空槽却无 trigger（黑洞）"
+
+
+def test_disabled_slots_are_not_deleted() -> None:
+    """卸载 = enabled 翻转，槽位仍在册（禁止用删除表达"当前不需要"）。"""
+    slots = _pipeline()
+    assert all("slot" in s for s in slots)
+    assert any(not s["enabled"] for s in slots), (
+        "至少要有一个留白槽位——制度应可插拔，而不是只有全开一种状态"
+    )
+
+
+def test_goals_have_evidence() -> None:
+    """闭合目标：met=true 必须附证据，且证据指向的文件存在（外部能力除外）。"""
+    goals = tomllib.loads(REGISTRY.read_text(encoding="utf-8")).get("goal", [])
+    assert goals, "必须声明本版闭合目标"
+    for g in goals:
+        assert g.get("id") and g.get("statement"), g
+        if g.get("met"):
+            ev = g.get("evidence", "").strip()
+            assert ev, f"{g['id']} 标 met 却无证据"
+            assert (ROOT / ev).exists(), f"{g['id']} 证据不存在: {ev}"

@@ -108,3 +108,99 @@ proxies = "代码不依赖 locale 编码、路径分隔符、文件系统排序"
 invalidated_if = "开发/CI 统一到单一容器环境，跨平台差异不再暴露"
 closure = "open()/read_text() 无缺省编码；路径比较无 str(path) 拼接；无反斜杠字面量判断"
 status = "open"
+
+# ============================================================================
+# 审计管线（槽位化）：可插拔，不是固定流程
+# ============================================================================
+# 设计要点：制度本身**不闭合**——槽位留着，随时插/拔；只有"本版就绪"有闭合目标
+# （见文件末尾 [[goal]]）。像 AST 后端那样：管线固定，环节可插拔。
+#
+# 槽位三态（tests/policy/test_audit_dimensions.py 校验）：
+#   impl_kind = "file"     → 仓内实现，路径必须存在
+#   impl_kind = "external" → 外部能力（如用户级 skill），不校验路径
+#   impl_kind = "todo"     → 空槽（留白），必须写 trigger（何时该填）
+# enabled = false → 本轮卸载：不跑、不报失败，但**仍在册**（不是删除）
+
+[[pipeline]]
+slot = "collect"
+purpose = "候选生成：跑探针，只出候选不裁决"
+enabled = true
+impl_kind = "file"
+impl = "tools/audit_cycle.py"
+
+[[pipeline]]
+slot = "judge"
+purpose = "证伪：对候选构造最小反例 + 给证据种类"
+enabled = true
+impl_kind = "external"
+impl = "~/.agents/skills/invariant-falsifier/SKILL.md"
+
+[[pipeline]]
+slot = "close"
+purpose = "闭合判据：每维 closure + 关闭即冻结"
+enabled = true
+impl_kind = "file"
+impl = "policy/collaboration.md"
+
+[[pipeline]]
+slot = "record"
+purpose = "落账：本轮结果 + 人判结论，可回溯趋势"
+enabled = true
+impl_kind = "file"
+impl = "docs/audit-ledger.jsonl"
+
+[[pipeline]]
+slot = "retro"
+purpose = "自省：每轮产出制度改进候选（可为「无」），不立即改制度"
+enabled = true
+impl_kind = "file"
+impl = "docs/audit-retro.jsonl"
+
+# 留白槽位（示例）：本轮不需要，但在册——需要时只翻 enabled 并填 impl，不改代码
+[[pipeline]]
+slot = "autofix"
+purpose = "机械修复：对同一类重复返工自动生成补丁候选"
+enabled = false
+impl_kind = "todo"
+trigger = "同一维度连续 3 轮出现同一类机械改动（如漏 encoding=、漏 status 字段）"
+
+# ============================================================================
+# 本版闭合目标（met 必须附证据；证据指向的文件/测试必须存在）
+# ============================================================================
+[[goal]]
+id = "G1"
+statement = "槽位定义齐全且三态合法（file/external/todo + trigger）"
+met = true
+evidence = "tests/policy/test_audit_dimensions.py"
+
+[[goal]]
+id = "G2"
+statement = "装载/卸载只改数据：enabled 翻转即生效，不改任何代码"
+met = true
+evidence = "tools/audit_cycle.py"
+
+[[goal]]
+id = "G3"
+statement = "至少 2 个槽位有真实实现并被本仓实际跑过"
+met = true
+evidence = "docs/audit-ledger.jsonl"
+
+[[goal]]
+id = "G4"
+statement = "retro 槽每轮产出 1 条改进候选（可为「无」），且不改制度本身"
+met = true
+evidence = "docs/audit-retro.jsonl"
+
+[[goal]]
+id = "G5"
+statement = "全量门禁绿且结构分不劣化"
+met = true
+evidence = "policy/check_invariants.py"
+
+# 明确不做（保持制度开放，不做的事写下来防反复争论）
+[not_doing]
+items = [
+  "不做「制度全自动闭环」——判据是否仍成立必须人判（见 collaboration.md 探针有效性复核）",
+  "不做「一次性补全所有槽位」——空槽留白，触发条件到了再填",
+  "不做「制度版本号/发布流程」——改制度走 CHANGELOG + 门禁，不另设流程",
+]
