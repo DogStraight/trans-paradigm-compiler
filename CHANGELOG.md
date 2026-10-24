@@ -7,6 +7,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **审查任务 2：预处理器 / linter / 解析器 / 精化基座 正交性审查 + 第一批清理**：
+  逐子系统查"双实现 / 补丁叠加 / 硬编码语言知识 / 死代码"，
+  结论：**预处理器与精化基座结构干净（无改动）**；linter/parser 各有死代码与幽灵引用。
+  · **预处理器**：`_expand.py` 已完全委托 `macro_expand` 的 hideset 引擎（旧"文本替换不动点"
+    算法已删，无残留）；`IDENT_RE` 单一来源；`condition._masks` 是 `mask_spans` 的薄封装；
+    零未调用私有函数；零反向依赖 parser/linter ⇒ **无改动**。
+  · **精化基座**：`structure.py`（通用设施）与 `elaboration/*`（引擎最小视图 + 插件求解）
+    分层清楚，`ElaborationService` 只转交 `StructureCtx` 能力不重新实现，全包单一解析点
+    ⇒ **无改动**。
+  · **linter 清理**：删 `discovery._discover_range` 的 `record` 形参链（P3c 前置切片遗留，
+    ADR-0024 已退役该能力，全仓无 `record=False` 调用方）；删 `RuleMatcher.memo_suspended()`
+    （零调用，且 `@contextmanager` 装饰器早已丢失 ⇒ 永不执行 `yield` 的损坏方法）；
+    删 `lookahead._elem_called_rules()`（零外部调用）；清 `_allowed_in_context` /
+    `internal_warnings()` / `_substitution_trial` 幽灵引用；删整体 skip 且引用已删 API 的
+    `tests/engine/linter/test_raw_corpus.py`（`corpus_raw/` 保留——仍被 3 个 C 检查测试
+    当误报语料）。
+  · **`linter/AGENTS.md` 纠错**：三条纪律指向已删能力；其中"资格判定四条缺陷态已进门禁抽查"
+    经核实 **_MUTATIONS 中根本不存在**，改为通用门禁纪律。
+  · **parser 清理**：删 `repeat_loop = _repeat_loop` 别名（零引用，只为自循环存在）；
+    `extract_from_spec` 去掉 `self` 占位参 + `del self  # 仅为兼容旧调用`。
+  · **门禁自证**：删 `record` 形参导致第 9 条变异载荷失配 →
+    `test_gate_efficacy_mutations` 当场变红（守卫有效），载荷已同步。
+  · structural S：1110 → 1018（Δ **-92**，新增 0 项、变大 0 项）。
+  · 验证：全量 **4406 passed / 7 skipped**；`eval_lint_accuracy` 33/33 召回、FP 0；
+    `eval_diag_baseline` 5548→5548 无增长；check_doc_refs / check_hardcode PASS。
+
+### Changed
+
 - **审查任务 1：草稿暂存区 `_drafts/` 清空 + 冗余扫描工具**：`_drafts/`
   （5,481 文件 / 119.9 MB，gitignored 讨论草稿区）按删除判据逐类清理：
   vendored 外部语料副本（veryl_ref/gcc/pre_p3/pre_p3b，97.6 MB）、运行产物与
