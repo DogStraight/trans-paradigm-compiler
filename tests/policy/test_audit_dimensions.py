@@ -62,6 +62,17 @@ def test_probe_scripts_exist() -> None:
                 assert (ROOT / token).is_file(), f"{d['id']} 探针脚本不存在: {token}"
 
 
+def test_every_dimension_declares_proxy_and_invalidation() -> None:
+    """探针是代理不是本体：必须写清"代理哪条性质"和"什么变化会让它失效"。
+
+    没有这两项的探针会安静腐化——被闭开原则淘汰后仍照常返回 PASS（假绿），
+    比没有探针更危险。这两项也是每轮开局人工复核（collaboration.md）的输入。
+    """
+    for d in _dims():
+        assert len(d.get("proxies", "").strip()) >= 12, f"{d['id']} 缺 proxies"
+        assert len(d.get("invalidated_if", "").strip()) >= 12, f"{d['id']} 缺 invalidated_if"
+
+
 def test_every_dimension_states_a_closure() -> None:
     """closure 必须能判断'关没关'——太短的就是口号。"""
     for d in _dims():

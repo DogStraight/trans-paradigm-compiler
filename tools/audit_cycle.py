@@ -77,9 +77,10 @@ def _print_rows(dims: list[dict], results: list[dict]) -> None:
         print(f"         closure: {dim.get('closure', '—')[:100]}")
 
 
-def _write_ledger(path: Path, results: list[dict]) -> None:
+def _write_ledger(path: Path, results: list[dict], judgement: str = "") -> None:
     row = {
         "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "judgement": judgement,   # 探针有效性复核（人判，不可自动生成）
         "results": results,
     }
     with path.open("a", encoding="utf-8", newline="\n") as fh:
@@ -92,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dim", action="append", default=[], help="只跑指定维度 id")
     ap.add_argument("--list", action="store_true", help="只列注册表")
     ap.add_argument("--ledger", type=Path, help="把本轮结果追加到 JSONL 账本")
+    ap.add_argument("--judgement", default="",
+                    help="人判的「探针有效性复核」结论（每轮开局必写，见 collaboration.md）")
     args = ap.parse_args(argv)
 
     dims = _select(load_dimensions(), args.dim)
@@ -107,8 +110,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n探针 {ran}/{len(results)} 有结果；失败 {failed}；无探针 {len(results) - ran}")
     print("注意：PASS 只表示'探针命令返回 0'，**不等于该维度已关闭**——"
           "关闭需按 policy/collaboration.md「审计维度轮」的四条判据。")
+    if args.judgement:
+        print(f"人判（探针有效性）：{args.judgement}")
     if args.ledger:
-        _write_ledger(args.ledger, results)
+        _write_ledger(args.ledger, results, args.judgement)
     return 1 if failed else 0
 
 
