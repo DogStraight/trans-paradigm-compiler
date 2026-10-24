@@ -33,3 +33,6 @@ _drafts/
 
 # pytest 运行临时输出（Tee 重定向产物，不入库）
 pytest_*.txt
+
+# 会话协作区（wire 消息树 / 花名册 / 本地协作工具；不进库，与 _drafts 同性质）
+.scratch/

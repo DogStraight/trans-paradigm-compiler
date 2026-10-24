@@ -15,6 +15,7 @@
 | `pylance-cleanup.md` | 改过哪个 py 就清哪个的静态诊断（含静/动态双面清理） | （人按需跑，无门禁） |
 | `bifrost_audit.md` | 外部审计规程（Bifrost 结构面信号：影响面/复杂度/异常吞吃/死代码/弱断言；先小后大） | （外部工具，开发自查） |
 | `structural_budget.md` | 结构欠账的度量与停止判据（超额量口径 R1–R5 / 结构欠账分 S / ROI 决策 / 三条停止规则） | `tools/structural_score.py`（开发自查，需外部二进制） |
+| `session-wire.md` | 多 agent 会话在同一仓库的交接制度（wire 消息格式/寻址/纪律；记录在 `.scratch/wire/` 不进库，教义进库） | `_drafts/session/tools/wirex.py`（前门：花名册解析 + 版本自检；开发自查） |
 | `release-checklist.md` | 发布 SOP（回归门禁 → 版本 → build → 包验证 → wheel 冒烟 → tag） | （人走流程，发布收尾） |
 
 ## 门禁工具
