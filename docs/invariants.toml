@@ -1,0 +1,67 @@
+# ============================================================================
+# 不变量清单（数据层）— 供 invariant-falsifier 协议证伪
+# ============================================================================
+# 为什么是数据不在代码：不变量是**项目特定**的，skill/引擎只提供证伪协议。
+# 换项目只换这份文件，不改协议——这是"反枚举"的结构性保证。
+#
+# 每条必须能让**人类**构造反例（否则它是口号，不是不变量）：
+#   statement    —— 断言什么（一句话、可证伪）
+#   violation    —— 什么形态算违反（反例长什么样）
+#   observable   —— 怎么**看见**它被违反（判据，不是感觉）
+#   verification —— mechanized（有脚本/测试判）| procedural（需人判，须给 manual_check）
+#   gate         —— 门禁锚点：policy/<file>.py#<RULE> | tests/<path>.py::<test> | tools/check_gate_efficacy.py#<n>
+#   violation_probe —— 证明"违反时门禁会响"的证据锚点（同上格式；缺失则只能算 procedural）
+#   known_pass   —— 当前为何成立（给可复核的事实，不写"已检查"）
+#
+# 门禁 `policy/check_invariants.py` 会校验：字段齐全、id 唯一、锚点可解析、
+# mechanized 必须有可解析的 gate + violation_probe。锚点失效（文件/测试/规则被删）
+# 会当场变红——防"不变量清单静默腐烂成新的封闭幻觉"。
+# ============================================================================
+
+[[invariant]]
+id = "INV-FAIL-CLOSED"
+statement = "无法判定时必须报错或标记未知，不得静默跳过或降级为「零违规」"
+violation = "遇到未分类的清单段/未知扩展名/畸形配置时静默跳过，门禁仍然全绿"
+observable = "构造一个未分类的 [section] 或删掉协议文件，门禁必须变红而不是通过"
+verification = "mechanized"
+gate = "tests/policy/test_engine_capabilities.py::test_every_manifest_section_is_classified"
+violation_probe = "tests/policy/test_check_hardcode.py::test_rule6_fails_fast_without_protocol_file"
+known_pass = "未分类清单段→红（test_every_manifest_section_is_classified）；缺 token 协议文件→RuntimeError（test_rule6_fails_fast_without_protocol_file）；未知扩展名→打印提示"
+
+[[invariant]]
+id = "INV-DERIVE-OVER-COPY"
+statement = "能派生的集合不手抄：判定须引用权威来源（语言定义/协议常量/仓库事实源），不得持有副本"
+violation = "把权威来源里的成员手抄一份进判定逻辑，来源变更后副本不同步且无人发现"
+observable = "注入一个来源里存在、副本里缺失的成员，判定必须按来源工作（或门禁变红）"
+verification = "mechanized"
+gate = "policy/check_hardcode.py#R6"
+violation_probe = "tests/policy/test_check_hardcode.py::test_rule6_covers_every_protocol_prefix_family"
+known_pass = "R6 的协议前缀族从 core/token_protocol.py 派生（旧实现手写 3/7 族，literal.number 漏检）；PY_KEYWORDS 从 keyword.kwlist 派生"
+
+[[invariant]]
+id = "INV-DELETE-TEST"
+statement = "新增机制必须通过删除测试：删掉它，原机制仍独立正确（否则它是承重墙，须显式声明为唯一实现）"
+violation = "新增的机制其实是旧机制的重复路径，删掉任何一个都「看起来还能跑」，但两者的边界无人说得清"
+observable = "删除该机制后，要么相关测试变红（说明承重，须声明），要么全绿（说明冗余，须删）"
+verification = "mechanized"
+gate = "tools/check_gate_efficacy.py#9"
+violation_probe = "tools/check_gate_efficacy.py#9"
+known_pass = "变异 #9 去掉「括号分支转块分支」后 c4 linter 测试如期变红 → 该分支承重且被覆盖；check_gate_efficacy 逐条抽查机制存在"
+
+[[invariant]]
+id = "INV-OPEN-SET"
+statement = "若一个集合会因「还没遇到」而显得封闭，禁止用清单/阈值判断，必须给出判据（可测量量或模型判定）"
+violation = "给函数加一条 if/elif/match-case 分支来容纳新案例，而不是让新案例落到同一判据上"
+observable = "统计「每修一个新案例要改几个文件/几个分支」；持续增长即违反"
+verification = "procedural"
+manual_check = "审查 diff：新增分支是否对应新的输入形态；若是，追问该形态能否由现有判据覆盖（能→删分支；不能→说明判据不足并补判据）"
+known_pass = "2026-10-24 自审：enumeration-illusion-audit 的 7 处修复均以判据替代清单（Unicode 类别替代标点表、keyword.kwlist 替代手写表、git ls-files 替代扩展名清单）"
+
+[[invariant]]
+id = "INV-EVOLUTION"
+statement = "新增/修改规则必须声明它替代或合并了哪条旧规则，或证明旧规则覆盖不到；禁止纯追加"
+violation = "门禁/规则只增不减，清单条目总数单调上升而无人解释"
+observable = "对照本轮 diff：新增规则数 vs 删除/合并数；只增不减且无理由即违反"
+verification = "procedural"
+manual_check = "在变更说明里逐条写明「新增 X 替代/合并 Y」或「旧规则不足的证据」；审查者核对被删项确实退场"
+known_pass = "2026-10-24：R6 手写前缀族→派生（删副本、留单一来源）；structural_kept 退场 4 条同理由豁免"

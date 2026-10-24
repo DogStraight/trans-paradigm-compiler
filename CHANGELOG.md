@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- **skill 形态演进（用户级，仓库外）**：新增 `invariant-falsifier`（只含协议层：
+  输入契约 / 证伪过程 / 带证据的 verdict 契约 / 五条元不变量 M1–M5）；
+  旧 `enumeration-illusion-audit` **降级为 L1 候选发生器**（首屏标注"只出候选、不裁决"）。
+  分工：`scan_enumerations.py → 候选（形态） → invariant-falsifier → verdict`。
+  反例硬门槛：`evidence_kind=executable` 才允许 `needs_redesign`，纯散文反例最高
+  `needs_revision`——防止把开放集从"问题清单"挪到"反例断言"上。
 
 - **审计工具自身的枚举幻觉（修 `~/.agents/skills/enumeration-illusion-audit`）**：
   用该 skill 的判据审它自己，修 7 处"自己也在枚举"的实现：
@@ -37,6 +43,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     非正确性路径）。
 
 ### Added
+- **不变量清单门禁 `policy/check_invariants.py` + `docs/invariants.toml`**（证伪器落地）：
+  把"该证伪什么"从代码挪到**数据**（项目特定），协议只负责证伪——检测器要枚举问题
+  （开放集），证伪器只需固定不变量（有限、可证伪）。
+  · 清单 5 条：`INV-FAIL-CLOSED` / `INV-DERIVE-OVER-COPY` / `INV-DELETE-TEST` /
+    `INV-OPEN-SET` / `INV-EVOLUTION`；字段含 `statement` / `violation` / `observable` /
+    `verification` / `gate` / `violation_probe` / `known_pass`。
+  · 门禁校验全可判定：字段齐全、id 唯一、statement≠violation、verification 枚举合法、
+    **mechanized 必须有可解析的 gate + violation_probe**（锚点到 policy 规则 id /
+    测试函数 / 变异序号），procedural 必须写清 manual_check。
+    锚点失效即红——**防清单腐烂成新的封闭幻觉**。
+  · 接入 CI（`policy checks` 步骤）与 `tests/policy/test_invariants_manifest.py`（9 条：
+    真实清单回归 + 7 条负例证明门禁会响——"门禁存在"≠"门禁会响"）。
+  · 验证：tests/policy 581 passed；check_doc_refs D1–D4 全 0；
+    structural S 1110 → 1018（新增 0 项）。
 
 - **枚举幻觉审计（按 `enumeration-illusion-audit` skill 正式流程补做，含自纠）**：
   上一轮我只从 #78 提交信息反推判据、未走 skill 工作流（未用扫描器/账本/三分类）；
@@ -67,8 +87,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 验证：check_doc_refs D1–D4 全 0；check_hardcode PASS；tests/policy 572 passed；
     structural S 1110 → 1018（新增 0 项）。
 
-### Added
-
 - **枚举幻觉审查（enumeration-illusion-audit）：清除本轮门禁/政策改动里的
   「封闭集拟合开放集」**——按 #78 先例复核本轮 6 个提交：
   · **R6 前缀族手写枚举 → 从 token 协议派生**：原 `("bracket.","symbol.","keyword.")`
@@ -91,8 +109,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     （含 `Doc:` 头），并新增两条契约用例（派生覆盖全部协议族 / 缺协议文件必须报错）。
   · 验证：全量 **4417 passed / 7 skipped**；check_doc_refs D1–D4 全 0；
     check_hardcode PASS；structural S 1110 → 1018（**新增 0 项**）。
-
-### Added
 
 - **ADR-0025 实施（D1–D4）：语句发现改为声明式形态推导**——`linter/discovery.py`
   不再靠 production 结构"猜"语法形状，新增开闭原则修复：
@@ -121,8 +137,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 验证：全量 **4411 passed / 7 skipped**；check_doc_refs D1–D4 全 0；
     check_hardcode PASS；tests/policy 566 passed。
 
-### Added
-
 - **审查任务 4：gap 档案冗余审查（合并 1 对 + 修 D4 孤儿）**：对 `docs/gaps/` 18 档做
   内容级相似度扫描（词元集合 Jaccard + 包含度），结论：**不存在"同一件事的不同侧面"
   式的实质重复**——最高相似度仅 J=0.131（主题相邻但材料各自独立），故不做成批合并。
@@ -143,8 +157,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     把"交付叙述/实测过程"搬回 git log 换回余量。
   · 验证：`check_doc_refs` D1–D4 全 0；`tests/policy` 566 passed。
 
-### Added
-
 - **审查任务 3：测试用例正交性（同构冗余参数化）**：新增
   `tools/scan_test_redundancy.py`——按 AST 骨架抹掉字面量/名字后比对，
   找出**同一文件/类内、仅数据不同**的测试函数组（参数化候选，不是"可删覆盖"）；
@@ -159,8 +171,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     "收集数前后相等"作为硬断言。
   · 余量（工具现报告）：13 组 / 57 个可减，其中 3 组被 min_pack 基线锚定。
   · 验证：全量 **4411 passed / 7 skipped**；check_doc_refs / check_hardcode PASS。
-
-### Added
 
 - **审查任务 2：预处理器 / linter / 解析器 / 精化基座 正交性审查 + 第一批清理**：
   逐子系统查"双实现 / 补丁叠加 / 硬编码语言知识 / 死代码"，
@@ -188,8 +198,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 验证：全量 **4406 passed / 7 skipped**；`eval_lint_accuracy` 33/33 召回、FP 0；
     `eval_diag_baseline` 5548→5548 无增长；check_doc_refs / check_hardcode PASS。
 
-### Changed
-
 - **审查任务 1：草稿暂存区 `_drafts/` 清空 + 冗余扫描工具**：`_drafts/`
   （5,481 文件 / 119.9 MB，gitignored 讨论草稿区）按删除判据逐类清理：
   vendored 外部语料副本（veryl_ref/gcc/pre_p3/pre_p3b，97.6 MB）、运行产物与
@@ -209,8 +217,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 验证：全量 **4406 passed / 14 skipped**；check_doc_refs / check_hardcode PASS；
     tests/policy 561 passed。
 
-### Added
-
 - **块 10：CI 排练对齐 cp1252 控制台（#77）**：
   · `tools/ci_rehearsal.py::_run` 对 Python 子进程注入 `PYTHONIOENCODING=cp1252`
     （模拟无 `PYTHONUTF8` 的远端 Windows runner），wheel 外跑 CLI 同口径；
@@ -219,8 +225,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 证据：cp1252 下 pytest 主回归 PASS、smoke/hardcode/docrefs/pyright/edge/fuzz/cli/wheel
     逐项 PASS（修复前主回归 1 failed = fragment CLI）。
   · TODO 删除该项；PROGRESS 块10 更新（只剩 eval_benchmark 口径）。
-
-### Added
 
 - **块 10：yaml 真实 workflow 两遍渲染幂等（#76）**：parser `_consume_block_end`
   对零宽块结束符（yaml `space.dedent`）不再消费紧随的独占行注释——其 `line` 指向
@@ -231,8 +235,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 全量 4392 passed/14 skipped；A/B 0/144；pyright 0；S Δ-92。
   · TODO 删除 yaml 项；PROGRESS 块 10 更新（剩 cp1252 / eval_benchmark）。
 
-### Added
-
 - **块 10：跨语言同进程 C→verilog→C postpass 不丢失（#74）**：
   `SharedComponents` 缓存命中时按当前全局 `_active_components` 与缓存语言组件名比较，
   不一致则重建配置与组件注册表（postpass/原语/capability）再复用对象。
@@ -241,8 +243,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 同语言重复 check 走快速路径（不重复 load）。
   · TODO 删除该项；PROGRESS 块 10 进度更新。
 
-### Added
-
 - **块 10 工程化：A/B 对拍 inproc 档可用（#73）**：`tools/ab_pipeline_compare.py`
   `--plugins` 默认改为 `<pack>/plugins`（换语言包不再手改）；采样输出增加"取最后一个 JSON
   对象"兜底与带 stdout/stderr 的诊断错误（旧行为裸 `JSONDecodeError`）。
@@ -250,16 +250,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     C 插件注入 verilog 的 `GrammarError`。
   · TODO 删除该项；PROGRESS 块 10 标记部分完成（其余 4 项待）。
 
-### Added
-
 - **块 8 块内诊断粒度（#71）**：C `CompoundStmt` 的 `{ ... }` 作为括号定界语句容器递归发现子语句；
   容器 body 内 Level 2 试解析无候选时按首 token 回退注册；父容器检查器在子节点存在时让位。
   `void f(void) { a + ; b + ; }` 现报 **2 条位置正确**的 `phase-statement`（char 17/23），不再只报
   1 条指向块起点；合法块 0 诊断。非容器上下文保持原未识别语义。
   · 新增 `tests/languages/c/test_c_block_diagnostics.py`；linter/C/Verilog/e2e 全绿；A/B 0/144。
   · 结构分：`COG/CC`/类规模增长按块 8 行为理由登记 kept；PROGRESS 块 8 ✅（4/12）；TODO 删除该项。
-
-### Added
 
 - **块 3 片段模式 P0（#70）**：独立 CLI `tpc fragment` + `tools/fragment_rewrite.py`：
   显式行注释记号（`// tpc:fragment id=<id> begin` … `// tpc:fragment end`，单层/显式 id）圈定区域，
@@ -269,8 +265,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 10 单测；真实文件 1 命中 0 误改；真实语料 259 个 .v/.sv 无记号 **0 文件变化**（9.1s）。
   · **不新增 TOML 段/能力位**（P1 需作者批准后再做）；文档 `docs/gaps/gap-fragment-mode.md`；
     PROGRESS 块 3 ✅（3/12）。
-
-### Added
 
 - **块 2 收口：parser 回溯优化——atom memo + 规则级 FIRST 早拒（#68/#69）**：
   · atom 位置 memo（`(token 位置, 作用域版本)`；`_ScopeStack.version` 仅在真实状态变化时递增；
@@ -282,8 +276,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     A/B **0/144**；全量 **4377/14**；corpus 7/7 0 诊断；pyright 0；S Δ0（AST 节点名序列一致）。
   · 文档：`gap-parser-backtracking.md` 收口；PROGRESS 块 2 ✅（2/12）；TODO 性能项删除。
 
-### Added
-
 - **块 2：parser atom 位置 memo（#68，partial）**：`_atom_parser_impl` 按
   `(token 位置, 作用域版本)` 缓存 atom 结果；`_ScopeStack` 版本号仅在真实状态变化时递增；
   `Parser.parse` 每次清空 memo；`restore` 增加无变化快速路径。消除嵌套括号下
@@ -294,16 +286,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     热路径优化；`COG|_atom_parser_impl` 以性能分支理由登记 kept。
   · 文档：`gap-parser-backtracking.md` 实施记录；PROGRESS 块 2 状态；TODO 同步。
 
-### Added
-
 - **主线 2 刻度立档（12 块：工具化 + 高性能 0.1.4）**：`PROGRESS.md` 改写为新主线刻度
   （块 1 基线清算 → 2 parser 性能 → 3/4 片段模式 P0/P1 → 5 unit graph → 6 精化基座 graph 化 →
   7 增量/编辑器 → 8 诊断粒度 → 9 渲染注释 → 10 工程化缺口 → 11 吞吐基准 → 12 收口）；
   `ROADMAP.md` 当前主线改写、删除已完成 P2.9；`TODO.md` 清理三条过期项（结构欠账/散点新增/
   性能前提措辞）。片段模式设计输入 = `_drafts/marker-mode-evaluation.md`（未入库；P1 声明面/
   能力位属框架级，待作者批准）。
-
-### Added
 
 - **T3 部件⑥：pipeline/config 审查 + C uses 漂移修复（#66；T3 收口 #59–#66）**：
   · L1：C `[engine].uses` 删除 T2c 遗留的 `transform.slots.v1`（C 已无任何 transform 声明；
@@ -317,8 +305,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     ⑤ L1 已修；接受项 = `inst_sites` 命名、`core/_protocol` 端口常量名（触发条件 = 第二门
     语言用 structure/typed_ports 面时复议）。T3 收口、T1–T3 路线图完成。
 
-### Added
-
 - **T3 部件⑤实现：transform 成品行属性声明化（#65，L1 修复）**：
   · `transform/_semantic_mapping.py` 去掉 `attr == "ports"` / `sym.attrs["resolved_ports"]`
     硬编码，改读 mapping entry 的声明键 `source.resolved_attr`；helper 更名
@@ -327,8 +313,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 判据：去掉 Verilog 声明键 → `test_typed_ports` **4 failed**（声明承重）；变异表新增该条
     （114→115）；全量 **4377 passed/14 skipped**；A/B **0/144**；`structural_score` Δ0。
   · 余：部件⑥（pipeline/config）→ T3 收口。
-
-### Added
 
 - **T3 部件①实现：Verilog 注释单一声明面 + 工具基线刷新（#60）**：
   · L1：删 `grammar/verilog/token.toml` 中重复的 `[comment].pairs`（保留
@@ -340,8 +324,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 验证：`tests/engine/lexer|preprocessor|e2e` 751 passed/7 skipped；A/B **0/144**；
     render **124/124**；doc refs/预算 PASS。
 
-### Added
-
 - **T2d：pre_scan/raw 文档收口（#58，ADR-0024 done）**：
   · 改写 `linter/linter_architecture.md`（收敛 warning/raw 资格 → 退役说明）、
     `grammar/c/README.md`（期别/两期 API/P4 章节）、`gap-c-semantic-base.md`/
@@ -350,8 +332,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     `gap-c-typedef-cast.md` 幽灵引用清理。
   · 验证：全量 **4374 passed/14 skipped**；A/B **0/144**；render **124/124**；
     `c_acceptance` **49/0**；doc refs/预算 PASS。**T2 全部收口**，进入 T3。
-
-### Added
 
 - **T2c 切片③：删除 linter M2 与候选收敛内部 warning 旁路（#57，ADR-0024）**：
   · 删 `scanner` 的 M2 摘诊断（`_DOWNGRADABLE_CODES`/`_apply_narrow_downgrade`）、
@@ -364,8 +344,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     pyright 0；变异目标校验通过；`core/global_state` 清 raw 契约登记 2 条。
   · 余：T2d 文档收口 + 全量冻结树 → T3。
 
-### Added
-
 - **T2c 切片②：删除 parser raw 承载（#56，ADR-0024）**：
   · 删 `block_parser` 的 `RawStatement` 机制（`match_raw_site`/`try_raw_sentence`/
     `build_raw_candidate`/`_raw_trial_*`/`_verbatim_slice`）、`parser_core` 的 `raw_sites`/
@@ -375,8 +353,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 验证：parser+preprocessor+C+pipeline 1968 passed/1 skipped；analyzer+C+pipeline
     1739 passed/1 skipped；pyright 0；变异目标校验通过。
   · 余：切片③（linter M2/内部 warning 旁路）→ T2d 文档收口 + 全量冻结树。
-
-### Added
 
 - **T2b：删除 lexer 预扫描（pre_scan）机制（#54，ADR-0024）**：
   · 删 `lexer/pre_scan.py` 与导出、两包 `[lexer] pre_scan` 配置与 `base/_pre_scan.toml`、
@@ -393,8 +369,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     `check_doc_refs` PASS；生产代码 pre_scan grep 0。
   · 余：T2c 删 raw 管线（M2/parser raw/P4/E002·E003 + 剩余 skip）；T2d 文档收口。
 
-### Added
-
 - **T2a：typedef 名复合字面量直接建树（#53，ADR-0024 复裁）**：
   · `CompoundLiteral` 类型名收 `@CastTypeName|@CastTypedefName`（复用 #49 门控）⇒
     `(t){1}` / `(S){ .a = 1 }` 解析期直接建 `CompoundLiteral`，不再走 raw 兜底；
@@ -407,8 +381,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     T2d 文档收口。判据/止损/否掉备选见 ADR-0024（重写）。
   · 验证：C/linter/pipeline 1618 passed/58 skipped；复合字面量直解结构断言；A/B 0/144；
     pyright 0（全量门禁在 T2b/T2c 各片收口时重跑）。
-
-### Added
 
 - **真实 C 语料门禁落地（退出判据 5 收口；循环 #52，T1 收尾）**：
   · 语料入库 `tests/e2e/samples/real_c_ref/`：cJSON 1.7.19（MIT）两文件 + zlib 1.3.2
@@ -428,8 +400,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 变异：新增 include 环境继承 + linter 注释回退两条（各自实测变红），清单 122 条。
   · 结果：判据 1–5 全过、主线 1 刻度 **9/9**；三任务路线图 T1 收口，进入 T2（pre_scan 专项）。
 
-### Added
-
 - **T1 预处理器宏展开时序收口（#51）**：定义时间线 + include 内预展开，真实语料
   **7/7 `parse_ok=True` syntax=0**（G4 #49 后唯一余量清零）。
   · A1：`_macro_events` 扩为 `{line,name,params,op,body}`；`expand_tokens(events=,
@@ -447,8 +417,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · 残余登记：zutil `TAG001×2`（include-guard 跨 include 可见性边界）+ C 误报基线门禁
     （判据 5 收口，下一轮 #52）。
 
-### Added
-
 - **剩余三任务路线图 + T1 预处理器宏展开时序调查**（2026-10-23，循环 #50，docs-only）：
   作者把剩余工作定为 T1 宏展开时序 → T2 `pre_scan` 专项清理 → T3 C/Verilog 双包抽象对照
   按部件审查，路线落 `ROADMAP.md`「当前主线」（含顺序理由、每项判据指针、T3 部件序）。
@@ -461,8 +429,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · T2 立项（TODO 三）指向 ADR-0024 分片 + 67 条 skip 测试处置；T3 执行路线落
     `docs/gaps/gap-engine-abstraction-audit.md`（六部件序、每轮输出 leak 清单/判据②探针/
     第二语言复用实验/止损）。
-
-### Added
 
 - **G4 typedef 名强转收口：parser 内符号表 + 规则符号门控**（2026-10-22，循环 #49，
   方案 B，作者拍板）：
@@ -482,8 +448,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     124/124；`c_acceptance` 49/0；变异 118 条（新增 register/门控两条，实测变红）。
     旧 M1/raw 资格测试 67 条 skip 登记（该面退役，随 ADR-0024 专项处理）。
 
-### Added
-
 - **G4 typedef 名强转调查/方案（「解析前符号判定」专项立项材料）**（2026-10-22，循环 #48，
   **docs-only**，未动生产代码）：真实语料门禁唯一前置。实测（check 路径）：
   · 最小矩阵 8 条中 5 条 `parse_ok=False`（函数内指针强转初值/return/if/for/文件域声明），
@@ -501,8 +465,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   文档：`docs/gaps/gap-c-typedef-cast.md`（新档，gaps README 登记）；`gap-c-real-corpus.md`
   G4 行、`ROADMAP.md` 阶段 5、`PROGRESS.md` 判据 5 与下一轮入口同步。
 
-### Added
-
 - **退出判据 3 收口 + 刻度块 7 收口**（2026-10-22，循环 #47，test-only）：新增
   `tests/languages/c/test_c_exit_criteria_negative.py`——四族代表负样本各被拒 + 正样本不误报：
   ① 作用域 = raw 安全网 **E002**（遮蔽例 `typedef int t; void f(){ int t; x=(t)y; }` ⇒ 管线失败 +
@@ -517,8 +479,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   块、加权约 **65–70%**；退出判据 1–4 全过，**判据 5 唯一前置 = G4（typedef 名强转 / 切片 1b
   = 解析前符号判定）**。
 
-### Added
-
 - **退出判据 4 收口：构造 × 标准档位断言面**（2026-10-22，循环 #46，test-only）：
   新增 `tests/languages/c/test_c_construct_standard_matrix.py`，把 `tools/c_acceptance.py::CASES`
   的 **49 条接受面构造**逐条挂上标准归属（C99 / C11 / C23；C17 为缺陷修正版、**无新语法**，
@@ -528,8 +488,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   普通调用静默接受是允许的，与 `test_c_standard_tiers.py` 头注同口径）。
   覆盖：47 条解析层构造上/下档 + 2 条预处理（归属 C99，接受面由 A2 `#include` e2e 覆盖）。
   判据 `pytest tests/languages/c/test_c_construct_standard_matrix.py`（70 例全绿）。
-
-### Added
 
 - **C 无名抽象指针形参（真实语料 G3 收口）**（2026-10-22，循环 #45，C 语法面）：
   C99 §6.7.6 允许 `parameter-declaration` 省略 declarator——`void f(void *, size_t);` /
@@ -547,8 +505,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   判据：`tests/languages/c/test_c_abstract_declarators.py`（16 例：5 目标形态 + 符号面 +
   具名/普通形参回归 + 边界拒绝）+ 档位基线档 1 例；`c_acceptance` 48 → **49** 条 / 空洞 0；
   门禁变异 **115 → 116**（`--only 116` 实测变红）；`tests/languages/c` 全量零回归。
-
-### Added
 
 - **C 声明说明符顺序自由 + 指针限定符**（2026-10-21，循环 #44，C 语法面；作者拍板走 B）：
   C 的 `declaration-specifiers` 顺序自由——typedef 名可出现在存储类/限定符之后
@@ -817,8 +773,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   PRE（HEAD 代码）新判据 **30 failed + 1 error / 16 passed** → POST 全绿；全量 **3952 passed / 7 skipped**；
   policy **458 passed**；pyright strict **0**（本包插件已纳入 strict 面）；A/B verilog **0/144**。
 
-### Changed
-
 - **`pre_scan` 退役改为「暂缓专项整治」**（2026-10-22，作者拍板；docs-only）：作者判断
   "让 lexer 做预扫描是耦合设计，不太好"，但处理应**专项整治**而非日常刻度逐片推进——
   **先完成刻度主线，之后再集中力量去掉该机制**。处理：ADR-0024 状态改 `deferred`
@@ -827,8 +781,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   A/B 0/144、两期产物无消费者、机制提及 37 文件/236 行）；`TODO.md` §3.1 执行项移除
   （暂缓项不进 TODO）；`docs/README.md`、`MODEL_INDEX.md`、两份 gap 档同步改"暂缓"口径。
   `PROGRESS.md` 下一轮入口回到刻度主线：G3 未命名抽象指针形参。
-
-### Changed
 
 - **决策：退役 lexer 预扫描，改两阶段 lint（ADR-0024）**（2026-10-22，#45 调查/设计轮；
   **docs-only**，未动生产代码）：作者判断 `pre_scan`（lexer 后、parser 前的文本级正则扫描）
@@ -848,8 +800,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `docs/README.md`）；`gap-c-semantic-base.md` 决策 ③⑧ 与预扫描期条目注方向变更；
   `gap-parser-linter-approximation.md` M1 段注符号无关化；`ROADMAP.md` 切片 1b 段、
   `TODO.md` §3.1（S1–S5 执行项）、`PROGRESS.md` 下一轮入口、`MODEL_INDEX.md` 行注"退役中"。
-
-### Changed
 
 - **C 真实语料调查第二轮：根因更正 + 语法面方案（决策材料）**（2026-10-21，循环 #44，
   **决策轮**；未动生产代码）：#43 把两类缺口判成"linter 单侧误报"**不成立**——实测
@@ -1095,8 +1045,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     **186 passed**；受影响面（preprocessor+pipeline+languages-c+policy）**1561 passed**；
     A/B **0/144**；pyright strict **0**。**A1 分级 = `partial`**——原因 = 3 条**已声明边界**（非缺验证）。
 
-### Changed
-
 - **长期/触发式项移出待办：策略入决策**（2026-10-17，作者定调"长期规划落入的也不算待办了，是一种策略，
   应该进决策"）：新建 `docs/decisions/0021-long-term-deferral-strategy.md`（**策略型 ADR**）——**9 个决策点**
   的「结论 / 为什么现在不做 / 触发条件 / 链」表：档位 `enabled` 语义**暂缓**（作者定调慢慢补）、
@@ -1124,8 +1072,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ⑥ 死链清理 3 处（`TODO` 2 + `policy/structural_budget.md` 1；README 侧 5 处留给 A2 文档批次，避免与并行
   写入撞车），`policy/structural_budget.md` 不再自违"不许写见某草稿"。
   验证：`tests/policy` **392 passed**（含 `test_planning_doc_budget`）；`git status` 仅 3 个文档文件。
-
-### Added
 
 - **阶段 4 首片 B：`#if` / `#elif` 整型常量表达式求值（声明驱动）**（2026-10-17，循环 #20）：
   `#if` 家族此前只有 `ifdef`/`elsif` 的**宏名**语义；本片按 C99 §6.10.1 实现表达式求值：
@@ -1590,8 +1536,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     ⇒ 改**段表 + 二分反查**与**前缀深度缓存**后复测 **+0.0%**（`format` −0.1%）；C 压力样本
     （200 个 eligible 位点）+6.8%/+7.6% ⇒ 未超 ~10%，按裁定**不加**试解析次数上限。
 
-### Changed
-
 - **机制卫生清理：旧回调链的两处残留**（2026-10-11，作者提问起子）。判据 = "删除先证后删"：
   - **`transform_callbacks` 死消费链**：该能力自 **P1.5 step 2** 起**无任何包声明**（`component_protocol.md`
     已注记删除）⇒ `get_capability` 恒 None ⇒ 回调恒空 ⇒ **`trans_callback/` 目录与 `cb_json` 字段
@@ -1619,8 +1563,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     （`parser/_production.py::_repeat_loop` 的 `result is None` 分支）。
   - 守卫测试改回"**M2 未上线**"（条目无降级字段/常量/方法），M2 落地时必须显式改它。
 
-### Added
-
 - **P2b-1：linter 符号相关性标记（零用户可见变化）**（循环 #3）。符号输入走引擎既有
   `[lexer] pre_scan`（`linter/scanner.py::_pre_scan_names` → `set_symbol_hints` →
   `discovery` → `lookahead`），**不 import 包侧插件、不硬编码 kind**；收敛判定条目新增
@@ -1642,8 +1584,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   而包侧无法关闭。声明类别的收集不受该键影响；非 bool 即 `ConfigError`（fail-fast）。
   判据：`tests/engine/lexer/test_pre_scan_fallback.py`（4 例，含 C 包符号面干净）+
   `check_gate_efficacy` 新变异（无条件建兜底 ⇒ 必红）。
-
-### Changed
 
 - **循环 #4：P3（parser 歧义位点 raw）首次落地经独立审计证伪，已整体回退（未发布）**。
   首次实现（语句起点落在"未收敛 ∧ 符号相关"位点 ⇒ **整句** raw + 同批重新引入窄档摘诊断）
@@ -1708,8 +1648,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     reject 7 / failures 0。
   - **剩余边界（已登记缺口档）**：`sibling_counter` 与簿记集合（trailing/anchor/repeat/fail_sites）
     不在快照内（只影响 `path=`/观测面）；`restore` 仍"只截不补"（回滚到更深快照未支持）。
-
-### Added
 
 - **C 语义基座 P1：声明式符号收集产物（作用域 + 声明序 + 分期标注）**（循环 #2 实现项；方向为
   作者 2026-10-10 拍板）。
@@ -1977,8 +1915,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     18 skipped / 0 failed**；产物缺失时相关用例**跳过**而非失败）、隔离工具 nodeid 归一
     （`_normalize_id` 已接 `ValueError`、始终保留 `::用例名`、路径压 posix；自测 20/20 绿）。
 
-### Changed
-
 - **C 语义基座方向落档（作者 2026-10-10 裁决 8 条）**：`docs/gaps/gap-c-semantic-base.md`
   「待拍板」→「**已拍板**」。关键设计 = **不走 parser 谓词键/运行期钩子**（延后），改为
   **linter 先过歧义路径**——路径不收敛时出**内部 warning** → parser 走 **raw 暂缓建树** →
@@ -2117,8 +2053,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **阶段 3/4/5 的顺序**（作者授权自定）：**先阶段 3**（结构类型与作用域语义——切片 1b 的
     前置，也是"AST 之后那半段"的第一个真实入口）；阶段 4 与语法面解耦、独立评估；
     阶段 5 随语料接入滚动做；三者排在 0.1.4（高性能组件）之后。
-
-### Added
 
 - **C 包 c23 属性：实参形态与属性表形态收口——多实参 `[[gnu::nonnull(1, 2)]]` + 尾随逗号
   `[[nodiscard,]]`**（作者口径"慢慢补充"下按实测优先级取的两条；①空实参 / ②相邻字面量 /
@@ -2421,8 +2355,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   探完回退到最长已声明候选）。判据：`tests/engine/lexer/test_lexer.py::TestSymbolLongestMatch`
   （自建 token 表，不依赖语言包）+ 全量回归 + 真实语料误报基线不增。
 
-### Added
-
 - **C 包支持变参尾段 `...`**（`int printf(const char *fmt, ...);`）——接受面
   **25/28 → 26/28**，空洞只剩预处理两项。改法是纯配置：
   `ParamList` 第二项写成 `(symbol.base.comma,(@ParamDecl|symbol.extend.ellipsis))*`
@@ -2439,7 +2371,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   参数）/ linter 零诊断 / 渲染逐字还原 + 幂等），`tools/c_acceptance.py` 复核。
 
 ### Fixed（前一轮，linter 误报）
-
 
 - **linter 在合法 C 上大面积误报的根因（不是"匹配器不回溯"）**：`grammar/c` 的
   `ring_buffer.h` / `ring_buffer.c` / `edge_comments.c` 三份**合法**样本上，linter 分别报
@@ -2500,8 +2431,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Declaration`，推翻本包刻意选定并锁进测试的消歧；引擎侧改 `_match_repeat` 的错误
   恢复则改变所有语言在坏输入上的诊断面。它不影响"合法代码零误报"（本轮已闭环），
   只是坏输入的诊断质量，故按"先落档后动手"记档待专用一轮。
-
-### Added
 
 - **收尾轮实测更正一处「接受面已闭环」的错觉：变参 `...` 从未支持**（本包文档此前把
   它写在「已落地」里）：

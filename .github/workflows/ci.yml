@@ -55,6 +55,9 @@ jobs:
         run: |
           python policy/check_hardcode.py --strict-doc --strict-import
           python policy/check_doc_refs.py
+          # check_invariants：不变量清单门禁——docs/invariants.toml 的锚点
+          #   （policy 规则 id / 测试函数 / 变异序号）必须可解析，防清单腐烂
+          python policy/check_invariants.py
 
       - name: Static type gate (pyright strict)
         # 版本钉在 1.1.413（与本地验证一致）；升级时同步 bump
