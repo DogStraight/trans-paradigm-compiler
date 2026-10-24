@@ -6,6 +6,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- **块 10 收口：`eval_benchmark` 对拍口径（parse 失败事实码 + 语法 lint 不误排除，`#79`）**：
+  `_tpc_diags_all` 原以 `not parse_ok or f["syntax"]` 排除文件——把**语法阶段 lint**
+  （ST001 行尾空白等）当成 parse 失败，7 个真实语料组里 6 个被判 `TPC-PARSE-FAIL`
+  （实测全部 `parse_ok=True`、仅带 ST001-003 风格诊断），verilator 对拍只剩 real_uart
+  （共识 0）。修法 = 排除面只认 `parse_ok=False`（真 parse 失败），语法 lint 不再影响
+  语义对拍；parse 失败文件的 `ast_optional` 事实型码仍收集进 `row["facts"]` 与
+  汇总 `tpc_facts`（只示明、不参与共识/FP 判定，避免 C 宏实参不足 MAC001 这类低报）。
+  · 拆出 `_semantic_entries` / `_take_unseen`，两次补查循环共用（原两处 `continue` 是
+    唯一丢弃点）；行/汇总新增 `tpc_parse_fail`、`tpc_facts` 英文键。
+  · 证据（`eval_benchmark --oracle=verilator --json`，38s）：`tpc_parse_fail` 6 → **0**，
+    共识 **0 → 53**（darkriscv 9/9、simcells 22/22、tv80 14/14、picorv32 8），仅tpc 18、
+    仅oracle 343；verible 口径下 6 组恢复参与（其命名族 NC001/NC014 在默认规则集未启用
+    ⇒ 仅oracle 661 的噪声属既有映射面，非本次口径）。slang 29.7s：仅tpc 71、仅o 0。
+  · 新增 `tests/e2e/test_eval_benchmark_scope.py` 3 条（改前红：C `F(1)` ⇒ MAC001 被丢 /
+    verilog ST001 组被排除；改后绿）。
+  · TODO 删除该项；PROGRESS 块 10 ✅、当前 5/12，下一轮入口块 11 调查轮。
+
 - **skill 形态演进（用户级，仓库外）**：新增 `invariant-falsifier`（只含协议层：
   输入契约 / 证伪过程 / 带证据的 verdict 契约 / 五条元不变量 M1–M5）；
   旧 `enumeration-illusion-audit` **降级为 L1 候选发生器**（首屏标注"只出候选、不裁决"）。

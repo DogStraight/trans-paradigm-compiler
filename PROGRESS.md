@@ -24,17 +24,19 @@
 | 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |
 | 8 | **诊断粒度** | ✅ 块内 2 坏语句 → 2 条位置正确 `phase-statement`（#71；父容器粗诊断让位）；`test_c_block_diagnostics.py` |
 | 9 | **渲染/注释遗留** | ⏳ #72 调查：LineSuffix 吞 token 根因=flatten；强制 group broken 修 C 但 yaml 往返回归，已回退；需源行感知方案 |
-| 10 | **工程化缺口** | ⏳ A/B inproc ✅ #73；C→V→C ✅ #74；yaml 幂等 ✅ #76；cp1252 排练 ✅ #77；eval_benchmark 口径待 |
+| 10 | **工程化缺口** | ✅ A/B inproc #73；C→V→C #74；yaml 幂等 #76；cp1252 排练 #77；benchmark 口径 #79（parse 失败事实码保留 + 语法 lint 不再误排除；verilator 共识 0→53） |
 | 11 | **吞吐/基准** | ⏳ fuzz 40→100 iter/s；parser 2.5x；benchmark 阈值进 CI |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 
-**当前 4 / 12**。基线锚：全量 4377/14、A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、feature 0。
+**当前 5 / 12**。基线锚：A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、
+feature 1 处待处置（`discovery.shape`，先于本轮的 `e4b93d3`）；全量复现 `pytest tests/`
+（未通过数记 CHANGELOG 当轮条目）。
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 10 收尾——`eval_benchmark` 对 parse 失败文件的 semantic 口径（收集事实型码或显式登记"只对语法完整文件"）；然后进入块 11 吞吐/基准。
-- **待验证假设**：C 样本 MAC001 在 parse 失败文件上由 postpass ast_optional 产出，benchmark 直接 `continue` 是唯一低报原因；登记/收集后 C 样本可对拍。
-- **台账**：块 1/2/3/8 ✅；块 9 ⏳（#72）、块 10 ⏳（4/5：#73/#74/#76/#77）；主线 2 当前 4/12；P1 待批准。
+- **意图**：块 11 调查轮——benchmark 阈值进 CI 的基线锚（本次 verilator 共识 53/仅tpc 18/仅o 343；verible 命名族噪声已知）与 fuzz 当前 ~40 iter/s 的耗时分解（harness 重建 vs 管线内部幂等复跑），选定 40→100 的最低风险路径。
+- **待验证假设**：ROADMAP P2.3 三件套量级（跨迭代缓存 ~2.5x / 关复跑 ~1.8x / 多进程 ~8x）在当前离线 harness 仍成立；若单迭代固定成本落在管线而非 harness，先做阶段级 fuzz。
+- **台账**：块 1/2/3/8/10 ✅；块 9 ⏳（#72）、块 11 ⏳；主线 2 当前 5/12；P1 待批准。
 
 ## 估算依据（对照锚，可复核）
 

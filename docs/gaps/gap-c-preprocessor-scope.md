@@ -162,6 +162,8 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 （`out_invocations`：name/slots/single_empty/params + clean 行坐标；`map_invocations_to_source` 回源 + **宏定义时间线**（`scan_directives(out_macro_events)`）把 params 修正为**调用点时点**值——展开器仍用最终宏表，后置定义/重定义/undef 前后不误判；被包含内容/行拼接段内调用点丢弃）；`[[analyzer.postpasses]]` 新增同族键 **`ast_optional`**（解析失败文件也执行——实参不足展开成非法语法，正是该报的那批）＋ `CTX_MACRO_INVOCATIONS` 注入＋合成节点 `_pos_original`（原始坐标跳过行表回源；parse 失败文件的**语义**诊断可豁免）。C 包 `plugins/checks/macro_args/`：MAC001（A 档 N1124 §6.10.3 段 1903/1904/1918；gcc 16.1 四档对拍），判定 = 非变参 `slots==形参数`（n=0 仅 `Z()`）、变参 `slots>=具名数` ⇒ 先前静默的多给 / 零参传参 / 变参缺具名现报；少给在 parse 失败文件上仍报（ast_optional）。证据：`test_macro_call_sites.py` 17、`test_macro_timeline.py` 13、`test_c_macro_args_checks.py` 25、`test_postpass_ast_optional.py` 5、变异 82→87。
 **边界**：变参恰好具名（C23 起接受）、宏体**内部**替换产生的嵌套调用（接缝处的已由 ㉔/㉕ 覆盖）、`#if` 表达式内调用、被包含文件内调用点
 （头文件定义按 include 行快照）、行拼接段内调用点、`#undef` 之前的调用点（展开器不展开 ⇒ 无事实）。
+**benchmark 侧落点**：C 样本接入 `tests/e2e/eval_benchmark.py` 后，parse 失败文件上由 `ast_optional` 产出的 MAC001 进 `row["facts"]` /
+`summary["tpc_facts"]`（parse 面不完整 ⇒ 不参与共识/FP 判定，但不再静默丢弃；#79 同时修正语法 lint 误排除对拍组）。
 
 ㉓ **A2 ② 交付：check 路径接 linter 语法诊断（原始源宏定义形式语法面；2026-10-18，循环 #22）**：`tpc lint` 早报宏定义形式错（rc=1）而 `tpc check`静默（rc=0）——check 语法阶段 lint 的是展开后文本，定义行已被扫指令消费。修法 = `FilePipeline` 语法阶段在原文上补跑 `linter/macro_syntax.py`（`analyzer/structure.py::raw_source_macro_diags`，与 lint 同一函数）；宏形式错为 blocking ⇒ 早退（不解析、不跑展开文本 lint）。**行为**：四类形式错由 rc=0静默 → check `[syntax]` + rc=1，code/行/列与 `tpc lint` 逐项一致；未闭合形参表此前在三面抛 `ConfigError`（lint/check 的 CLI traceback 与管线冒泡）→ 全部转受控诊断（scan_diagnostics 的 `directive` / scanner 的 `preprocessor-error` / 管线 error）。verilog 零变化（A/B 0/144）。证据：`test_c_macro_syntax_check_path.py` 9 条 + 受控错误 3 条、变异 87→88（全量/精度/A-B 见 CHANGELOG）。
 

@@ -15,6 +15,12 @@
 行对齐：tpc 诊断 line 是 0-based（LSP），oracle 是 1-based → +1；
 按 ±2 行容差匹配（诊断常落在声明行 vs 使用行）。
 
+语义口径：**parse 失败**（`parse_ok=False`）的工程不做对拍判定——0 诊断是假干净，
+部分诊断也不完整；其 semantic 中的事实型码（`ast_optional` postpass 产出，如 C
+宏实参个数 MAC001）仍收集进 `row["facts"]` 与汇总 `tpc_facts`，只示明"引擎已产出"，
+不参与共识/FP 判定。**语法阶段 lint 诊断**（如 ST001 行尾空白）不构成排除——对拍
+比较的是 semantic 阶段产物，语法 lint 的好坏与语义判定无关。
+
 oracle 选择（--oracle 可重复；缺省全部可用项）：
     verilator — 语义最强（位宽/锁存/未使用/多驱动），MSYS2
     verible   — 语法/风格向（case 缺 default/命名/宏卫生），已捆绑
@@ -405,7 +411,34 @@ _ORACLES = {
 }
 
 
-def _tpc_diags_all(checker, files: list[str]) -> tuple[list[dict], bool]:
+def _semantic_entries(fr: dict) -> list[dict]:
+    """单文件 check 记录 → 对拍条目（code / basename / 1-based 行）。"""
+    base = os.path.basename(fr["path"])
+    entries: list[dict] = []
+    for d in fr.get("semantic", []):
+        code = d.get("code")
+        if not code:
+            continue
+        line0 = (d.get("range") or {}).get("start", {}).get("line", 0)
+        entries.append({"code": code, "file": base, "line": line0 + 1})
+    return entries
+
+
+def _take_unseen(entries: list[dict], seen: set[tuple]) -> list[dict]:
+    """跨文件组去重（同 code / 文件 / 行只计一次）。"""
+    kept: list[dict] = []
+    for e in entries:
+        key = (e["code"], e["file"], e["line"])
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(e)
+    return kept
+
+
+def _tpc_diags_all(
+    checker, files: list[str]
+) -> tuple[list[dict], bool, list[dict]]:
     """跑 tpc check 覆盖文件组**全部**文件（oracle 扫全目录对齐）。
 
     oracle（Verible/svlint/slang）对每个输入文件独立扫，而 tpc 从 entry
@@ -416,50 +449,45 @@ def _tpc_diags_all(checker, files: list[str]) -> tuple[list[dict], bool]:
     实现：对 entry 跑**一次** check（全量编译覆盖依赖链），再对 entry
     未覆盖的独立文件补 check（避免对每文件重复全量编译——picorv32 单次
     check ~95s，N 文件 × N 次会数分钟超时）。
+
+    返回 (diags, parse_ok, facts)：
+      diags    — 可对拍文件的语义诊断（进共识/FP 判定）；
+      parse_ok — 组内每个文件都 parse 完整；
+      facts    — parse 失败文件的语义诊断。事实型 postpass（`ast_optional`）在
+                 parse 失败文件上仍产出（如 C 宏实参不足 ⇒ 展开成非法语法，
+                 MAC001 仍应报）；丢弃即低报，保留但不参与对拍判定（parse 面
+                 不完整 ⇒ 对拍无区分力）。
+
+    语法阶段 lint 诊断（ST001 行尾空白等风格项）**不影响可比性**——这里比较的
+    是 semantic 阶段产物；此前 `or f.get("syntax")` 把 6/7 真实语料组误判为
+    "不可对拍"（其实全部 parse_ok，仅带风格 lint）。
     """
     out: list[dict] = []
+    facts: list[dict] = []
     parse_ok = True
     seen: set[tuple] = set()
     # entry = 文件组第一个文件；一次 check 覆盖其依赖链
     entry = files[0]
     report = checker.check(entry)
     covered_paths = {os.path.abspath(f["path"]) for f in report.get("files", [])}
-    for f in report.get("files", []):
-        if not f.get("parse_ok") or f.get("syntax"):
+    for fr in report.get("files", []):
+        if not fr.get("parse_ok"):
             parse_ok = False
+            facts.extend(_take_unseen(_semantic_entries(fr), seen))
             continue
-        base = os.path.basename(f["path"])
-        for d in f.get("semantic", []):
-            code = d.get("code")
-            if not code:
-                continue
-            line0 = (d.get("range") or {}).get("start", {}).get("line", 0)
-            key = (code, base, line0 + 1)
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append({"code": code, "file": base, "line": line0 + 1})
+        out.extend(_take_unseen(_semantic_entries(fr), seen))
     # 补查 entry 未覆盖的独立文件（不在依赖链的）
     for path in files:
         if os.path.abspath(path) in covered_paths:
             continue
         r2 = checker.check(path)
-        for f in r2.get("files", []):
-            if not f.get("parse_ok") or f.get("syntax"):
+        for fr in r2.get("files", []):
+            if not fr.get("parse_ok"):
                 parse_ok = False
+                facts.extend(_take_unseen(_semantic_entries(fr), seen))
                 continue
-            base = os.path.basename(f["path"])
-            for d in f.get("semantic", []):
-                code = d.get("code")
-                if not code:
-                    continue
-                line0 = (d.get("range") or {}).get("start", {}).get("line", 0)
-                key = (code, base, line0 + 1)
-                if key in seen:
-                    continue
-                seen.add(key)
-                out.append({"code": code, "file": base, "line": line0 + 1})
-    return out, parse_ok
+            out.extend(_take_unseen(_semantic_entries(fr), seen))
+    return out, parse_ok, facts
 
 
 def _near(a: dict, b: dict, tol: int = 2) -> bool:
@@ -625,7 +653,7 @@ def run(checker, groups, label: str,
     del label  # 调用方保留的标签（本函数不打日志）
     rows = []
     stats = {
-        "groups": 0, "oracle_skip": 0, "tpc_parse_fail": 0,
+        "groups": 0, "oracle_skip": 0, "tpc_parse_fail": 0, "tpc_facts": 0,
         "consensus": 0, "only_tpc": 0, "only_v": 0, "suppressed": 0,
         "v_scope_out": 0, "v_expand": 0,
         "per_oracle": {o: {"consensus": 0, "only_tpc": 0, "only_v": 0,
@@ -636,12 +664,15 @@ def run(checker, groups, label: str,
         stats["groups"] += 1
         # tpc 检查覆盖文件组全部文件（oracle 扫全目录对齐；entry 递归
         # 会漏扫 entry 不依赖的独立文件）
-        tpc, tpc_parse_ok = _tpc_diags_all(checker, g["files"])
+        tpc, tpc_parse_ok, tpc_facts = _tpc_diags_all(checker, g["files"])
         if not tpc_parse_ok:
-            # tpc 解析失败（如 darkriscv 条件编译嵌套位置，P1.5）→
-            # 0 诊断是"假干净"，不能当 MISS/共识，标为无法对拍
+            # tpc 解析失败（`parse_ok=False`；语法阶段 lint 诊断不算）→
+            # 0 诊断是"假干净"，不能当 MISS/共识，标为无法对拍；
+            # 事实型码（ast_optional）仍收集进 row["facts"]，只示明不判定。
             stats["tpc_parse_fail"] += 1
-            rows.append({"name": g["name"], "verdict": "TPC-PARSE-FAIL"})
+            stats["tpc_facts"] += len(tpc_facts)
+            rows.append({"name": g["name"], "verdict": "TPC-PARSE-FAIL",
+                         "facts": tpc_facts})
             continue
         lint_offs = _file_lint_offs(g["files"])
         has_cond = _file_has_cond(g["files"])
@@ -684,6 +715,7 @@ def run(checker, groups, label: str,
         "输入工程数": stats["groups"],
         "oracle 跳过（硬错误/未安装）": stats["oracle_skip"],
         "tpc 解析失败": stats["tpc_parse_fail"],
+        "tpc 解析失败组仍收集的事实码（不参与对拍）": stats["tpc_facts"],
         "共识（双方同报）": stats["consensus"],
         "仅 tpc（FP 候选）": stats["only_tpc"],
         "仅 oracle（漏报/scope 候选）": stats["only_v"],
@@ -692,6 +724,8 @@ def run(checker, groups, label: str,
         "oracle 扩展侧 WIDTHEXPAND": stats["v_expand"],
         "groups": stats["groups"],
         "oracle_skip": stats["oracle_skip"],
+        "tpc_parse_fail": stats["tpc_parse_fail"],
+        "tpc_facts": stats["tpc_facts"],
         "consensus": stats["consensus"],
         "only_tpc": stats["only_tpc"],
         "only_v": stats["only_v"],
@@ -737,6 +771,8 @@ def main() -> None:
             extra = (f"共识={len(r['consensus'])} 仅tpc={len(r['only_tpc'])} "
                      f"仅{oracle_label}={len(r['only_v'])} "
                      f"抑制={len(r['suppressed'])} 范围外={len(r['v_scope_out'])}")
+        elif r.get("facts"):
+            extra = f"事实码={len(r['facts'])}（不参与对拍）"
         name = r["name"]
         if r.get("oracle"):
             name = f"{r['name']}[{r['oracle']}]"
