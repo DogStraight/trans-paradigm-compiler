@@ -120,16 +120,6 @@ PREFIX_FAMILY_ALLOWLIST: dict[str, str] = {
 R6_FILE_ALLOWLIST: dict[tuple[str, str], str] = {
     ("parser/rule_selector.py", "symbol.base.colon"):
         "`if __name__ == \"__main__\"` 下的手工调试样例（非生产路径、不被任何模块执行）",
-    ("linter/discovery.py", "bracket.l_parentheses"):
-        "**已知债，ADR-0025 D2 消除**：`_derive_attr_openers` 从 production 结构推导"
-        "属性对（`(* ... *)`）时把 Verilog 的两个 token 名写死。属「同形不同意图无法推导」"
-        "（见 ADR-0025「为什么是声明而不是更好的推导」），待声明面 `[discovery.prefix_pairs]` 落地后改读声明",
-    ("linter/discovery.py", "symbol.base.multiple"):
-        "同上：ADR-0025 D2 消除（属性对的第二个 token）",
-    ("linter/scanner.py", "symbol.base.colon"):
-        "**引擎协议**：推导「opener 前驱排除」时把「子句分隔符」认作 `:` 形态——"
-        "这是 §clause 分隔的引擎概念，配合 `st.startswith(KEYWORD_PREFIX)` 使用，"
-        "不指向某个语言的具体规则；待 ADR-0025 声明面落地后改读声明",
 }
 
 # 规则 2 allowlist：文档化的默认语言引导路径（产品决策：verilog 为默认

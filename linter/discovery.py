@@ -18,13 +18,14 @@ Doc: linter/linter_architecture.md
 from __future__ import annotations
 
 from core.define import Token
-from core.token_protocol import KEYWORD_PREFIX, TRIVIA_TOKEN_TYPES, skip_trivia, split_token_types
+from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia, split_token_types
 
 from . import LintDiagnostic, token_span
 from .checker import (
     CTX_TOP,
     DiscoveredNode,
 )
+from .discovery_shape import DiscoveryShape, is_stmt_container, load_shape
 from .lookahead import LookaheadTable, fallback_statement_names
 
 # discovery 递归深度上限（坏输入收敛防御，见 _discover_range 注释）
@@ -39,69 +40,6 @@ def _split_end_set(
     positive = {s for s in end_set if not s.startswith("!")}
     return exclude, positive
 
-
-def _derive_attr_openers(tree: dict) -> tuple[str, str] | None:
-    """从语法树推导属性对开括号（如 (* ... *)）。
-
-    配置驱动：找 production 以 "(" + "*" 两个纯 token 开头的规则
-    （如 AttrInstance），返回 (开括号 token, 次 token)。无则 None。
-    """
-    for info in tree.values():
-        if not isinstance(info, dict):
-            continue
-        prods = info.get("prods") or []
-        if len(prods) < 2:
-            continue
-        p0, p1 = prods[0], prods[1]
-        if (
-            isinstance(p0, dict)
-            and p0.get("type") == "token"
-            and p0.get("token_type") == "bracket.l_parentheses"
-            and isinstance(p1, dict)
-            and p1.get("type") == "token"
-            and p1.get("token_type") == "symbol.base.multiple"
-        ):
-            return ("bracket.l_parentheses", "symbol.base.multiple")
-    return None
-
-
-def _is_bracket_stmt_container(discovery: "Discovery", rule: str, opener: str) -> bool:
-        """规则是否为**以当前括号开头的纯定界语句容器**（如 `{ @Stmt* }`）。
-
-        与 scanner 的纯容器判定同口径：production 只含定界 token + 语句/块引用，
-        且首个元素就是当前开括号；用于把 `{...}` 转块分支递归 body，同时避免把
-        `[[nodiscard]] int f(void){...}` 这类"属性前缀 + 函数定义"误当括号容器。
-        """
-        info = discovery._tree.get(rule, {}) or {}
-        if info.get("block_start") or info.get("block_end"):
-            return False
-        prods = info.get("prods") or []
-        if not prods:
-            return False
-        first = prods[0]
-        if not isinstance(first, dict) or first.get("type") != "token":
-            return False
-        if opener not in split_token_types(first.get("token_type", "")):
-            return False
-        delim = (
-            set(discovery._block_openers)
-            | set(discovery._block_closers)
-            | set(discovery._bracket_openers)
-            | set(discovery._bracket_closers)
-        )
-        seen_body = False
-        for elem in prods:
-            if not isinstance(elem, dict):
-                return False
-            typ = elem.get("type")
-            if typ == "token":
-                if not set(split_token_types(elem.get("token_type", ""))) <= delim:
-                    return False
-            elif typ in ("repeat", "optional", "plus", "call"):
-                seen_body = True
-            else:
-                return False
-        return seen_body
 
 class Discovery:
     """发现器：产出自动注册的扁平节点列表。"""
@@ -126,51 +64,16 @@ class Discovery:
         self._block_closers = block_closers
         self._bracket_openers = bracket_openers
         self._bracket_closers = bracket_closers
-        # 属性对开括号推导（配置驱动，不硬编码规则名）：找 production 以
-        # "(" + "*" 开头的规则（如 AttrInstance 的 (* ... *)）。_skip_to_end
-        # 据此整体跳过属性对，使带属性的语句（如 (* parallel_case *) case ...）
-        # 边界不被属性内的括号/newline 截断。
-        self._attr_openers = _derive_attr_openers(tree)
-        # 容器结构延续关键字（配置驱动推导，不硬编码；理由见
-        # `_derive_continuation_openers`）
-        self._continuation_openers = self._derive_continuation_openers(tree)
+        # 语句发现形态（ADR-0025）：**全部来自语言包声明**，引擎不猜。
+        # 属性/修饰前缀对、容器延续关键字、括号定界语句容器、子句分隔符
+        # 都由 `[discovery]` 声明（见 linter/discovery_shape.py）。
+        self._shape: DiscoveryShape = load_shape()
+        self._continuation_openers = self._shape.continuations
         # 未识别语句诊断（本次 discover 累积，scan 后由 scanner 合并）。
         self._unrecognized: list[LintDiagnostic] = []
         # 括号定界语句容器 body 的语句恢复深度（仅该上下文启用 fallback 候选，
         # 避免把全局"未识别"诊断语义改成 phase-statement）
         self._stmt_recovery_depth = 0
-
-    def _derive_continuation_openers(self, tree: dict) -> frozenset[str]:
-        """容器结构延续关键字（配置驱动推导，不硬编码）。
-
-        production 以纯 keyword token 开头、但不启动任何语句/块的规则——如
-        else（if 链延续）、default（case 项延续）。children 递归遇到时跳过：
-        延续关键字不单独成语句，其 body（块/语句）由后续扫描自然发现；不跳过
-        会把 else 当"有语句特征但无匹配"的未识别语句误报。
-
-        精确化：延续关键字 = production **引用语句/块**的容器延续（else →
-        @Stmt、default → @StmtOrNull、impl → 块成员）。仅凭"keyword 起始 +
-        非语句/块"会把 input/output/parameter/invert 等声明规则误当延续——
-        它们在块头内侥幸不触发，但在 body 语境出现会被跳过漏检。引用判定复用
-        `_feat_calls_stmt`（穿透包装选择器）。
-        """
-        stmt_block_firsts: set[str] = set()
-        continuation: set[str] = set()
-        for info in tree.values():
-            if not isinstance(info, dict):
-                continue
-            prods = info.get("prods") or []
-            if not prods or prods[0].get("type") != "token":
-                continue
-            tok = prods[0].get("token_type", "")
-            if info.get("is_statement") or info.get("is_block"):
-                stmt_block_firsts.add(tok)
-                continue
-            if not tok.startswith(KEYWORD_PREFIX):
-                continue
-            if any(self._feat_calls_stmt(f) for f in prods):
-                continuation.add(tok)
-        return frozenset(continuation - stmt_block_firsts)
 
     def discover(self, tokens: list[Token]) -> list[DiscoveredNode]:
         """扫描 token 流，递归发现嵌套节点，返回树（children 填充）。"""
@@ -317,11 +220,7 @@ class Discovery:
         # 属性对 (* ... *)：整体跳过，不注册语句节点。属性是元数据，
         # 其 body（case/赋值）由后续扫描独立发现——注册 AttrStmt 会因
         # checker 需匹配跨行 body、边界难定而误报。
-        if (
-            self._attr_openers
-            and t.type == self._attr_openers[0]
-            and self._next_type(tokens, i + 1, end) == self._attr_openers[1]
-        ):
+        if self._shape.is_prefix_pair(t.type, self._next_type(tokens, i + 1, end) or ""):
             return self._skip_balanced(tokens, i, end)
         candidates = self._lookahead.classify(tokens, i, context)
         # 块规则（有 block_end）：括号开启符同时是块开启符（scanner 把括号并入
@@ -333,8 +232,8 @@ class Discovery:
             info = self._tree.get(candidates[0], {}) or {}
             # 块规则（有 block_end）或括号定界语句容器（如 CompoundStmt
             # `{ @Stmt* }`）：转块分支注册节点并递归 body。
-            if info.get("block_end") or _is_bracket_stmt_container(
-                self, candidates[0], t.type
+            if info.get("block_end") or is_stmt_container(
+                self._shape, self._tree, candidates[0], t.type
             ):
                 return self._discover_block(
                     tokens, i, end, context, depth, nodes
@@ -821,11 +720,8 @@ class Discovery:
         ——否则换行会被 end_case 当语句边界截断（(* x *) 后换行 case 的边界
         只到属性行）。
         """
-        if not self._attr_openers:
-            return False
-        return (
-            tokens[i].type == self._attr_openers[0]
-            and self._next_type(tokens, i + 1, n) == self._attr_openers[1]
+        return self._shape.is_prefix_pair(
+            tokens[i].type, self._next_type(tokens, i + 1, n) or ""
         )
 
     def _advance_block_depth(

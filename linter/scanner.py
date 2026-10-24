@@ -22,9 +22,9 @@ from core.define import GrammarRule
 from core.config_registry import ConfigRegistry, declare_cfg
 from core.errors import ConfigError
 from core.token_protocol import (
-    split_token_types,
     BRACKET_L_PREFIX,
     BRACKET_R_PREFIX,
+    KEYWORD_PREFIX,
     bracket_left,
     bracket_right,
 )
@@ -35,6 +35,7 @@ from preprocessor._expand import scan_directives, expand_tokens, _load_config
 from . import LintDiagnostic, Position
 from .grammar_slicer import build_slice_tree
 from .discovery import Discovery
+from .discovery_shape import is_stmt_container
 from .checker import CheckerRegistry
 from .checkers.boundary import BoundaryChecker
 from .checkers.macro_hygiene import MacroHygieneChecker
@@ -65,24 +66,29 @@ _style_check_cfg: dict = declare_cfg(
 )
 
 
-def _seq_end_tokens(feat: dict, excludes: dict[str, set[str]]) -> set:
+def _seq_end_tokens(
+    feat: dict, excludes: dict[str, set[str]], separators: frozenset[str]
+) -> set:
     """seq 的末尾 token 集（= 末元素的末尾集）。
 
     顺带做排除推导：逐位比较"上一元素的末尾集 × 当前元素的起始集"，命中
-    (symbol.base.colon, keyword.X) 相邻对即登记 X 的前驱排除 colon。
+    `(声明的子句分隔符, keyword.X)` 相邻对即登记 X 的前驱排除该分隔符。
+    分隔符来自语言包 `[discovery].clause_separators`（ADR-0025），引擎不写死 token 名。
     """
     ends = {None}
     for item in feat.get("items", []):
-        starts = _feature_end_tokens(item, excludes)
+        starts = _feature_end_tokens(item, excludes, separators)
         for e in ends:
             for st in starts:
-                if st and e == "symbol.base.colon" and st.startswith("keyword."):
+                if st and e in separators and st.startswith(KEYWORD_PREFIX):
                     excludes.setdefault(st, set()).add(e)
         ends = starts
     return ends
 
 
-def _feature_end_tokens(feat, excludes: dict[str, set[str]]) -> set:
+def _feature_end_tokens(
+    feat, excludes: dict[str, set[str]], separators: frozenset[str]
+) -> set:
     """返回 feature 可能的末尾 token 集合（call 截断）。"""
     if feat is None:
         return {None}
@@ -92,88 +98,44 @@ def _feature_end_tokens(feat, excludes: dict[str, set[str]]) -> set:
     if typ == "call":
         return {None}
     if typ == "seq":
-        return _seq_end_tokens(feat, excludes)
+        return _seq_end_tokens(feat, excludes, separators)
     if typ in ("repeat", "optional", "plus"):
-        return _feature_end_tokens(feat.get("elem"), excludes) | {None}
+        return _feature_end_tokens(feat.get("elem"), excludes, separators) | {None}
     if typ == "choice":
         acc = set()
         for alt in feat.get("alternatives", []):
-            acc |= _feature_end_tokens(alt, excludes)
+            acc |= _feature_end_tokens(alt, excludes, separators)
         return acc
     return {None}
 
 
-def _derive_opener_prev_excludes(tree: dict) -> dict[str, frozenset[str]]:
+def _derive_opener_prev_excludes(
+    tree: dict, separators: frozenset[str]
+) -> dict[str, frozenset[str]]:
     """语法推导块 opener 的非起始前驱 token 集（供 BoundaryChecker）。
 
-    production 树中 (symbol.base.colon, keyword.X) 相邻 token 对（X 是块
-    opener）→ X 的前驱排除 colon：该位置的 X 是子句终结形态（如 config
-    插件的 use 子句 use lib.cell:config），不是块起始。BoundaryChecker
-    压栈时命中排除即不压——避免 :config 被当 config 块 opener 造成
-    unclosed 误报。推导是通用结构（不硬编码关键字名），语言知识留 TOML。
+    production 树中 (声明的子句分隔符, keyword.X) 相邻 token 对（X 是块
+    opener）→ X 的前驱排除该分隔符：该位置的 X 是子句终结形态（如 config
+    插件的 use 子句 `use lib.cell:config`），不是块起始。BoundaryChecker
+    压栈时命中排除即不压——避免 `:config` 被当 config 块 opener 造成
+    unclosed 误报。分隔符来自 `[discovery].clause_separators`（ADR-0025）。
     """
     excludes: dict[str, set[str]] = {}
     for info in tree.values():
         if not isinstance(info, dict):
             continue
         for prod in info.get("prods", []):
-            _feature_end_tokens(prod, excludes)
+            _feature_end_tokens(prod, excludes, separators)
     return {k: frozenset(v) for k, v in excludes.items()}
 
 
-def _is_pure_stmt_container(
-    tree: dict,
-    block_openers,
-    block_closers,
-    bracket_openers,
-    bracket_closers,
-    rule,
-) -> bool:
-    """纯定界语句容器（如 `{ @Stmt* }`）：只有定界 token + 语句引用。
-
-    这类节点的父检查器会把 `@Stmt*` 内坏语句的 trial 错误吞成一条
-    coarse 诊断；子节点已独立注册检查器时报精确错误，父检查器应跳过。
-    有 block_start/end 的关键字容器不在此列（父检查器负责块结构）。
-    """
-    if not isinstance(rule, str):
-        return False
-    info = tree.get(rule, {}) or {}
-    if info.get("block_start") or info.get("block_end"):
-        return False
-    prods = info.get("prods") or []
-    if not prods:
-        return False
-    delim = (
-        set(block_openers)
-        | set(block_closers)
-        | set(bracket_openers)
-        | set(bracket_closers)
-    )
-    seen_body = False
-    for elem in prods:
-        if not isinstance(elem, dict):
-            return False
-        typ = elem.get("type")
-        if typ == "token":
-            if not set(split_token_types(elem.get("token_type", ""))) <= delim:
-                return False
-        elif typ in ("repeat", "optional", "plus", "call"):
-            seen_body = True
-        else:
-            return False
-    return seen_body
-
-
 def _register_discovery_checkers(scanner, tokens, registry) -> None:
+    shape = scanner._discovery._shape
+
     def register(node) -> None:
-        if node.children and _is_pure_stmt_container(
-            scanner._tree,
-            scanner._block_openers,
-            scanner._block_closers,
-            scanner._bracket_openers,
-            scanner._bracket_closers,
-            node.rule,
-        ):
+        # 父检查器让位判据 = 声明的括号定界语句容器（ADR-0025 D3：与发现层
+        # `_discover_bracket` 共用 `is_stmt_container` 单一口径）
+        if node.children and is_stmt_container(shape, scanner._tree, node.rule):
             for child in node.children:
                 register(child)
             return
@@ -412,7 +374,9 @@ class LinterScanner:
                     self._block_openers,
                     self._block_closers,
                     self._block_pairs,
-                    opener_prev_exclude=_derive_opener_prev_excludes(self._tree),
+                    opener_prev_exclude=_derive_opener_prev_excludes(
+                        self._tree, self._discovery._shape.clause_separators
+                    ),
                 )
             )
 

@@ -144,8 +144,8 @@ _MUTATIONS: list[dict[str, str]] = [
             info = self._tree.get(candidates[0], {}) or {}
             # 块规则（有 block_end）或括号定界语句容器（如 CompoundStmt
             # `{ @Stmt* }`）：转块分支注册节点并递归 body。
-            if info.get("block_end") or _is_bracket_stmt_container(
-                self, candidates[0], t.type
+            if info.get("block_end") or is_stmt_container(
+                self._shape, self._tree, candidates[0], t.type
             ):
                 return self._discover_block(
                     tokens, i, end, context, depth, nodes

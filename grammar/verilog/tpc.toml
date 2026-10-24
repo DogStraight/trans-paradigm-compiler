@@ -17,6 +17,8 @@ uses = [
     "preprocessor.pipeline.v1",
     "renderer.doc_ir.v1",
     "structure.protocol.v1",
+    # 语句发现形态声明（`base/_discovery.toml`，ADR-0025）：属性对/容器延续/子句分隔符
+    "discovery.shape.v1",
     "transform.slots.v1",
 ]
 
@@ -36,6 +38,9 @@ rules = { file = ["0*/*.toml"], required = true }
 
 [structure]
 protocol = { file = "base/_structure.toml", section = "structure", required = false }
+
+[discovery]
+shape = { file = "base/_discovery.toml", section = "discovery", required = false }
 
 [renderer]
 style = { file = "base/_style.toml", section = "style", required = false }

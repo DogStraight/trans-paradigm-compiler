@@ -18,6 +18,8 @@ uses = [
     "checks.rules.v1",
     # 预处理器（`base/_macro.toml` + 本文件 `[preprocessor]` 挂载，循环 #14）：宏形态声明 + 指令处理器 + 展开配置
     "preprocessor.pipeline.v1",
+    # 语句发现形态声明（`base/_discovery.toml`，ADR-0025）：括号定界语句容器 + 容器延续关键字
+    "discovery.shape.v1",
 ]
 
 [renderer]
@@ -52,5 +54,8 @@ expand = { file = "base/_macro.toml", section = "expand", required = false }
 #   `nand`（plugins/syntax/gates 的关键字）在 verilog 下无需任何 ext_dirs 即为关键字，
 #   因为 verilog 的 `[plugins] enabled` 列出了 gates。
 #   故"启用组合等效某个标准"的运行入口就在这里——c11 已启用；c17/c23 待落地后追加。
+[discovery]
+shape = { file = "base/_discovery.toml", section = "discovery", required = false }
+
 [plugins]
 enabled = ["c11", "c17", "c23"]

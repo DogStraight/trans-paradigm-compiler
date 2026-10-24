@@ -74,33 +74,50 @@ def _baseline_files() -> set[str]:
     return out
 
 
+def _is_test_fn(fn: object, min_body: int) -> bool:
+    """是否受检测试函数（`test*` 且函数体够长——太短参数化收益低于可读性损失）。"""
+    return (
+        isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and fn.name.startswith("test")
+        and len(fn.body) >= min_body
+    )
+
+
+def _group_scope(scope: list, min_body: int) -> dict[str, list[ast.FunctionDef]]:
+    """一个作用域（模块体 / 类体）内按骨架分组。"""
+    local: dict[str, list[ast.FunctionDef]] = defaultdict(list)
+    for sub in scope:
+        if _is_test_fn(sub, min_body):
+            local[_skeleton(sub)].append(sub)
+    return local
+
+
+def _collect_groups(
+    tree: ast.Module, min_body: int
+) -> dict[str, list[ast.FunctionDef]]:
+    """模块级测试函数 + `Test*` 类方法 → {骨架: 成员}。
+
+    分组按"类内 / 模块内"隔离：不同类的同名方法不互相合并
+    （类方法的骨架键加 `#class:<类名>:` 前缀）。
+    """
+    groups = dict(_group_scope(tree.body, min_body))
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+            for sig, members in _group_scope(node.body, min_body).items():
+                groups[f"#class:{node.name}:{sig}"] = members
+    return groups
+
+
 def scan(min_group: int = 4, min_body: int = 4) -> list[dict]:
     anchored = _baseline_files()
     findings: list[dict] = []
     for path in sorted((ROOT / "tests").rglob("test_*.py")):
-        rel = path.relative_to(ROOT).as_posix()
         try:
             tree = ast.parse(io.open(path, encoding="utf-8", errors="ignore").read())
         except SyntaxError:
             continue
-        groups: dict[str, list[ast.FunctionDef]] = defaultdict(list)
-        # 模块级测试函数 + `Test*` 类方法（分组按"类内/模块内"隔离——
-        # 不同类的同名方法不互相合并）
-        def _well_formed(fn: ast.FunctionDef) -> bool:
-            return fn.name.startswith("test") and len(fn.body) >= min_body
-
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _well_formed(node):
-                groups[_skeleton(node)].append(node)
-            elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
-                local: dict[str, list[ast.FunctionDef]] = defaultdict(list)
-                for sub in node.body:
-                    if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)) and _well_formed(sub):
-                        local[_skeleton(sub)].append(sub)
-                for members in local.values():
-                    if len(members) >= 2:
-                        groups[_skeleton(members[0]) + f"#class:{node.name}"] = members
-        for members in groups.values():
+        rel = path.relative_to(ROOT).as_posix()
+        for members in _collect_groups(tree, min_body).values():
             if len(members) < min_group:
                 continue
             findings.append({

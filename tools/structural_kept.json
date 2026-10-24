@@ -29,10 +29,6 @@
     "COG|parser.parser_core._atom_parser_impl": "性能缓存保持：atom 位置 memo 的命中/未命中分支是块 2 回溯收口的核心（cJSON parse 58.7→6.5s、语料门禁 90–110→29.4s；`docs/gaps/gap-parser-backtracking.md`）。分支不可再拆而不引入额外调用开销；判据 = parser/语言/e2e 套件 + A/B 0/144 + corpus 0 诊断。2026-10-23 块 2 实施判定。",
     "COG|tools.fragment_rewrite._parse_markers": "P0 片段变换记号的单层配对状态机（begin/end/嵌套/未闭合/死分支水域）分支密度高；P0 为可失败原型，P1 契约面批准后会重写为声明式规则/能力位。判据=tests/engine/test_fragment_rewrite.py（10 条）+ 死分支/负例；2026-10-23 块3 P0 判定。",
     "CC|tools.fragment_rewrite._parse_markers": "P0 片段变换记号的单层配对状态机（begin/end/嵌套/未闭合/死分支水域）分支密度高；P0 为可失败原型，P1 契约面批准后会重写为声明式规则/能力位。判据=tests/engine/test_fragment_rewrite.py（10 条）+ 死分支/负例；2026-10-23 块3 P0 判定。",
-    "COG|linter.discovery.Discovery._discover_statement": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。",
-    "CC|linter.discovery.Discovery._discover_statement": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。",
-    "COG|linter.discovery._is_bracket_stmt_container": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。",
-    "CLASS|linter/discovery.py:Discovery": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。",
-    "CLASS|linter/lookahead.py:LookaheadTable": "块 8 块内诊断粒度：`{ @Stmt* }` 语句容器递归发现 + 容器 body 内试解析失败回退候选 +父容器粗诊断让位。复杂度对应可独立验证的行为（每条坏语句各报一条位置正确诊断、非容器上下文仍报未识别）；helper 已尽量移出类体，剩余是分支语义本身。判据 = tests/languages/c/test_c_block_diagnostics.py + linter/C/Verilog/e2e 套件；2026-10-23 块 8。"
+    "CLASS|linter/lookahead.py:LookaheadTable": "模块即类（R2）判保持：类体 495 行的规模来自**多级消歧的分派面**（Level 1 前缀路径集 / Level 2 试解析 / 候选决策 / 各种 end-token 推导），每个变体一个短方法，单方法认知与 CC 均在阈下（超阈值项已各自单独下结论）。拆 mixin 只会切共享的 self._* 状态，属形式拆分。2026-10-30 复核（ADR-0025 改造后 discovery 侧容器/属性对/延续推导已全部迁出该表）。"
   }
 }

@@ -1,0 +1,16 @@
+# ============================================================================
+# 语句发现形态声明 — linter 切语句边界所需的**语言事实**
+# ============================================================================
+# 见 `grammar/c/base/_discovery.toml` 头注（为什么声明而不是推导：ADR-0025）。
+# 未声明本段 = 该语言没有这些形态（引擎按空集处理，**不猜**）。
+#
+# 字段：containers / continuations / prefix_pairs / clause_separators
+# ============================================================================
+
+[discovery]
+# else（if 链延续）/ default（case 项延续）：不单独成语句，其 body 由后续扫描发现
+continuations = ["keyword.default", "keyword.else"]
+# 属性对 (* ... *)：整体跳过、不注册语句节点（属性是元数据）
+prefix_pairs = [["bracket.l_parentheses", "symbol.base.multiple"]]
+# 子句分隔符：`use lib.cell:config` 的 `:config` 不是 config 块起始
+clause_separators = ["symbol.base.colon"]

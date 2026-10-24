@@ -7,6 +7,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **ADR-0025 实施（D1–D4）：语句发现改为声明式形态推导**——`linter/discovery.py`
+  不再靠 production 结构"猜"语法形状，新增开闭原则修复：
+  · **声明面**：语言包新增 `base/_discovery.toml`（`[discovery]` 段：`containers` /
+    `continuations` / `prefix_pairs` / `clause_separators`）+ `tpc.toml`
+    `[discovery] shape = {file, section}` + 能力 `discovery.shape.v1`
+    （`core/engine_capabilities.py`）。verilog / c 各一份声明。
+  · **引擎侧**：新增 `linter/discovery_shape.py`（`DiscoveryShape` + `load_shape` +
+    统一判定 `is_stmt_container`）；删除 `_derive_attr_openers` /
+    `_derive_continuation_openers` / `_is_bracket_stmt_container`（discovery）与
+    `_is_pure_stmt_container`（scanner）——两处近乎逐行重复的容器启发式合并为单一口径。
+  · **为什么改**（实测证据）：旧启发式在 116 个样本上的有效命中只有 `CompoundStmt`
+    一处，但对 `PortParens`/`Range`/`InitList`/`StructBody` 等 12+ 条**非容器规则**同样
+    返回 True ⇒ 它在猜；且 `[[nodiscard]] int f(void){...}` 与 `{...}` 结构同形，
+    区分依据是语义意图，只能声明。
+  · **行为零变化（硬判据）**：`eval_lint_accuracy` 33/33 召回 + FP 0；
+    `eval_diag_baseline` 5548→5548 不增长；删除函数致变异载荷失配时
+    `test_gate_efficacy_mutations` 当场变红（已同步载荷）。
+  · **量化收敛**：structural S **1110 → 1018（Δ −92，新增 0 项）**；
+    `structural_kept.json` 退场 4 条同理由豁免（`_is_bracket_stmt_container` /
+    `_discover_statement` CC+COG / `Discovery` 类），仅 `LookaheadTable` 仍超标保留。
+  · **R6 门禁债清零**：`check_hardcode.py` 移除 3 条 allowlist（discovery 属性对 2 条 +
+    scanner 子句分隔符 1 条）——引擎侧已无具体语言 token 名。
+  · **开闭自证**：临时假语言包仅声明 `[discovery]`（容器/延续/属性对/子句分隔符），
+    **不改任何引擎文件**即全部生效。
+  · 验证：全量 **4411 passed / 7 skipped**；check_doc_refs D1–D4 全 0；
+    check_hardcode PASS；tests/policy 566 passed。
+
+### Added
+
 - **审查任务 4：gap 档案冗余审查（合并 1 对 + 修 D4 孤儿）**：对 `docs/gaps/` 18 档做
   内容级相似度扫描（词元集合 Jaccard + 包含度），结论：**不存在"同一件事的不同侧面"
   式的实质重复**——最高相似度仅 J=0.131（主题相邻但材料各自独立），故不做成批合并。
