@@ -22,7 +22,7 @@ ddmin 出自 Zeller & Hildebrandt, *Simplifying and Isolating Failure-Inducing I
     python tests/fuzz/shrink.py --all --pack grammar/verilog
     python tests/fuzz/shrink.py --file tests/fuzz/findings/00012_crash_gen.v --kind crash
     python tests/fuzz/shrink.py --all --sediment tests/edge/edge_corpus --cause "..."
-    python tests/fuzz/shrink.py --file X.v --kind non-idempotent --out _drafts/min
+    python tests/fuzz/shrink.py --file X.v --kind non-idempotent --out ./min
 
 Doc: tests/fuzz/README.md（回馈链路与纪律）
 """

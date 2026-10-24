@@ -1187,7 +1187,7 @@ _MUTATIONS: list[dict[str, str]] = [
         "test": "tests/languages/verilog/test_typed_ports.py",
     },
 
-    # ── 符号表快照/回滚（task-22 三条自证 + parse 重建；原 _drafts/task22_revert.py）──
+    # ── 符号表快照/回滚（task-22 三条自证 + parse 重建）──
     {
         "why": "快照不含符号 store（回到第 7 位恒 None 的旧语义）⇒ pratt 内提前注册的"
                "符号不随回滚撤销，规则退出后残留在符号表（跨规则串味）",

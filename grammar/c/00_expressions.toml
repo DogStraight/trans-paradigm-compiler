@@ -9,7 +9,7 @@
 #     ③ 原子选择器 `PrimaryExpr` 标 `inline = true`，且 production 是**单条交替**。
 #   `ParenthesizedExpr` 内含 `@Expression` 会与 `Expression` 成环——这不是问题：
 #   上述三项齐备时环被 pratt 层截断。（阶段 3 的一次委派尝试即因缺这些标记，
-#   在 setup_grammar 报 RecursionError；产物存 `_drafts/stage3_wip/` 备查。）
+#   在 setup_grammar 报 RecursionError。）
 #
 # Layer 划分（每层落地即跑 `tests/languages/c`）：
 #   Layer A（本层）：原子（数字 / 字符串 / 标识符 / 括号）+ 选择器 + 表达式入口

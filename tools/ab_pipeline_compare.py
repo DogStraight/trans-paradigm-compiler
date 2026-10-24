@@ -18,10 +18,10 @@
 
     # 进程内档（任意语言包；对拍 lint 诊断 + 管线结果）
     python tools/ab_pipeline_compare.py --mode inproc --pack grammar/c \
-        --plugins grammar/c/plugins --sources-file _drafts/cases.txt --expect-changed 0
+        --plugins grammar/c/plugins --sources-file sources.txt --expect-changed 0
 
     # 只看差异条数是否等于期望（0 = 零用户可见变化）
-    ... --expect-changed 0 --json _drafts/_probe_out/ab.json
+    ... --expect-changed 0 --json ab.json
 
 判读：`--expect-changed N` 给定时，差异条数必须等于 N（且 verilog 语料快照必须逐字节
 相同）；不给则只报告差异、不判失败。差异清单逐条打印 PRE/POST 全值，便于写进报告。
