@@ -106,10 +106,9 @@ def _parse_pos_spec(spec: str) -> tuple[int, str | None] | None:
 
 
 def extract_from_spec(
-    self, spec: str, all_matched_nodes: list[Node], keep_comments: bool = False
+    spec: str, all_matched_nodes: list[Node], keep_comments: bool = False
 ) -> Any:
     """从属性映射规约中提取值，例如 "$3" 或 "$4.items"；非 $ 引用直接作为字面值返回"""
-    del self  # 模块级函数，self 命名仅为兼容旧调用，实际不使用
     if not isinstance(spec, str):
         return None
     parsed = _parse_pos_spec(spec)
@@ -170,7 +169,7 @@ class _AttrBinder:
         merged: list = []
         for item_spec in specs:
             extracted = extract_from_spec(
-                self.parser, item_spec, self.nodes, keep_comments=True
+                item_spec, self.nodes, keep_comments=True
             )
             if extracted is None:
                 continue
@@ -183,7 +182,7 @@ class _AttrBinder:
 
     def _bind_one(self, rule_node: Node, attr_name: str, spec: Any) -> None:
         """单值 spec：提取 → optional 解壳 → 挂载；失败走诊断。"""
-        extracted = extract_from_spec(self.parser, spec, self.nodes)
+        extracted = extract_from_spec(spec, self.nodes)
         if extracted is None:
             self._diagnose(attr_name, spec)
             return

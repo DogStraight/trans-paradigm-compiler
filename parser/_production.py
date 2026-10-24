@@ -1298,6 +1298,3 @@ def parse_plus(self, node: dict, context: ParseContext) -> Node | None:
         plus_node.add_sub_node(child) if child is not None else None
     return plus_node
 
-
-# 公开别名（保持与 parser_core 中 _repeat_loop = repeat_loop 的兼容）
-repeat_loop = _repeat_loop

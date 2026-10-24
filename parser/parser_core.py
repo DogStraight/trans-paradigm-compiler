@@ -433,7 +433,6 @@ from ._production import (
     parse_repeat,
     parse_optional,
     parse_plus,
-    repeat_loop,
     collect_following_comments,
 )
 
@@ -478,7 +477,6 @@ class Parser:
     _parse_repeat = parse_repeat
     _parse_optional = parse_optional
     _parse_plus = parse_plus
-    _repeat_loop = repeat_loop
     _process_production_node = process_production_node
     _match_productions = match_productions
     _try_rule_productions = try_rule_productions

@@ -89,17 +89,17 @@ class TestTransferCommentSlots:
 
 class TestExtractFromSpec:
     def test_out_of_range_slot_returns_none(self):
-        assert extract_from_spec(_Sink(), "$5", [Node("a")]) is None
+        assert extract_from_spec("$5", [Node("a")]) is None
 
     def test_missing_path_returns_none(self):
-        assert extract_from_spec(_Sink(), "$1.cond", [Node("x")]) is None
+        assert extract_from_spec("$1.cond", [Node("x")]) is None
 
     def test_literal_value_passthrough(self):
-        assert extract_from_spec(_Sink(), "hello", []) == "hello"
+        assert extract_from_spec("hello", []) == "hello"
 
     def test_plain_slot_returns_node(self):
         n = Node("a")
-        assert extract_from_spec(_Sink(), "$1", [n]) is n
+        assert extract_from_spec("$1", [n]) is n
 
 
 class TestGetAttrByPath:

@@ -148,14 +148,14 @@ _MUTATIONS: list[dict[str, str]] = [
                 self, candidates[0], t.type
             ):
                 return self._discover_block(
-                    tokens, i, end, context, depth, nodes, record=record
+                    tokens, i, end, context, depth, nodes
                 )
 """,
         "new": """        if candidates and isinstance(candidates[0], str):
             info = self._tree.get(candidates[0], {}) or {}
             if False:  # 变异：不转块分支
                 return self._discover_block(
-                    tokens, i, end, context, depth, nodes, record=record
+                    tokens, i, end, context, depth, nodes
                 )
 """,
         "test": "tests/languages/c4/test_c4_linter.py",

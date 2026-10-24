@@ -70,16 +70,36 @@ def _ignored_entries() -> list[str]:
     return entries
 
 
+def _classify_loose(p: Path, rel: str, tracked: set[str]) -> dict | None:
+    """单个散落文件的分类（None = 不是残留物）。
+
+    tracked 文件不凭文件名判定（须走删除判据 A 逐条复核，如
+    core/debug_report.py 是正式工具），故探针/日志两类只标未跟踪的。
+    """
+    name = p.name
+    size = p.stat().st_size
+    if name.endswith(TEMP_SUFFIXES):
+        return {"kind": "temp-suffix", "path": rel, "files": 1, "bytes": size}
+    if PROBE_NAME_RE.match(name) and p.suffix in (".py", ".ps1", ".sh"):
+        if rel not in tracked:
+            return {"kind": "probe-script", "path": rel, "files": 1,
+                    "bytes": size, "tracked": False}
+        return None
+    if "/" not in rel and ROOT_LOG_RE.match(name) and rel not in tracked:
+        return {"kind": "root-log", "path": rel, "files": 1, "bytes": size}
+    return None
+
+
+def _scan_scratch_dir(d: str) -> dict:
+    """草稿目录一项（文件数 + 总字节）。"""
+    files = [p for p in (ROOT / d).rglob("*") if p.is_file()]
+    return {"kind": "scratch-dir", "path": d, "files": len(files),
+            "bytes": sum(p.stat().st_size for p in files)}
+
+
 def scan_scratch() -> list[dict]:
     """草稿/临时文件清单（含大小），按体积降序。"""
-    found: list[dict] = []
-    for d in SCRATCH_DIRS:
-        base = ROOT / d
-        if base.is_dir():
-            files = [p for p in base.rglob("*") if p.is_file()]
-            total = sum(p.stat().st_size for p in files)
-            found.append({"kind": "scratch-dir", "path": d,
-                          "files": len(files), "bytes": total})
+    found = [_scan_scratch_dir(d) for d in SCRATCH_DIRS if (ROOT / d).is_dir()]
     tracked = set(_tracked_files())
     for p in ROOT.rglob("*"):
         if not p.is_file() or "__pycache__" in p.parts or ".git" in p.parts:
@@ -87,20 +107,9 @@ def scan_scratch() -> list[dict]:
         rel = p.relative_to(ROOT).as_posix()
         if any(rel == d or rel.startswith(d + "/") for d in SCRATCH_DIRS):
             continue
-        name = p.name
-        if name.endswith(TEMP_SUFFIXES):
-            found.append({"kind": "temp-suffix", "path": rel,
-                          "files": 1, "bytes": p.stat().st_size})
-        elif PROBE_NAME_RE.match(name) and p.suffix in (".py", ".ps1", ".sh"):
-            # 只标**未跟踪**的散落探针脚本：tracked 文件须走删除判据 A（无引用等）
-            # 逐条复核，不能凭文件名判定（如 core/debug_report.py 是正式工具）。
-            if rel not in tracked:
-                found.append({"kind": "probe-script", "path": rel,
-                              "files": 1, "bytes": p.stat().st_size,
-                              "tracked": False})
-        elif "/" not in rel and ROOT_LOG_RE.match(name) and rel not in tracked:
-            found.append({"kind": "root-log", "path": rel,
-                          "files": 1, "bytes": p.stat().st_size})
+        hit = _classify_loose(p, rel, tracked)
+        if hit is not None:
+            found.append(hit)
     found.sort(key=lambda x: -x["bytes"])
     return found
 
@@ -157,40 +166,50 @@ def _fmt(n: int) -> str:
     return f"{n/1024/1024:.1f} MB" if n >= 1024 * 1024 else f"{n/1024:.0f} KB"
 
 
+def _report_refs(refs: dict, live: bool) -> None:
+    """引用体检段：悬空引用（B3）+ 可选"仍被引用"清单。"""
+    dang = refs["dangling"]
+    print(f"\n[dangling] 已悬空引用（删除判据 B3）：{len(dang)} 条")
+    for h in dang:
+        print(f"  - {h['file']}:{h['line']} -> {h['target']} (不存在)")
+    if not live:
+        return
+    lv = refs["live"]
+    print(f"\n[live-refs] 仍存在但被引用的草稿：{len(lv)} 条（删除前须迁走/改锚）")
+    seen: set[str] = set()
+    for h in lv:
+        if h["target"] in seen:
+            continue
+        seen.add(h["target"])
+        print(f"  ! {h['target']}  <- {h['file']}:{h['line']}")
+
+
+def _report_group(kind: str, items: list[dict], limit: int = 25) -> None:
+    """单类残留段：前 limit 项明细 + 溢出计数。"""
+    tot = sum(i["bytes"] for i in items)
+    print(f"\n[{kind}] {len(items)} 项 / {_fmt(tot)}")
+    for i in items[:limit]:
+        extra = f" ({i['files']} files)" if i["files"] > 1 else ""
+        trk = ""
+        if i.get("tracked") is not None:
+            trk = " [tracked]" if i["tracked"] else " [untracked]"
+        print(f"  - {i['path']}{extra}{trk}  {_fmt(i['bytes'])}")
+    if len(items) > limit:
+        print(f"  ... 另 {len(items) - limit} 项")
+
+
 def report(findings: list[dict], refs: dict | None, live: bool) -> None:
     print("=" * 78)
     print("冗余残留扫描（dry-run，未删除任何文件）")
     print("=" * 78)
     if refs is not None:
-        dang = refs["dangling"]
-        print(f"\n[dangling] 已悬空引用（删除判据 B3）：{len(dang)} 条")
-        for h in dang:
-            print(f"  - {h['file']}:{h['line']} -> {h['target']} (不存在)")
-        if live:
-            lv = refs["live"]
-            print(f"\n[live-refs] 仍存在但被引用的草稿：{len(lv)} 条（删除前须迁走/改锚）")
-            seen = set()
-            for h in lv:
-                key = h["target"]
-                if key in seen:
-                    continue
-                seen.add(key)
-                print(f"  ! {key}  <- {h['file']}:{h['line']}")
+        _report_refs(refs, live)
     groups: dict[str, list[dict]] = {}
     for f in findings:
         groups.setdefault(f["kind"], []).append(f)
     for kind in ("scratch-dir", "ignored-dir", "temp-suffix", "probe-script", "root-log"):
-        items = groups.get(kind)
-        if not items:
-            continue
-        tot = sum(i["bytes"] for i in items)
-        print(f"\n[{kind}] {len(items)} 项 / {_fmt(tot)}")
-        for i in items[:25]:
-            extra = f" ({i['files']} files)" if i["files"] > 1 else ""
-            trk = "" if i.get("tracked") is None else (" [tracked]" if i["tracked"] else " [untracked]")
-            print(f"  - {i['path']}{extra}{trk}  {_fmt(i['bytes'])}")
-        if len(items) > 25:
-            print(f"  ... 另 {len(items)-25} 项")
+        if groups.get(kind):
+            _report_group(kind, groups[kind])
     print("\n提示：删除前按 policy/doc-alignment.md「删除判据」逐条复核；"
           "清理需显式 --clean <kind> --yes。")
 
