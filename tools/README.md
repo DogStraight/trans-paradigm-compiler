@@ -21,6 +21,7 @@
 | `lang_penetration.py` | 语言知识渗透探针（弱信号）：引擎里出现语言包规则/节点名（硬信号）+ 语言对象词作标识符（弱信号，需人工判） | L1 渗透复审 / 动 analyzer 语义面前后对照 | `docs/gaps/gap-language-penetration.md`（「判据（三条）」+「当前实测快照」） |
 | `min_pack_probe.py` | **最小语言包探针（行为面基线）**：把默认语言包换成迷你包跑引擎测试，记录"哪些引擎测试仍绿"（仍绿 = 引擎通用面）；`--record` 写基线，默认比对并「有回归即 exit 1」。机制 = `$TPC_CONFIG` 指向临时配置（**零引擎改动**）。⚠ **强制串行**（默认补 `-n 0`）——探针故意混跑双语，并行结果随 worker 分配漂移，不可作判据 | 动精化基座 / analyzer 语义面前后对照（机制见 `analyzer/elaboration/README.md`）；判"某测试是不是靠语言包声明才成立" | `docs/gaps/gap-language-penetration.md` 判据 1；基线 `tools/min_pack_baseline.json`（与探针包绑定，换包须重记；**必须串行重记**） |
 | `fragment_rewrite.py` | **片段变换 P0 原型**（记号模式）：显式行注释记号圈区域，纯语法规则 `always @(*)`→`always @*`；默认 dry-run diff、`--write` 落盘；bytes identity/死分支/假记号/fail-closed | 评估片段级改写、验证 identity/安全判据时 | `docs/gaps/gap-fragment-mode.md` |
+| `scan_redundant.py` | **冗余残留扫描（审查会话复用）**：机械识别三类残留——草稿/临时物（`_drafts/`、`*.bak|*.orig|*~|*.tmp`、未跟踪探针脚本、根目录调试日志）、gitignored 大体积产物目录、以及**指向草稿区的悬空引用**（删除判据 B3）。默认 dry-run 只报告；`--live-refs` 列出「仍被引用的草稿」（删除前须迁走，否则制造悬空引用）；`--json` 出清单；`--clean <kind> --yes` 才真删 | 审查会话任务 1（冗余文件盘点）/ 清理 `_drafts` 前后 / 收尾确认无悬空引用 | `policy/doc-alignment.md`「删除判据」 |
 | `ab_pipeline_compare.py` | **PRE(HEAD)/POST(工作树) 对拍**：`git archive HEAD` 解到临时目录跑 PRE、当前树跑 POST，逐输入 diff 诊断/`success`/`error`/`output`（CLI 档另比 stdout+exit code；`--products` 再比 `tpc format` 渲染产物），支持 `--expect-changed N`（0 = 零用户可见变化）。**只读**：不写工作树、不提交、临时目录用完即删；⚠ 共享工作区里**不要**用"写回 HEAD 版本再恢复"的做法 | 每轮改动收口证明"零变化 / 只有预期变化" | — |
 
 另有非本目录的按需门禁：

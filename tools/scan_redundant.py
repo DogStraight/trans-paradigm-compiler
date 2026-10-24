@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""tools/scan_redundant.py — 冗余残留扫描 +（可选）清理脚手架
+
+审查会话的复用工具：扫描仓库里"建议删除"的残留物，默认**只报告不删除**。
+删除必须先过"删除判据"（policy/doc-alignment.md，判据 A/B/C），脚本只做
+**机械识别**，判据归属仍需人/agent 复核——脚本不替你判定"该不该删"。
+
+扫描三类（顺序与 implement-task 审查清单一致）：
+  1. scratch    —— 草稿/临时产物：`_drafts/`、`*.bak|*.orig|*.rej|*~|*.tmp|*.swp`、
+                   `probe_*`/`_probe*`/`scratch_*`/`dbg_*` 命名脚本、根目录调试日志
+  2. ignored    —— 被 .gitignore 忽略的大体积构建产物（dist/ 等），可选 --clean
+  3. dangling   —— 指向 scratch 区的**已悬空引用**：tracked 文件里引用了
+                   scratch 路径但目标不存在（删除判据 B3「引已删目标」）
+
+只读 git 与文件系统，零第三方依赖。默认 dry-run。
+
+用法：
+    python tools/scan_redundant.py                  # 全量报告（dry-run）
+    python tools/scan_redundant.py --only scratch   # 只看草稿残留
+    python tools/scan_redundant.py --live-refs      # 额外列出"仍被引用的草稿"（删除前须迁走）
+    python tools/scan_redundant.py --json out.json  # 机器可读清单
+
+    # 真正删除（危险，需显式 --yes）：
+    python tools/scan_redundant.py --clean scratch --yes
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# 草稿/临时目录（与 .gitignore 的 scratch 区一致）
+SCRATCH_DIRS = ("_drafts",)
+TEMP_SUFFIXES = (".bak", ".orig", ".rej", "~", ".tmp", ".swp")
+# 调试/探针脚本命名（根目录或任意目录下的散落产物）
+PROBE_NAME_RE = re.compile(r"^(probe_|_probe|scratch_|dbg_|debug_|tmp_)")
+# 根目录调试日志
+ROOT_LOG_RE = re.compile(r"^(_?parser_debug\.log|pytest_.*\.txt|.*\.log)$")
+# 构建/缓存产物目录（gitignored）
+BUILD_DIRS = ("dist", "build", ".pytest_cache", "trans_paradigm_compiler.egg-info",
+              "__pycache__", "coverage_html")
+
+# 引用扫描时跳过的目录（本身是 scratch/产物，不算"引用者"）
+REF_SKIP = set(SCRATCH_DIRS) | set(BUILD_DIRS) | {".git", "node_modules", ".venv"}
+
+
+def _tracked_files() -> list[str]:
+    out = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files"], capture_output=True, text=True, check=True
+    )
+    return [l for l in out.stdout.splitlines() if l.strip()]
+
+
+def _ignored_entries() -> list[str]:
+    """gitignored 的顶层条目（含未跟踪的 scratch 区）。"""
+    out = subprocess.run(
+        ["git", "-C", str(ROOT), "status", "--ignored", "--porcelain"],
+        capture_output=True, text=True, check=True,
+    )
+    entries = []
+    for line in out.stdout.splitlines():
+        if line.startswith("!! "):
+            entries.append(line[3:].strip().strip("/"))
+    return entries
+
+
+def scan_scratch() -> list[dict]:
+    """草稿/临时文件清单（含大小），按体积降序。"""
+    found: list[dict] = []
+    for d in SCRATCH_DIRS:
+        base = ROOT / d
+        if base.is_dir():
+            files = [p for p in base.rglob("*") if p.is_file()]
+            total = sum(p.stat().st_size for p in files)
+            found.append({"kind": "scratch-dir", "path": d,
+                          "files": len(files), "bytes": total})
+    tracked = set(_tracked_files())
+    for p in ROOT.rglob("*"):
+        if not p.is_file() or "__pycache__" in p.parts or ".git" in p.parts:
+            continue
+        rel = p.relative_to(ROOT).as_posix()
+        if any(rel == d or rel.startswith(d + "/") for d in SCRATCH_DIRS):
+            continue
+        name = p.name
+        if name.endswith(TEMP_SUFFIXES):
+            found.append({"kind": "temp-suffix", "path": rel,
+                          "files": 1, "bytes": p.stat().st_size})
+        elif PROBE_NAME_RE.match(name) and p.suffix in (".py", ".ps1", ".sh"):
+            # 只标**未跟踪**的散落探针脚本：tracked 文件须走删除判据 A（无引用等）
+            # 逐条复核，不能凭文件名判定（如 core/debug_report.py 是正式工具）。
+            if rel not in tracked:
+                found.append({"kind": "probe-script", "path": rel,
+                              "files": 1, "bytes": p.stat().st_size,
+                              "tracked": False})
+        elif "/" not in rel and ROOT_LOG_RE.match(name) and rel not in tracked:
+            found.append({"kind": "root-log", "path": rel,
+                          "files": 1, "bytes": p.stat().st_size})
+    found.sort(key=lambda x: -x["bytes"])
+    return found
+
+
+def scan_ignored() -> list[dict]:
+    """gitignored 的大体积产物目录。"""
+    out = []
+    for e in _ignored_entries():
+        p = ROOT / e
+        if not p.is_dir() or e in SCRATCH_DIRS:
+            continue
+        files = [q for q in p.rglob("*") if q.is_file()]
+        out.append({"kind": "ignored-dir", "path": e, "files": len(files),
+                    "bytes": sum(q.stat().st_size for q in files)})
+    out.sort(key=lambda x: -x["bytes"])
+    return out
+
+
+def _reference_hits(needle_prefix: str) -> list[dict]:
+    """tracked 文件中对 scratch 路径的引用（悬空与否由调用方判定）。"""
+    hits = []
+    for rel in _tracked_files():
+        if any(rel == d or rel.startswith(d + "/") for d in REF_SKIP):
+            continue
+        p = ROOT / rel
+        if p.suffix not in (".py", ".md", ".toml", ".json", ".ps1", ".sh", ".yml",
+                            ".yaml", ".txt", ".cfg", ".ini"):
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if needle_prefix not in text:
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            for m in re.finditer(re.escape(needle_prefix) + r"[A-Za-z0-9_./\-]*", line):
+                target = m.group(0).rstrip(".,;)'\"")
+                hits.append({"file": rel, "line": i, "target": target})
+    return hits
+
+
+def scan_refs() -> dict:
+    """引用体检：仍存在的草稿被谁引用（live）+ 已悬空引用（dangling）。"""
+    live, dangling = [], []
+    for d in SCRATCH_DIRS:
+        for h in _reference_hits(d + "/"):
+            exists = (ROOT / h["target"]).exists()
+            h["exists"] = exists
+            (live if exists else dangling).append(h)
+    return {"live": live, "dangling": dangling}
+
+
+def _fmt(n: int) -> str:
+    return f"{n/1024/1024:.1f} MB" if n >= 1024 * 1024 else f"{n/1024:.0f} KB"
+
+
+def report(findings: list[dict], refs: dict | None, live: bool) -> None:
+    print("=" * 78)
+    print("冗余残留扫描（dry-run，未删除任何文件）")
+    print("=" * 78)
+    if refs is not None:
+        dang = refs["dangling"]
+        print(f"\n[dangling] 已悬空引用（删除判据 B3）：{len(dang)} 条")
+        for h in dang:
+            print(f"  - {h['file']}:{h['line']} -> {h['target']} (不存在)")
+        if live:
+            lv = refs["live"]
+            print(f"\n[live-refs] 仍存在但被引用的草稿：{len(lv)} 条（删除前须迁走/改锚）")
+            seen = set()
+            for h in lv:
+                key = h["target"]
+                if key in seen:
+                    continue
+                seen.add(key)
+                print(f"  ! {key}  <- {h['file']}:{h['line']}")
+    groups: dict[str, list[dict]] = {}
+    for f in findings:
+        groups.setdefault(f["kind"], []).append(f)
+    for kind in ("scratch-dir", "ignored-dir", "temp-suffix", "probe-script", "root-log"):
+        items = groups.get(kind)
+        if not items:
+            continue
+        tot = sum(i["bytes"] for i in items)
+        print(f"\n[{kind}] {len(items)} 项 / {_fmt(tot)}")
+        for i in items[:25]:
+            extra = f" ({i['files']} files)" if i["files"] > 1 else ""
+            trk = "" if i.get("tracked") is None else (" [tracked]" if i["tracked"] else " [untracked]")
+            print(f"  - {i['path']}{extra}{trk}  {_fmt(i['bytes'])}")
+        if len(items) > 25:
+            print(f"  ... 另 {len(items)-25} 项")
+    print("\n提示：删除前按 policy/doc-alignment.md「删除判据」逐条复核；"
+          "清理需显式 --clean <kind> --yes。")
+
+
+def _clean(findings: list[dict], kinds: set[str]) -> None:
+    targets = [f for f in findings if f["kind"] in kinds]
+    for t in targets:
+        p = ROOT / t["path"]
+        if not p.exists():
+            continue
+        if p.is_dir():
+            import shutil
+            shutil.rmtree(p)
+        else:
+            p.unlink()
+        print(f"  removed: {t['path']}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="冗余残留扫描（默认 dry-run）")
+    ap.add_argument("--only", choices=["scratch", "ignored"], help="只看某类")
+    ap.add_argument("--live-refs", action="store_true", help="列出仍被引用的草稿")
+    ap.add_argument("--json", metavar="PATH", help="写出 JSON 清单")
+    ap.add_argument("--clean", nargs="+", metavar="KIND",
+                    help="删除指定 kind（scratch-dir/ignored-dir/...）；需搭配 --yes")
+    ap.add_argument("--yes", action="store_true", help="确认删除（不加则只打印计划）")
+    args = ap.parse_args(argv)
+
+    findings: list[dict] = []
+    if args.only != "ignored":
+        findings += scan_scratch()
+    if args.only != "scratch":
+        findings += scan_ignored()
+
+    refs = scan_refs()
+
+    if args.json:
+        Path(args.json).write_text(
+            json.dumps({"findings": findings, "refs": refs}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"[json] {args.json}")
+
+    report(findings, refs, args.live_refs)
+
+    if args.clean:
+        kinds = set(args.clean)
+        print(f"\n[clean] 计划删除 kind={sorted(kinds)}")
+        if not args.yes:
+            print("  未加 --yes：仅打印计划，未删除。")
+            return 0
+        _clean(findings, kinds)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
