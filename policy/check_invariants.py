@@ -23,6 +23,11 @@ skill/协议只提供证伪流程。但**数据会腐烂**——规则/测试被
     python policy/check_invariants.py             # 校验并打印清单
     python policy/check_invariants.py --json      # 机器可读
 Doc: docs/invariants.toml（数据面与字段说明）
+
+边界（与 policy/check_doc_refs.py 不重叠）：
+  本门禁只解析**符号级**锚点（规则 id / 测试函数 / 变异序号），来源只有
+  docs/invariants.toml；文档/代码的**文件级**存在性归 D1-D4。
+  两门禁的锚点语法不相交，由 tests/policy/test_gate_boundary.py 锁定。
 """
 from __future__ import annotations
 

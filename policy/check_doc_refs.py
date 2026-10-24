@@ -25,6 +25,9 @@
 
 边界纪律（语义判断不进工具——与"语言知识不进代码"同构）：
 - 不做符号级存在性（须 import 代码，脆且重）→ D3 info。
+  符号级锚点的**唯一**归属是 policy/check_invariants.py（来源仅
+  docs/invariants.toml 的 gate/violation_probe）；本脚本不解析该文件，
+  两者锚点语法不相交，由 tests/policy/test_gate_boundary.py 锁定。
 - 不改 CHANGELOG 历史条目（历史不篡改）。
 - 不改正文叙述引用（`references.md「章节」` 含锚点语义）。
 

@@ -53,6 +53,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     **mechanized 必须有可解析的 gate + violation_probe**（锚点到 policy 规则 id /
     测试函数 / 变异序号），procedural 必须写清 manual_check。
     锚点失效即红——**防清单腐烂成新的封闭幻觉**。
+  · **为何不是新增重复门禁**（INV-EVOLUTION 的证据）：`check_doc_refs` 的 D3
+    明确"不做符号级存在性"（只文件级、glob 非空即过），而本门禁要解析的
+    规则 id / 测试函数 / 变异序号**都是符号级**——旧规则覆盖不到。
+    边界已双向写进两个脚本的文档，并由 `tests/policy/test_gate_boundary.py`
+    机械锁定（doc gate 只认 .md、invariants gate 拒绝 .md 锚点、两者语法不相交）。
   · 接入 CI（`policy checks` 步骤）与 `tests/policy/test_invariants_manifest.py`（9 条：
     真实清单回归 + 7 条负例证明门禁会响——"门禁存在"≠"门禁会响"）。
   · 验证：tests/policy 581 passed；check_doc_refs D1–D4 全 0；
