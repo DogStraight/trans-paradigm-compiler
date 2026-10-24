@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **审查任务 1：草稿暂存区 `_drafts/` 清空 + 冗余扫描工具**：`_drafts/`
+  （5,481 文件 / 119.9 MB，gitignored 讨论草稿区）按删除判据逐类清理：
+  vendored 外部语料副本（veryl_ref/gcc/pre_p3/pre_p3b，97.6 MB）、运行产物与
+  `__pycache__`、commit_msg/cases JSON/diff/ast 转储等编辑残留、过期的
+  `HEAD-*` 快照。
+  · **删除前先迁走活引用**（否则立即制造悬空引用，判据 B3）：5 个测试原以
+    `_drafts/taskNN_defect.py` 作"缺陷态变红"证据 → 改指 `tools/check_gate_efficacy.py`
+    的 `_MUTATIONS` 表（正式门禁 + policy 静态守卫）；其中 task-22 的 4 条符号表
+    变异此前**未被覆盖**，本轮迁入（119 条），`--only` 逐条抽查均如期变红。
+  · 片段模式（未立项，P1 待批）的设计输入原只存在于草稿 → P1/P2 契约与退出
+    判据内联进 `docs/gaps/gap-fragment-mode.md`，`ROADMAP.md` 指针同步改指该档
+    （`policy/collaboration.md` 要求设计输入/反例必须落版本库，不能只留草稿）。
+  · 新增 `tools/scan_redundant.py`：冗余残留扫描脚手架（默认 dry-run 只报告；
+    `--live-refs` 列出"仍被引用的草稿"，即删除前的放行闸；`--clean <kind> --yes`
+    才真删）。
+  · 残留引用仅 `CHANGELOG.md` 的历史条目（按反判据，CHANGELOG 历史不是删除对象）。
+  · 验证：全量 **4406 passed / 14 skipped**；check_doc_refs / check_hardcode PASS；
+    tests/policy 561 passed。
+
 ### Added
 
 - **块 10：CI 排练对齐 cp1252 控制台（#77）**：
