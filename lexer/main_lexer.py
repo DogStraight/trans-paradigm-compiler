@@ -15,7 +15,12 @@ from core.config_registry import declare_cfg
 from core.token_protocol import (
     COMMENT_TOKEN_TYPE,
     IDENT_RE,
+    LITERAL_NUMBER_TOKEN_TYPE,
+    LITERAL_PLAIN_TOKEN_TYPE,
     MACRO_CALL_TOKEN_TYPE,
+    SPACE_DEDENT_TOKEN_TYPE,
+    SPACE_FOLD_TOKEN_TYPE,
+    SPACE_INDENT_TOKEN_TYPE,
     bracket_left,
     bracket_right,
     keyword_type,
@@ -577,7 +582,7 @@ class Lexer:
             # 结构缩进
             while self.indent_deep < current_depth:
                 indent_token = Token(line=st.line, column=st.col)
-                indent_token.set_type("space.indent")
+                indent_token.set_type(SPACE_INDENT_TOKEN_TYPE)
                 indent_token.set_content(space_content)
                 st.tokens.append(indent_token)
                 self.indent_deep += 1
@@ -585,7 +590,7 @@ class Lexer:
             # 结构反缩进
             while self.indent_deep > current_depth:
                 dedent_token = Token(line=st.line, column=st.col)
-                dedent_token.set_type("space.dedent")
+                dedent_token.set_type(SPACE_DEDENT_TOKEN_TYPE)
                 dedent_token.set_content("")
                 st.tokens.append(dedent_token)
                 self.indent_deep -= 1
@@ -595,7 +600,7 @@ class Lexer:
                 len(space_content)
             ):
                 fold_token = Token(line=st.line, column=st.col)
-                fold_token.set_type("space.fold")
+                fold_token.set_type(SPACE_FOLD_TOKEN_TYPE)
                 fold_token.set_content("")
                 st.tokens.append(fold_token)
 
@@ -644,7 +649,7 @@ class Lexer:
         tok.set_content(scalar_content)
         # 关键字精化（true/false/null 等经 flat map 升级为 keyword）
         full = self.full_token_map.get(scalar_content)
-        tok.set_type(full if full is not None else "literal.plain")
+        tok.set_type(full if full is not None else LITERAL_PLAIN_TOKEN_TYPE)
         st.col += st.offset
         tok = self.refine_type(tok)
         st.tokens.append(tok)
@@ -688,7 +693,7 @@ class Lexer:
         """命中数字形态：落地 token 并推进游标（`literal.number` + refine）。"""
         self._emit_pending_dedent(st.tokens)
         st.offset = new_idx - st.idx
-        tok.set_type("literal.number")
+        tok.set_type(LITERAL_NUMBER_TOKEN_TYPE)
         tok.set_content(content)
         st.idx = new_idx
         st.col += st.offset
@@ -841,7 +846,7 @@ class Lexer:
         if self.new_line_start:
             while self.indent_deep > 0:
                 dedent_token = Token(line=0, column=0)
-                dedent_token.set_type("space.dedent")
+                dedent_token.set_type(SPACE_DEDENT_TOKEN_TYPE)
                 dedent_token.set_content("")
                 tokens.append(dedent_token)
                 self.indent_deep -= 1

@@ -16,6 +16,10 @@ lexer 产出的 token 类型遵循统一命名协议，所有消费方必须引�
 
 前缀是**引擎协议**（lexer 按此产出、下游按此消费），不是语言知识——
 语言知识是 keyword.module 这类具体名字。
+
+**纪律**：协议 token 名一律用本模块常量（`SPACE_FOLD_TOKEN_TYPE` 等），
+消费方不得写裸字符串——否则 `check_hardcode.py` R6 无法区分
+"协议词"与"语言 token 名"，只能退化成手写 allowlist（枚举幻觉）。
 Doc: core/component_protocol.md（token 类型协议）
 """
 
@@ -70,6 +74,15 @@ def macro_type(name: str) -> str:
 COMMENT_TOKEN_TYPE = "comment"
 NEWLINE_TOKEN_TYPE = "newline"
 IDENTIFIER_TOKEN_TYPE = "id"
+# 空白族（lexer 产出）：单空格 / 折行 / 缩进 / 反缩进
+SPACE_TOKEN_TYPE = "space"
+SPACE_FOLD_TOKEN_TYPE = f"{SPACE_PREFIX}fold"
+SPACE_INDENT_TOKEN_TYPE = f"{SPACE_PREFIX}indent"
+SPACE_DEDENT_TOKEN_TYPE = f"{SPACE_PREFIX}dedent"
+# 字面量族（lexer 产出）：数字 / 字符串 / 无类型标量（yaml plain）
+LITERAL_NUMBER_TOKEN_TYPE = f"{LITERAL_PREFIX}number"
+LITERAL_STRING_TOKEN_TYPE = f"{LITERAL_PREFIX}string"
+LITERAL_PLAIN_TOKEN_TYPE = f"{LITERAL_PREFIX}plain"
 MACRO_CALL_TOKEN_TYPE = "macro.call"
 # 占位 token：宏调用在解析流里的“跳过/占位”形态（**空体宏**——展开为空，
 # 如 `` `TV80DELAY ``：原地不占任何语法位置，像 trivia 一样被跳过）。
@@ -81,8 +94,8 @@ PLACEHOLDER_TOKEN_TYPE = "macro.placeholder"
 # 单一事实源——历史曾在 linter 4 个文件各定义一份（A8 去重）。
 TRIVIA_TOKEN_TYPES = frozenset(
     {
-        "space.fold",
-        "space",
+        SPACE_FOLD_TOKEN_TYPE,
+        SPACE_TOKEN_TYPE,
         COMMENT_TOKEN_TYPE,
         NEWLINE_TOKEN_TYPE,
         PLACEHOLDER_TOKEN_TYPE,

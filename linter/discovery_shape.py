@@ -28,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.config_registry import declare_cfg
+from core.errors import ConfigError
 from core.token_protocol import split_token_types
 
 # discovery.shape: 语句发现形态（语言包 tpc.toml `[discovery] shape = {file, section}`）
@@ -48,14 +49,40 @@ class DiscoveryShape:
         return (opener, second) in self.prefix_pairs
 
 
+def _parse_prefix_pairs(raw: object) -> frozenset[tuple[str, str]]:
+    """`prefix_pairs` 声明 → 二元组集合。**畸形即 fail-fast**（ADR-0003）。
+
+    不做"跳过不合法项"的静默降级：少一对前缀对会让属性区间的边界判定**悄悄**
+    退回错误形态（属性内的括号/换行截断语句），而这种错误没有可见症状。
+    """
+    if raw is None:
+        return frozenset()
+    if not isinstance(raw, (list, tuple)):
+        raise ConfigError(
+            f"[discovery] prefix_pairs 应为列表的列表（[[开 token, 次 token], ...]），"
+            f"实际是 {type(raw).__name__}"
+        )
+    pairs: set[tuple[str, str]] = set()
+    for i, item in enumerate(raw):
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ConfigError(
+                f"[discovery] prefix_pairs[{i}] 应为 [开 token, 次 token] 二元组，"
+                f"实际是 {item!r}"
+            )
+        first, second = item
+        if not isinstance(first, str) or not isinstance(second, str):
+            raise ConfigError(
+                f"[discovery] prefix_pairs[{i}] 两个元素都必须是字符串（token 名），"
+                f"实际是 {item!r}"
+            )
+        pairs.add((first, second))
+    return frozenset(pairs)
+
+
 def load_shape() -> DiscoveryShape:
     """从已加载的语言包配置构造形态（`ConfigRegistry.load_all` 之后调用）。"""
     raw = _shape_cfg or {}
-    pairs = frozenset(
-        (str(p[0]), str(p[1]))
-        for p in (raw.get("prefix_pairs") or ())
-        if isinstance(p, (list, tuple)) and len(p) == 2
-    )
+    pairs = _parse_prefix_pairs(raw.get("prefix_pairs"))
     return DiscoveryShape(
         containers=frozenset(raw.get("containers") or ()),
         continuations=frozenset(raw.get("continuations") or ()),

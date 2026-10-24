@@ -68,10 +68,20 @@ SECTION_CAPABILITY: dict[str, str] = {
     "structure": "structure.protocol",
     "discovery": "discovery.shape",
 }
-# 行政段：语言包自述与 CLI 装配，不是引擎契约面（不产生能力依赖）
+# 行政段：语言包自述 / CLI 装配 / 组件依赖，不是引擎契约面（不产生能力依赖）
+# `requires`：组件依赖元数据（`core/plugin_loader._resolve_dependencies` 拓扑排序用），
+#   声明的是"包内组件包含关系"，不是"依赖引擎哪项契约"。
 ADMIN_SECTIONS: frozenset[str] = frozenset(
-    {"engine", "plugins", "commands", "component"}
+    {"engine", "plugins", "commands", "component", "requires"}
 )
+
+# 组件**本地配置**段：只被该组件自己读（formatter 的 style/wrap 参数、
+# macro_policy 的策略参数等），不是包↔引擎契约面。与 ADMIN_SECTIONS 的区别：
+# 行政段是"包自述/装配"，本类是"组件的私有参数"。
+# ⚠ 这张表**故意是显式清单**：新增段必须先分类（门禁
+# `test_every_manifest_section_is_classified` 对未分类段报错）——
+# 否则 `required_capabilities()` 会静默漏掉它，能力协商变成空转。
+LOCAL_CONFIG_SECTIONS: frozenset[str] = frozenset({"formatter", "macro_policy"})
 
 
 def parse_use(token: str) -> tuple[str, str]:

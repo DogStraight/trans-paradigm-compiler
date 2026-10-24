@@ -15,7 +15,7 @@
    delimiters = ['"', "'"]
    escape = "\\"            # 可选：段内转义字符（见下）
    → 每个定界符展开为 kind "delim" 规则（end = 定界符自身），
-     token_type 固定为 "literal.string"。
+     token_type 固定为 LITERAL_STRING_TOKEN_TYPE。
    prefixes = { u8 = ['"'], L = ['"', "'"] }   # 可选：字面量**前缀**
    → 每个「前缀 × 允许的定界符」展开为一条 start = 前缀+定界符、end = 定界符
      的 "delim" 规则；前缀是 token 的一部分（`u8"…"` 一个 token、内容含前缀，
@@ -51,6 +51,8 @@ Doc: docs/language_walkthrough.md（注释/字符串 token 扫描）
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from core.token_protocol import LITERAL_STRING_TOKEN_TYPE
 
 
 class CaptureRule:
@@ -293,7 +295,7 @@ def _legacy_comment_rules(token_define: dict) -> list[CaptureRule]:
 
 
 def _string_delim_rules(token_define: dict) -> list[CaptureRule]:
-    """`[string] delimiters` / `prefixes` → kind "delim" / token_type "literal.string"。
+    """`[string] delimiters` / `prefixes` → kind "delim" / token_type LITERAL_STRING_TOKEN_TYPE。
 
     引擎不再硬编码引号定界符（verilog 只声明 "，yaml/c4 声明 " 与 '）。
     `escape`（可选，**段级**）声明段内转义字符：定界符内的 `\\X` 整体并入内容、
@@ -317,7 +319,7 @@ def _string_delim_rules(token_define: dict) -> list[CaptureRule]:
             )
         delims.append(delim)
     rules: list[CaptureRule] = [
-        CaptureRule(d, d, "delim", "literal.string", escape=escape) for d in delims
+        CaptureRule(d, d, "delim", LITERAL_STRING_TOKEN_TYPE, escape=escape) for d in delims
     ]
     prefixes = section.get("prefixes", {}) or {}
     if not isinstance(prefixes, dict):
@@ -343,7 +345,7 @@ def _string_delim_rules(token_define: dict) -> list[CaptureRule]:
                 )
             rules.append(
                 CaptureRule(
-                    prefix + delim, delim, "delim", "literal.string", escape=escape
+                    prefix + delim, delim, "delim", LITERAL_STRING_TOKEN_TYPE, escape=escape
                 )
             )
     return rules

@@ -20,6 +20,7 @@ import sys
 import tomllib
 
 import pytest
+from pathlib import Path
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
@@ -27,6 +28,18 @@ if _ROOT not in sys.path:
 
 from core import engine_capabilities as caps  # noqa: E402
 from core.engine_compat import check_engine_compat  # noqa: E402
+
+
+# 不产生引擎能力依赖的段：
+#   - ADMIN_SECTIONS：语言包自述 / CLI 装配 / 组件依赖（core/engine_capabilities.py）
+#   - "capabilities"：动态能力名（`capability.<k>`，由 required_capabilities 单独展开）
+#   - 组件**本地配置**段：只被该组件自己读（如 formatter 的 style/wrap 参数），
+#     不是包↔引擎契约面
+_NON_CAPABILITY_SECTIONS: frozenset[str] = frozenset(
+    set(caps.ADMIN_SECTIONS)
+    | set(caps.LOCAL_CONFIG_SECTIONS)
+    | {"capabilities"}  # 动态能力名（capability.<k>），由 required_capabilities 展开
+)
 
 
 def _packs() -> list[str]:
@@ -62,6 +75,32 @@ def test_pack_declares_every_capability_it_uses(pack):
         f"引擎改该能力时不会拦下这个包）：{sorted(derived - uses)}"
     )
     check_engine_compat(meta, f"grammar/{pack}")
+
+
+@pytest.mark.parametrize("pack", _packs())
+def test_every_manifest_section_is_classified(pack):
+    """每个清单段必须**显式分类**：行政段（ADMIN_SECTIONS）或能力段（SECTION_CAPABILITY）。
+
+    为什么需要这条（enumeration-illusion-audit）：`required_capabilities()` 按
+    `SECTION_CAPABILITY` 这张**封闭表**推导所需能力；新增一个段而忘了登记，
+    推导集里就少一项 ⇒ `derived ⊆ uses` 恒真、协商标无声 —— 正是"封闭集拟合
+    开放集"。本门禁把"忘了分类"变成红灯，强制维护者显式决定它属哪一类。
+    """
+    pack_dir = os.path.join(_ROOT, "grammar", pack)
+    unknown: list[str] = []
+    for tpc in sorted(Path(pack_dir).rglob("tpc.toml")):
+        with open(tpc, "rb") as f:
+            data = tomllib.load(f)
+        for section in data:
+            if section in _NON_CAPABILITY_SECTIONS or section in caps.SECTION_CAPABILITY:
+                continue
+            rel = os.path.relpath(tpc, _ROOT)
+            unknown.append(f"{rel}: [{section}]")
+    assert not unknown, (
+        "以下清单段未分类——请在 core/engine_capabilities.py 里显式归类"
+        "（行政段加 ADMIN_SECTIONS / 能力段加 SECTION_CAPABILITY + CAPABILITIES）：\n  "
+        + "\n  ".join(unknown)
+    )
 
 
 @pytest.mark.parametrize("pack", _packs())

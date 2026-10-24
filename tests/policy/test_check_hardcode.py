@@ -11,6 +11,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 _CHECKER_PATH = Path(__file__).resolve().parent.parent.parent / "policy" / "check_hardcode.py"
 
 
@@ -26,8 +28,28 @@ def _load_checker():
 checker = _load_checker()
 
 
+# 最小 token 协议（R6 从它派生前缀族与协议词汇；真实仓库对应
+# core/token_protocol.py，单测树必须自带，否则 R6 无法判定 ⇒ fail-fast）
+_MIN_TOKEN_PROTOCOL = '''"""最小 token 协议（单测夹具）：R6 从它派生前缀族与协议词汇。
+
+Doc: core/token_protocol.py
+"""
+
+KEYWORD_PREFIX = "keyword."
+SYMBOL_PREFIX = "symbol."
+BRACKET_L_PREFIX = "bracket.l_"
+BRACKET_R_PREFIX = "bracket.r_"
+SPACE_PREFIX = "space."
+LITERAL_PREFIX = "literal."
+MACRO_PREFIX = "macro."
+COMMENT_TOKEN_TYPE = "comment"
+NEWLINE_TOKEN_TYPE = "newline"
+SPACE_FOLD_TOKEN_TYPE = "space.fold"
+'''
+
+
 def _make_tree(tmp_path: Path, engine_code: str, keywords: tuple[str, ...] = ("zzkw",)) -> Path:
-    """构造最小扫描树：grammar/v/token.toml（[id.keyword]）+ core/a.py。"""
+    """构造最小扫描树：grammar/v/token.toml + core/a.py + core/token_protocol.py。"""
     grammar = tmp_path / "grammar" / "v"
     grammar.mkdir(parents=True)
     lines = ["[id]", "[id.keyword]"]
@@ -36,6 +58,7 @@ def _make_tree(tmp_path: Path, engine_code: str, keywords: tuple[str, ...] = ("z
     core = tmp_path / "core"
     core.mkdir()
     (core / "a.py").write_text(engine_code, encoding="utf-8")
+    (core / "token_protocol.py").write_text(_MIN_TOKEN_PROTOCOL, encoding="utf-8")
     return tmp_path
 
 
@@ -225,6 +248,25 @@ def test_rule6_ignores_comment_and_docstring(tmp_path: Path) -> None:
     code = '"""说明：symbol.base.colon 这种写法应改声明。"""\n# x = "symbol.base.colon"\ny = 1\n'
     root = _make_tree(tmp_path, code)
     assert _r6(root) == []
+
+
+def test_rule6_covers_every_protocol_prefix_family(tmp_path: Path) -> None:
+    """派生而非枚举：任一协议族（含 literal./space./macro.）的具体名都要被抓。
+
+    回归防"枚举幻觉"：旧实现手写 ("bracket.", "symbol.", "keyword.") 只覆盖
+    3/7 个族，`literal.number` 这类具体名整体逃过门禁。
+    """
+    for lit in ("literal.number", "space.indent", "macro.call", "keyword.module"):
+        root = _make_tree(tmp_path / lit.replace(".", "_"), f'x = "{lit}"\n')
+        assert len(_r6(root)) == 1, f"{lit} 未被 R6 抓住"
+
+
+def test_rule6_fails_fast_without_protocol_file(tmp_path: Path) -> None:
+    """协议文件缺失 ⇒ 显式报错（不静默降级为"零违规"）。"""
+    root = _make_tree(tmp_path, "x = 1\n")
+    (root / "core" / "token_protocol.py").unlink()
+    with pytest.raises(RuntimeError, match="token_protocol"):
+        checker.collect_findings(root)
 
 
 def test_rule6_is_gate(tmp_path: Path) -> None:

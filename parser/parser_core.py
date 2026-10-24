@@ -21,7 +21,11 @@ from core.define import (
 from core.config_registry import declare_cfg
 from core.errors import ConfigError
 from ._constants import COMMENT_TOKEN_TYPE, IDENTIFIER_TOKEN_TYPE, ROOT_RULE_NAME
-from core.token_protocol import TRIVIA_TOKEN_TYPES
+from core.token_protocol import (
+    NEWLINE_TOKEN_TYPE,
+    SPACE_FOLD_TOKEN_TYPE,
+    TRIVIA_TOKEN_TYPES,
+)
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # parser.operator_defs
@@ -36,10 +40,10 @@ _token_categories_cfg: dict = declare_cfg("parser.token_categories", {}, __name_
 
 # parser.skip_types
 #   格式: list[str] — 解析时需要跳过的空白/折叠 token 类型
-#   默认值 ["newline", "space.fold"] 是引擎 token 协议的产物（lexer 产出的
+#   默认值 [NEWLINE_TOKEN_TYPE, SPACE_FOLD_TOKEN_TYPE] 是引擎 token 协议的产物（lexer 产出的
 #   空白类型，所有语言通用），语言包可不显式声明；有特殊跳过需求时可覆盖。
 _skip_types_cfg: list[str] = declare_cfg(
-    "parser.skip_types", ["newline", "space.fold"], __name__, "_skip_types_cfg"
+    "parser.skip_types", [NEWLINE_TOKEN_TYPE, SPACE_FOLD_TOKEN_TYPE], __name__, "_skip_types_cfg"
 )
 
 # merged inline: ParseContext

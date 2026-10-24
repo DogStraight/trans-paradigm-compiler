@@ -106,20 +106,26 @@ TOKEN_ALLOWLIST: dict[str, str] = {
 # 规则 6 allowlist：引擎协议里的 **token 前缀/族**（不是具体语言名字）。
 # `core/token_protocol.py` 定义的前缀常量族是引擎词汇（KEYWORD_PREFIX 等），
 # 引擎按前缀族判断形态是正当的；写死某个具体名字（`symbol.base.colon`）才是语言知识。
-PREFIX_FAMILY_ALLOWLIST: dict[str, str] = {
-    "symbol.": "token 协议前缀族（core/token_protocol.py SYMBOL_PREFIX）",
-    "bracket.l_": "token 协议前缀族（BRACKET_L_PREFIX）",
-    "bracket.r_": "token 协议前缀族（BRACKET_R_PREFIX）",
-    "keyword.": "token 协议前缀族（KEYWORD_PREFIX）",
-    "symbol.base": "词法层构造 category 前缀（lexer 按 [symbol.base] 表扫描，非具体 token）",
-    "symbol.extend": "词法层构造 category 前缀（lexer 按 [symbol.extend] 表扫描）",
+# 规则 6 allowlist：**词法 category 前缀**（不是具体 token）。
+# 裸协议前缀族（`"symbol."` 等）不在此表——那是派生判定（`_protocol_prefix_families`），
+# 手写一遍等于把同一事实存两份。此处只留 lexer 按 `[symbol.base]` / `[symbol.extend]`
+# **表名**前缀拼接的形态（表名是语言包数据，引擎只做分类前缀拼接）。
+LEXER_CATEGORY_PREFIXES: dict[str, str] = {
+    "symbol.base": "词法层 category 前缀（lexer 按 [symbol.base] 表扫描，非具体 token）",
+    "symbol.extend": "词法层 category 前缀（lexer 按 [symbol.extend] 表扫描）",
 }
 
 # 规则 6 allowlist：按**文件**豁免的已知例外（须逐条给理由）。
 # 判定原则：引擎可以持有"引擎协议词"（见上），但不应持有某个语言的具体 token 名。
+# 按**文件**豁免的已知例外（须逐条给理由）：引擎可以持有"协议词"，不应持有
+# 某语言的具体 token 名；`__main__` 下的手工调试样例不是生产路径。
+_RULE_SELECTOR_MAIN = (
+    "`if __name__ == \"__main__\"` 下的手工调试样例"
+    "（非生产路径、不被任何模块执行）"
+)
 R6_FILE_ALLOWLIST: dict[tuple[str, str], str] = {
-    ("parser/rule_selector.py", "symbol.base.colon"):
-        "`if __name__ == \"__main__\"` 下的手工调试样例（非生产路径、不被任何模块执行）",
+    ("parser/rule_selector.py", "symbol.base.colon"): _RULE_SELECTOR_MAIN,
+    ("parser/rule_selector.py", "literal.number|literal.string"): _RULE_SELECTOR_MAIN,
 }
 
 # 规则 2 allowlist：文档化的默认语言引导路径（产品决策：verilog 为默认
@@ -193,7 +199,52 @@ def collect_grammar_keywords(root: Path) -> set[str]:
     return vocab - PY_KEYWORDS
 
 
-_CONCRETE_TOKEN_PREFIXES: tuple[str, ...] = ("bracket.", "symbol.", "keyword.")
+def _protocol_assignments(root: Path) -> list[tuple[str, str]]:
+    """读 `core/token_protocol.py` 的 `名字 = "字符串"` 赋值 → [(名, 值)]。
+
+    协议文件缺失/坏 ⇒ 显式报错（门禁不静默降级为"零违规"）。
+    """
+    proto = root / "core" / "token_protocol.py"
+    if not proto.is_file():
+        raise RuntimeError(
+            f"找不到 {proto}——R6 需从 token 协议派生前缀族/协议词汇，"
+            "不能静默降级为'零违规'"
+        )
+    try:
+        tree = ast.parse(proto.read_text(encoding="utf-8"))
+    except SyntaxError as exc:
+        raise RuntimeError(f"core/token_protocol.py 解析失败: {exc}") from exc
+    out: list[tuple[str, str]] = []
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        value = node.value
+        if (
+            isinstance(target, ast.Name)
+            and isinstance(value, ast.Constant)
+            and isinstance(value.value, str)
+        ):
+            out.append((target.id, value.value))
+    return out
+
+
+def _protocol_vocabulary(root: Path) -> tuple[tuple[str, ...], frozenset[str]]:
+    """→ (前缀族, 协议 token 名集合)，**全部从 token 协议派生，不手写枚举**。
+
+    enumeration-illusion-audit：手写 `("bracket.", "symbol.", "keyword.")` 只覆盖
+    协议族 3/7，`literal.number` / `space.indent` / `macro.call` 这类具体名会整体
+    逃过 R6。`*_PREFIX` 是前缀族；其余字符串常量是协议词汇（引擎自己产出）。
+    """
+    assigns = _protocol_assignments(root)
+    families = tuple(sorted(v for n, v in assigns if n.endswith("_PREFIX")))
+    if not families:
+        raise RuntimeError(
+            "core/token_protocol.py 里没有找到任何 `*_PREFIX` 常量——"
+            "R6 无法判定协议前缀族（门禁不静默降级）"
+        )
+    names = frozenset(v for n, v in assigns if not n.endswith("_PREFIX"))
+    return families, names
 
 
 def _iter_engine_files(root: Path) -> Iterator[Path]:
@@ -330,6 +381,24 @@ def _rule4_grammar_imports(root: Path) -> list[Finding]:
     return findings
 
 
+def _classify_token_literal(
+    lit: str, rel_key: str, families: tuple[str, ...], protocol_names: frozenset[str]
+) -> tuple[bool, str] | None:
+    """单条字面量判定 → `(是否放行, 理由)`；None = 不属协议命名空间（不管）。
+
+    放行面只有三类，且都是**可枚举的正当理由**：协议词汇常量 / 词法 category 前缀 /
+    按文件豁免的调试样例。其余一律违规（引擎持有语言 token 名）。
+    """
+    if not lit.startswith(families):
+        return None
+    if lit in families or lit in protocol_names:
+        return True, "token 协议词汇常量（core/token_protocol.py）"
+    allowed = LEXER_CATEGORY_PREFIXES.get(lit) or R6_FILE_ALLOWLIST.get((rel_key, lit))
+    if allowed is not None:
+        return True, allowed
+    return False, f"引擎写死具体语言 token 名 '{lit}'（应取语言包声明）"
+
+
 def _rule6_concrete_token_names(root: Path) -> tuple[list[Finding], list[Finding]]:
     """规则 6：引擎代码里写死**具体语言 token 名**（`bracket.l_parentheses`、
     `symbol.base.colon` 这种）。返回 (违规, allowlist 跳过)。
@@ -341,28 +410,20 @@ def _rule6_concrete_token_names(root: Path) -> tuple[list[Finding], list[Finding
     """
     violations: list[Finding] = []
     skipped: list[Finding] = []
+    families, protocol_names = _protocol_vocabulary(root)
     for rel in _iter_engine_files(root):
         text = (root / rel).read_text(encoding="utf-8")
         for line_no, lit in _iter_code_literals(text):
-            if not lit.startswith(_CONCRETE_TOKEN_PREFIXES):
+            hit = _classify_token_literal(
+                lit, str(rel).replace("\\", "/"), families, protocol_names
+            )
+            if hit is None:
                 continue
-            if lit in PREFIX_FAMILY_ALLOWLIST:
-                skipped.append(
-                    Finding("R6", str(rel), line_no, f"token 前缀族 '{lit}'",
-                            PREFIX_FAMILY_ALLOWLIST[lit])
-                )
-                continue
-            rel_key = str(rel).replace("\\", "/")
-            reason = R6_FILE_ALLOWLIST.get((rel_key, lit))
-            if reason is not None:
-                skipped.append(
-                    Finding("R6", str(rel), line_no, f"token '{lit}'", reason)
-                )
+            allowed, why = hit
+            if allowed:
+                skipped.append(Finding("R6", str(rel), line_no, f"token '{lit}'", why))
             else:
-                violations.append(
-                    Finding("R6", str(rel), line_no,
-                            f"引擎写死具体语言 token 名 '{lit}'（应取语言包声明）")
-                )
+                violations.append(Finding("R6", str(rel), line_no, why))
     return violations, skipped
 
 

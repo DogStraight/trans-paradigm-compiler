@@ -7,6 +7,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **枚举幻觉审查（enumeration-illusion-audit）：清除本轮门禁/政策改动里的
+  「封闭集拟合开放集」**——按 #78 先例复核本轮 6 个提交：
+  · **R6 前缀族手写枚举 → 从 token 协议派生**：原 `("bracket.","symbol.","keyword.")`
+    只覆盖协议族 **3/7**，`literal.number` / `space.indent` / `macro.call` 这类具体名
+    会**整体逃过门禁**。改为读 `core/token_protocol.py` 的 `*_PREFIX` 常量派生前缀族、
+    其余字符串常量派生协议词汇；协议文件缺失/坏 → **显式报错**（不静默降级为"零违规"）。
+    注入自证：`literal.number` / `keyword.module` 现均被抓（前者旧实现漏检）。
+  · **协议 token 名收口为常量**（单一来源）：`token_protocol.py` 新增
+    `SPACE_*` / `LITERAL_*` 常量并在 `TRIVIA_TOKEN_TYPES` 复用；lexer/parser 的 6 处
+    裸字符串（`"space.indent"`/`"literal.number"`/`"literal.string"` 等）改引用常量
+    ——否则 R6 无法区分"协议词"与"语言 token 名"，只能退化成手写 allowlist。
+  · **能力推导的段枚举补门禁**：`required_capabilities()` 按 `SECTION_CAPABILITY`
+    封闭表推导，**新增清单段会静默漏掉**（`derived ⊆ uses` 恒真、协商标空转）。
+    新增 `test_every_manifest_section_is_classified`（未分类段即红）；顺带发现并归类
+    现存的 `[requires]`（组件依赖，行政段）与 `[formatter]`/`[macro_policy]`
+    （组件本地配置，新增 `LOCAL_CONFIG_SECTIONS`）。
+  · **`[discovery].prefix_pairs` 畸形不再静默丢弃**：改 fail-fast（ADR-0003）——
+    少一对前缀对会让属性区边界判定悄悄退回错误形态且无可见症状。
+  · **测试夹具同步**：`test_check_hardcode` 的最小树补 `core/token_protocol.py`
+    （含 `Doc:` 头），并新增两条契约用例（派生覆盖全部协议族 / 缺协议文件必须报错）。
+  · 验证：全量 **4417 passed / 7 skipped**；check_doc_refs D1–D4 全 0；
+    check_hardcode PASS；structural S 1110 → 1018（**新增 0 项**）。
+
+### Added
+
 - **ADR-0025 实施（D1–D4）：语句发现改为声明式形态推导**——`linter/discovery.py`
   不再靠 production 结构"猜"语法形状，新增开闭原则修复：
   · **声明面**：语言包新增 `base/_discovery.toml`（`[discovery]` 段：`containers` /
