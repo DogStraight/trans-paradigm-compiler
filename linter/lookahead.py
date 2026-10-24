@@ -297,29 +297,6 @@ def _is_inline_dispatcher(info: dict, prods: list[dict]) -> bool:
     )
 
 
-def _elem_called_rules(feat: dict | None) -> set[str]:
-    """元素树里出现的所有 `@call` 规则名（递归 seq/choice/repeat/optional）。"""
-    if not isinstance(feat, dict):
-        return set()
-    typ = feat.get("type")
-    if typ == "call":
-        name = feat.get("name", "")
-        return {name} if name else set()
-    if typ == "seq":
-        out: set[str] = set()
-        for item in feat.get("items") or []:
-            out |= _elem_called_rules(item)
-        return out
-    if typ == "choice":
-        out = set()
-        for alt in feat.get("alternatives") or []:
-            out |= _elem_called_rules(alt)
-        return out
-    if typ in ("repeat", "plus", "optional"):
-        return _elem_called_rules(feat.get("elem"))
-    return set()
-
-
 def fallback_statement_names(
     keyword_map: dict, ident_candidates: list, token_type: str
 ) -> list[str]:
@@ -480,7 +457,7 @@ class LookaheadTable:
             []         = 有语句起点特征但无任何已知规则匹配（拼错关键字/残缺
                          结构头）——discovery 据此报"未识别语句"，不静默吞错。
 
-        `context` 只用于 Level 2 的**内部收敛判定**（`_allowed_in_context`），
+        `context` 只用于 Level 2 的**内部收敛判定**，
         不改变候选/返回值——用户可见面与传入值无关。
         """
         tok_type = tokens[i].type
@@ -714,13 +691,13 @@ class LookaheadTable:
         """Level 2：对每个候选完整 production 试解析，取错误最少且消费最多者。
 
         **收敛判定（内部，用户不可见）**：在 `_decide_best` 择一之外，对
-        "上下文允许的候选"（`_allowed_in_context`）另算一次：
+        "上下文允许的候选"另算一次：
           · `errs == 0` 的候选 ≥2 且最大 `consumed` 并列（`(errs, consumed)`
             无法区分） ⇒ 未收敛，reason = `ambiguous_full_match`；
           · 允许集非空但全部 `errs > 0` ⇒ 未收敛，reason = `no_full_match`
             （`[]`/未识别档）。
-        唯一最优、可区分、或允许集为空 ⇒ 收敛。未收敛只写**内部 warning**
-        （`internal_warnings()`），不改 `_decide_best` 的择一行为。
+        唯一最优、可区分、或允许集为空 ⇒ 收敛。未收敛只记内部证据，
+        不改 `_decide_best` 的择一行为。
 
         **条目形态（T2b 后）**：只带收敛证据 `kind/reason/context/pos/line/column/
         token/tied/allowed/all/region`；符号资格字段（`eligible` 等）已随 pre_scan
