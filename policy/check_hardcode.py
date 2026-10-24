@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import ast
 import io
+import keyword
 import re
 import sys
 import tokenize
@@ -65,15 +66,11 @@ EXTRA_FILES: tuple[str, ...] = ("main.py",)
 
 # 实现语言关键字：词表提取后剔除，避免 Python 自身关键字误报
 # （如 verilog 的 if/else/while 与 c4 的 return 与 Python 同名）。
-PY_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "False", "None", "True", "and", "as", "assert", "async", "await",
-        "break", "class", "continue", "def", "del", "elif", "else", "except",
-        "finally", "for", "from", "global", "if", "import", "in", "is",
-        "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try",
-        "while", "with", "yield",
-    }
-)
+# **从标准库派生，不手写**（enumeration-illusion-audit）：Python 新增硬关键字时
+# 手写表会静默漏剔除 ⇒ R1 对新关键字误报（门禁自己制造假红）。`keyword.kwlist`
+# 是语言定义的权威来源（软关键字 `match`/`case`/`type` 上下文相关，不在此列，
+# 保持既有行为不变）。实测与旧手写表 35/35 完全一致。
+PY_KEYWORDS: frozenset[str] = frozenset(keyword.kwlist)
 
 # 规则 1 allowlist：与引擎协议词表同名的 grammar 关键字（引擎自身词汇，
 # 非语言知识），逐项注明原因。新增冲突词须评审后加入。

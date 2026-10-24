@@ -7,6 +7,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **枚举幻觉审计（按 `enumeration-illusion-audit` skill 正式流程补做）**：
+  上一轮我只从 #78 提交信息反推判据、未走 skill 工作流（未用扫描器/账本/三分类）；
+  本轮补齐——扫描本次会话改动的 23 个 .py（候选 2 条，清单条目 45）：
+  · 🔴 **`PY_KEYWORDS` 手写 35 项 Python 关键字表 → 从 `keyword.kwlist` 派生**。
+    性质＝"实现语言的关键字集合"是**语言定义**的封闭集，但手写副本会随 Python
+    版本漂移（新增硬关键字 → 静默漏剔除 → R1 对引擎代码误报）。机制 L1（派生，
+    实测与旧表 35/35 完全一致，行为零变化）。
+  · ✅ **`main_lexer._scan_one` 10 分支链判为合法封闭集**：按**词法类别**固定优先级
+    分派（换行→空白→capture→plain→数字→符号→括号→转义标识符→标识符→兜底），
+    类别由 lexer 自身设计封闭、分支顺序即语义（优先级），非"一案例一分支"。
+  · 全仓基线扫描（排除 vendored/构建产物）：**77 候选 / 0 HIGH / 7 MEDIUM / 70 LOW，
+    清单条目总数 514**；7 个 MEDIUM 全为词法/插件分派链（同上 ✅ 类）。
+  · **落账**：新增 `docs/enumeration-ledger.jsonl`（首条基线），供后续 `--trend`
+    看"清单条目总数"是否只增不减。
+  · 补丁比（skill 反身性指标）：新增枚举条目 5 / 机制化改动 3 ≈ 1.67（>1）——
+    **本轮仍含补丁成分**，已记账：`LEXER_CATEGORY_PREFIXES`(2)、
+    `LOCAL_CONFIG_SECTIONS`(2)、`R6_FILE_ALLOWLIST`(+1) 是"显式分类清单"，
+    属 fail-closed 门禁的必要显式性；其中前两者可从 TOML 表名派生（后续项）。
+  · 验证：check_doc_refs D1–D4 全 0；check_hardcode PASS；tests/policy 572 passed；
+    structural S 1110 → 1018（新增 0 项）。
+
+### Added
+
 - **枚举幻觉审查（enumeration-illusion-audit）：清除本轮门禁/政策改动里的
   「封闭集拟合开放集」**——按 #78 先例复核本轮 6 个提交：
   · **R6 前缀族手写枚举 → 从 token 协议派生**：原 `("bracket.","symbol.","keyword.")`
