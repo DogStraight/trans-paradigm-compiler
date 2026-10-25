@@ -13,7 +13,6 @@ from typing import Any
 
 from core.define import GrammarRule
 from linter.first_set import first_tokens
-from core.token_protocol import split_token_types
 from parser.rule_selector import analyze_production_features
 
 

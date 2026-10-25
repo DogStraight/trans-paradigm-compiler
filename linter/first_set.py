@@ -45,7 +45,7 @@ def first_tokens(
     """计算 feature 的起始 token 集合；`nullable` 见模块 docstring。"""
     if not isinstance(feat, dict):
         return set()
-    typ = feat.get("type")
+    typ = str(feat.get("type") or "")
     if typ == "token":
         return split_token_types(feat.get("token_type", ""))
     handler = {"choice": _choice_firsts, "seq": _seq_firsts, "call": _call_firsts}.get(typ)

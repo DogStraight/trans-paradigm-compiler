@@ -32,7 +32,7 @@ checker = _load_checker()
 
 
 @pytest.fixture(autouse=True)
-def _clear_input_gaps():
+def clear_input_gaps():
     """模块级输入缺口通道必须逐用例清零，避免跨用例假绿/假红。"""
     checker._INPUT_GAPS.clear()
     yield
