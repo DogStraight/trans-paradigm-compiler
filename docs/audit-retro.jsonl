@@ -11,3 +11,4 @@
 {"at": "2026-10-25T15:44:40+0800", "retro": "验证分层（作者 2026-10-24）：只动 linter/parser 就只跑这两个部件测试；短改跑 pytest -m smoke 即当全量；我此前每轮跑全量 policy+全仓属于违反既有'按影响范围分层跑'纪律"}
 {"at": "2026-10-25T15:56:37+0800", "retro": "编码任务下发 teammate（task-1/task-2），Lead 只做流程：判据/落账/提交/闭合，避免自己既改代码又当裁判"}
 {"at": "2026-10-25T16:10:23+0800", "retro": "分层验证补丁：smoke 不覆盖 tests/policy；删 linter/matcher 的 helper 后 structural_kept 出现悬空 CLONE 键，smoke 全绿却没抓到——涉及符号删除时必须加跑 tests/policy/test_structural_kept.py"}
+{"at": "2026-10-25T16:43:39+0800", "retro": "D3 收口为不删：57 项候选的成本在 min_pack 基线重录，不在参数化本身；这条要写进 not_doing 防反复争论"}
