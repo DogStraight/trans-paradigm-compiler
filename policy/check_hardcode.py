@@ -192,6 +192,10 @@ def collect_grammar_keywords(root: Path) -> set[str]:
     vocab: set[str] = set()
     grammar_dir = root / "grammar"
     if not grammar_dir.is_dir():
+        _record_parse_failure(
+            grammar_dir,
+            "输入面缺失: grammar/ 目录不存在，R1 词表为空（零检查）",
+        )
         return vocab
     for toml_path in grammar_dir.rglob("*.toml"):
         try:
@@ -276,6 +280,10 @@ def _iter_test_files(root: Path) -> Iterator[Path]:
     """
     tests_dir = root / "tests"
     if not tests_dir.is_dir():
+        _record_parse_failure(
+            tests_dir,
+            "输入面缺失: tests/ 目录不存在，R5 将零文件检查",
+        )
         return
     for path in sorted(tests_dir.rglob("*.py")):
         rel = path.relative_to(root).as_posix()

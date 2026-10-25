@@ -8,6 +8,7 @@ Doc: tests/policy/test_check_hardcode.py
 """
 
 import importlib.util
+import shutil
 import sys
 from pathlib import Path
 
@@ -330,3 +331,48 @@ def test_strict_parse_turns_failures_into_gate_failure(tmp_path: Path) -> None:
     assert checker.main(["--root", str(root), "--strict-parse", "--quiet"]) == 1
     checker.PARSE_FAILURES.clear()
     assert checker.main(["--root", str(root), "--quiet"]) == 0
+
+
+def test_missing_grammar_dir_is_recorded_and_fails_closed(tmp_path: Path, capsys) -> None:
+    """grammar/ 缺失 ⇒ R1 零词表必须可见：默认告警、--strict-parse 判失败。"""
+    root = _make_tree(tmp_path, "x = 1\n")
+    shutil.rmtree(root / "grammar")
+    (root / "tests").mkdir()  # 隔离本用例，只观察 grammar/ 缺失
+
+    checker.PARSE_FAILURES.clear()
+    checker.collect_findings(root)
+    assert any(
+        "grammar" in path and "输入面缺失" in reason
+        for path, reason in checker.PARSE_FAILURES
+    ), checker.PARSE_FAILURES
+
+    checker.PARSE_FAILURES.clear()
+    assert checker.main(["--root", str(root), "--quiet"]) == 0
+    out = capsys.readouterr().out
+    assert "[告警]" in out and "grammar" in out, out
+
+    checker.PARSE_FAILURES.clear()
+    assert checker.main(["--root", str(root), "--quiet", "--strict-parse"]) == 1
+    checker.PARSE_FAILURES.clear()
+
+
+def test_missing_tests_dir_is_recorded_and_fails_closed(tmp_path: Path, capsys) -> None:
+    """tests/ 缺失 ⇒ R5 零文件必须可见：默认告警、--strict-parse 判失败。"""
+    root = _make_tree(tmp_path, "x = 1\n")
+    assert not (root / "tests").exists()
+
+    checker.PARSE_FAILURES.clear()
+    checker.collect_findings(root)
+    assert any(
+        "tests" in path and "输入面缺失" in reason
+        for path, reason in checker.PARSE_FAILURES
+    ), checker.PARSE_FAILURES
+
+    checker.PARSE_FAILURES.clear()
+    assert checker.main(["--root", str(root), "--quiet"]) == 0
+    out = capsys.readouterr().out
+    assert "[告警]" in out and "tests" in out, out
+
+    checker.PARSE_FAILURES.clear()
+    assert checker.main(["--root", str(root), "--quiet", "--strict-parse"]) == 1
+    checker.PARSE_FAILURES.clear()
