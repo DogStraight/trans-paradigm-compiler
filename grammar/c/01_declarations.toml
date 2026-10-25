@@ -91,11 +91,12 @@ capture = { specs = "specs", specs_rest = "rest" }
 
 
 # ── 说明符三层规则（存储类 / 类型限定符 / 类型说明符） ──
-# ⚠ **形态约束（实测得出，勿随意改）**：本仓的语句发现/FIRST 集推导按
-#   `split_token_types` 口径解析**不带括号的 token 交替** `a|b|c`；写成带括号的组
-#   `"(a|b|c)"` 时整串会被当成**一个** token 类型（`_first_token_of_spec` 的
-#   退化分支），该规则的首 token 静默缺失 → 解析出空 AST。
-#   故此处三处关键字交替一律用**裸交替**（同 yaml 的 `"@Scalar|@MergeKey"` 形态）。
+# ⚠ **形态约束（历史教训，勿随意改）**：本仓的语句发现/FIRST 集推导会按
+#   `split_token_types` 口径拆 token 交替 `a|b|c`；旧浅实现曾把带括号的组
+#   `"(a|b|c)"` 整串当成**一个** token 类型，致该规则首 token 静默缺失 →
+#   解析出空 AST。现 FIRST 由 `rule_selector`/`follow` 的 feature 树统一处理
+#   （带括号与裸交替均可拆），但此处三处关键字交替仍统一用**裸交替**
+#   （同 yaml 的 `"@Scalar|@MergeKey"` 形态），保持语法写法一致。
 #   分层（存储类 / 限定符 / 类型说明符）是**语法形态**而非语义判定——组合合法性
 #   仍归语义层。
 

@@ -125,19 +125,6 @@ def match_productions(
     return all_matched_nodes
 
 
-def _first_token_of_spec(spec: str, grammar_rules: dict) -> set[str]:
-    """计算一个产生式规格字符串的起始 token 类型集合。"""
-    raw = spec.rstrip("?+*")
-    if raw.startswith("@"):
-        rule = grammar_rules.get(raw[1:])
-        if rule:
-            prods = getattr(rule, "production", [])
-            if prods:
-                return _first_token_of_spec(prods[0], grammar_rules)
-        return set()
-    return {raw}
-
-
 # ── 规则匹配全流程 ──
 
 

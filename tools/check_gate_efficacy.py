@@ -1220,6 +1220,31 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        context = ParseContext(tokens)  # 变异：不重建、不绑定符号 store\n",
         "test": "tests/engine/parser/test_symbol_rollback.py",
     },
+    # ── D5 补齐：三个默认 policy gate 的直接变异（task-3）──
+    {
+        "why": "D1 的 Doc: 目标存在性若被关掉（if False）⇒ 删文档后门禁不会红；"
+               "本变异证明 tests/policy/test_check_doc_refs.py 真的握着缺失目标检测分支",
+        "file": "policy/check_doc_refs.py",
+        "old": "            if not (root / target).is_file():\n",
+        "new": "            if False:  # 变异：D1 不再报告缺失目标\n",
+        "test": "tests/policy/test_check_doc_refs.py",
+    },
+    {
+        "why": "R1 若不按 grammar 词表判定（所有字面量一律跳过）⇒ 引擎写死语言 token 也不会红；"
+               "本变异证明 tests/policy/test_check_hardcode.py 真的握着 R1 的违规分支",
+        "file": "policy/check_hardcode.py",
+        "old": "            if lit not in vocab:\n                continue\n",
+        "new": "            if True:  # 变异：R1 全部跳过\n                continue\n",
+        "test": "tests/policy/test_check_hardcode.py",
+    },
+    {
+        "why": "R2 若不检查 grammar 相对路径字面量（所有字面量一律跳过）⇒ 引擎硬编码路径也不会红；"
+               "本变异证明 tests/policy/test_check_hardcode.py 真的握着 R2 的违规分支",
+        "file": "policy/check_hardcode.py",
+        "old": "            if not _PATH_LITERAL_RE.match(lit):\n                continue\n",
+        "new": "            if True:  # 变异：R2 全部跳过\n                continue\n",
+        "test": "tests/policy/test_check_hardcode.py",
+    },
 ]
 
 
