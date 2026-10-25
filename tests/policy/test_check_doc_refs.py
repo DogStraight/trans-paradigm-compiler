@@ -8,6 +8,7 @@ Doc: tests/policy/test_check_doc_refs.py
 """
 
 import importlib.util
+import shutil
 import sys
 from pathlib import Path
 
@@ -28,6 +29,15 @@ def _load_checker():
 
 
 checker = _load_checker()
+
+
+@pytest.fixture(autouse=True)
+def _clear_input_gaps():
+    """模块级输入缺口通道必须逐用例清零，避免跨用例假绿/假红。"""
+    checker._INPUT_GAPS.clear()
+    yield
+    checker._INPUT_GAPS.clear()
+
 
 pytestmark = pytest.mark.smoke  # smoke：policy 组代表（D1-D4 文档门禁，含真仓库回归）
 
@@ -300,6 +310,58 @@ def test_main_d3_info_not_gate(tmp_path: Path) -> None:
 def test_repo_gate_clean() -> None:
     """真实仓库根：D1/D2 必须零违规（文档调用点防断链进测试套件）。"""
     root = Path(__file__).resolve().parent.parent.parent
+    checker._INPUT_GAPS.clear()
     results = checker.collect_findings(root).results
+    assert checker._INPUT_GAPS == []
     assert results["D1"].violations == []
     assert results["D2"].violations == []
+
+
+def test_missing_docs_dir_is_recorded_and_fails_closed(tmp_path: Path, capsys) -> None:
+    """docs/ 缺失 ⇒ D1/D3/D4 零检查必须可见：默认告警、--strict-input 判失败。"""
+    root = _make_tree(tmp_path)
+    shutil.rmtree(root / "docs")
+    assert not (root / "docs").exists()
+
+    checker._INPUT_GAPS.clear()
+    checker.collect_findings(root)
+    assert any(
+        "docs" in path and "docs/ 目录不存在" in reason
+        for path, reason in checker._INPUT_GAPS
+    ), checker._INPUT_GAPS
+
+    checker._INPUT_GAPS.clear()
+    assert checker.main(["--root", str(root), "--quiet"]) == 0
+    out = capsys.readouterr().out
+    assert "[告警]" in out and "docs/" in out, out
+
+    checker._INPUT_GAPS.clear()
+    assert checker.main(["--root", str(root), "--quiet", "--strict-input"]) == 1
+    checker._INPUT_GAPS.clear()
+
+
+def test_missing_nav_indexes_is_recorded_and_fails_closed(tmp_path: Path, capsys) -> None:
+    """导航索引缺失 ⇒ D2 零检查必须可见：默认告警、--strict-input 判失败。"""
+    root = _make_tree(tmp_path, docs={"docs/api.md": "# API\n"})
+    for nav_rel in checker.NAV_FILES:
+        nav_path = root / nav_rel
+        if nav_path.is_file():
+            nav_path.unlink()
+    assert not any((root / rel).is_file() for rel in checker.NAV_FILES)
+
+    checker._INPUT_GAPS.clear()
+    checker.collect_findings(root)
+    assert any(
+        "导航索引" in reason and "README.md" in reason
+        for _path, reason in checker._INPUT_GAPS
+    ), checker._INPUT_GAPS
+    assert len([1 for _p, r in checker._INPUT_GAPS if "导航索引" in r]) == 4
+
+    checker._INPUT_GAPS.clear()
+    assert checker.main(["--root", str(root), "--quiet"]) == 0
+    out = capsys.readouterr().out
+    assert "[告警]" in out and "导航索引" in out, out
+
+    checker._INPUT_GAPS.clear()
+    assert checker.main(["--root", str(root), "--quiet", "--strict-input"]) == 1
+    checker._INPUT_GAPS.clear()

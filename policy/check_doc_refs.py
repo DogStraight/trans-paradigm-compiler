@@ -33,9 +33,11 @@
 
 用法：
   python policy/check_doc_refs.py             # 门禁规则 D1/D2
+  python policy/check_doc_refs.py --strict-input  # 输入面缺失也判失败
   python policy/check_doc_refs.py --root <dir>   # 指定扫描根（测试用）
 
-退出码：0 = 门禁规则全干净；1 = 存在门禁违规（D1/D2）。
+退出码：0 = 门禁规则全干净；1 = 存在门禁违规（D1/D2）或在
+        --strict-input 下存在输入面缺失（docs/ 或导航索引）。
 
 Doc: policy/doc-alignment.md
 """
@@ -90,6 +92,16 @@ _BARE_REF_RE = re.compile(
     r"`((?:decisions|gaps)/[A-Za-z0-9_./-]+\.md|[\w-]+\.md)`"
 )
 
+# ── 输入面缺失可见通道（D6 fail-closed）──────────────────────────────
+_INPUT_GAPS: list[tuple[str, str]] = []
+
+
+def _record_input_gap(path: object, reason: str) -> None:
+    entry = (str(path), reason)
+    if entry not in _INPUT_GAPS:  # 去重键必须是 (path, reason)
+        _INPUT_GAPS.append(entry)
+
+
 # ── 引擎目录（D1 扫描范围：引擎 + 测试 + 工具 + 插件代码都可能有 Doc: 头）──
 _SCAN_EXCLUDE_DIRS: tuple[str, ...] = (
     ".git",
@@ -142,11 +154,29 @@ def _iter_py_files(root: Path) -> Iterator[Path]:
 
 
 def _iter_doc_files(root: Path) -> Iterator[Path]:
-    """产出 docs/ 下全部 .md 文件（相对 root）。"""
+    """产出 docs/ 下全部 .md 文件（相对 root）；缺失即记录输入面缺口。"""
     docs_dir = root / "docs"
-    if docs_dir.is_dir():
-        for path in sorted(docs_dir.rglob("*.md")):
-            yield path.relative_to(root)
+    if not docs_dir.is_dir():
+        _record_input_gap(
+            docs_dir,
+            "输入面缺失: docs/ 目录不存在，D1/D3/D4 将零文件检查",
+        )
+        return
+    for path in sorted(docs_dir.rglob("*.md")):
+        yield path.relative_to(root)
+
+
+def _iter_nav_indexes(root: Path) -> Iterator[tuple[str, Path]]:
+    """产出存在的导航索引；缺失项记录输入面缺口（D2 会跳过）。"""
+    for nav_rel in NAV_FILES:
+        nav_path = root / nav_rel
+        if not nav_path.is_file():
+            _record_input_gap(
+                nav_path,
+                f"输入面缺失: 导航索引 {nav_rel} 不存在，D2 将跳过该文件",
+            )
+            continue
+        yield nav_rel, nav_path
 
 
 # ── D1：代码 Doc: 头目标存在性 ─────────────────────────────────────────────
@@ -232,10 +262,7 @@ def _check_nav_line(
 def _rule_d2_nav_indexes(root: Path) -> list[Finding]:
     """规则 D2（gate）：导航索引引用的 docs 文件必须存在。"""
     findings: list[Finding] = []
-    for nav_rel in NAV_FILES:
-        nav_path = root / nav_rel
-        if not nav_path.is_file():
-            continue
+    for nav_rel, nav_path in _iter_nav_indexes(root):
         text = nav_path.read_text(encoding="utf-8", errors="replace")
         for line_no, line in _iter_md_lines(text):
             _check_nav_line(line, nav_rel, line_no, root, findings)
@@ -433,14 +460,23 @@ def _collect_d2_targets(root: Path) -> set[str]:
     引用），D2 规则则跳过代码块——沿用原实现的这种不对称（孤儿集是超集）。
     """
     targets: set[str] = set()
-    for nav_rel in NAV_FILES:
-        nav_path = root / nav_rel
-        if not nav_path.is_file():
-            continue
+    for _nav_rel, nav_path in _iter_nav_indexes(root):
         text = nav_path.read_text(encoding="utf-8", errors="replace")
         for line in text.splitlines():
             targets.update(_nav_line_targets(line, root))
     return targets
+
+
+def _report_input_gaps(strict: bool) -> int:
+    """输入面缺失可见通道 → 返回是否应判失败（1/0）。"""
+    if not _INPUT_GAPS:
+        return 0
+    print(f"[告警] {len(_INPUT_GAPS)} 处输入面缺失，**未纳入检查**：")
+    for path, reason in _INPUT_GAPS[:10]:
+        print(f"  {path}: {reason}")
+    if len(_INPUT_GAPS) > 10:
+        print(f"  ...另有 {len(_INPUT_GAPS) - 10} 处")
+    return 1 if strict else 0
 
 
 def _print_findings(title: str, findings: Sequence[Finding]) -> None:
@@ -461,6 +497,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--root", default=None, help="扫描根目录（默认仓库根；测试/诊断用）")
     parser.add_argument("--quiet", action="store_true", help="只输出违规与结论")
+    parser.add_argument(
+        "--strict-input",
+        action="store_true",
+        help="输入面缺失即判门禁失败（默认仅打印告警）",
+    )
     args = parser.parse_args(argv)
 
     root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
@@ -477,6 +518,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not args.quiet:
             print(f"── 规则 {rule_id} [{label}]")
         _print_findings(f"{rule_id} 发现", res.violations)
+
+    if _report_input_gaps(args.strict_input):
+        print("[FAIL] 存在输入面缺失（--strict-input）")
+        return 1
 
     gate_findings = sum(len(results[r].violations) for r in gate)
     if gate_findings:
