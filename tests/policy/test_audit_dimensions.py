@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 REGISTRY = ROOT / "docs" / "audit_dimensions.toml"
 REQUIRED = ("id", "name", "origin", "closure", "status")
 TODO = "todo"
+ADHOC = "adhoc"  # 每次现写的探针（作者 2026-10-24 定：不入库，避免堆积失效探针）
 
 
 def _dims() -> list[dict]:
@@ -44,10 +45,18 @@ def test_todo_dimensions_have_trigger() -> None:
             assert d.get("trigger"), f"{d['id']} 标 todo 却没有 trigger（黑洞）"
 
 
+def test_adhoc_dimensions_declare_recipe() -> None:
+    """ad-hoc 探针：不要求入库实现，但必须写清"每次怎么现写"，否则等于没有探针。"""
+    for d in _dims():
+        if d.get("probe") == ADHOC:
+            assert len(d.get("adhoc", "").strip()) >= 12, f"{d['id']} 缺 adhoc 配方"
+            assert d.get("trigger"), f"{d['id']} 标 adhoc 却没有 trigger"
+
+
 def test_closed_dimensions_have_real_probe() -> None:
     for d in _dims():
         if d["status"] == "closed":
-            assert d.get("probe", TODO) != TODO, (
+            assert d.get("probe", TODO) not in (TODO, ADHOC), (
                 f"{d['id']} 无探针却标 closed——不允许"
             )
 

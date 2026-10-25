@@ -178,7 +178,6 @@ CONSTANT: dict[str, str] = {
     "lexer.capture_runner._CAPTURE_HANDLERS": "capture kind → 终止条件 handler 分发表（只读，`_VALID_KINDS` 由它派生）",
     "lexer.number_gen._CHAR_CATEGORY": "字符类别字面量表",
     "linter.checkers.expression.ExpressionChecker._MAX_DEPTH": "最大递归深度常量",
-    "linter.grammar_slicer._FIRST_HANDLERS": "元素类型→First 集 handler 分发表（只读字面量）",
     "main._CMD_DEFAULTS": "CLI 子命令默认值",
     "parser._production._DISPATCH": "节点分发表字面量",
     "parser.rule_selector.SEPARATOR_HANDLERS": "production 分隔符处理器表（模块级字面量）",

@@ -12,6 +12,7 @@ Doc: linter/linter_architecture.md
 from typing import Any
 
 from core.define import GrammarRule
+from linter.first_set import first_tokens
 from core.token_protocol import split_token_types
 from parser.rule_selector import analyze_production_features
 
@@ -97,75 +98,6 @@ def get_start_tokens(parsed: list[dict], tree: dict | None = None) -> set[str]:
     return _collect_first_start_tokens(parsed[0], tree)
 
 
-def _token_first(feat: dict, _tree: dict | None) -> set[str]:
-    """字面量 token 元素：首 token 即其类型（多候选 `A|B` 拆开）。
-
-    与 matcher / rule_selector 同口径（`split_token_types`）——否则含 `|`
-    的整串不会与实际 token 匹配，该规则的首 token 会静默缺失。
-    """
-    return split_token_types(feat["token_type"])
-
-
-def _call_firsts(feat: dict, tree: dict | None) -> set[str]:
-    """`@rule` 引用：块规则并入 block_start，其余取首个 production 的 First 集。
-
-    块规则：block_start 已从 production 剥离（如 BeginEnd 的 keyword.begin），
-    需并入 firsts——否则 @BeginEnd 等块候选的首 token 收集缺失，导致
-    Stmt/CtrlStmt firsts 漏掉 begin（matcher @Stmt 起始校验失灵）。
-    """
-    if tree is None:
-        return set()
-    info = tree.get(feat.get("name", ""))
-    if info is None:
-        return set()
-    result: set[str] = set()
-    bs = info.get("block_start") or ""
-    if bs:
-        result.add(bs)
-    # inline 规则取第一个 production 的 First 集
-    prods = info.get("prods", [])
-    if not prods:
-        return result
-    result |= _collect_first_start_tokens(prods[0], tree)
-    return result
-
-
-def _choice_firsts(feat: dict, tree: dict | None) -> set[str]:
-    """choice：所有分支 First 集的并。"""
-    result: set[str] = set()
-    for alt in feat.get("alternatives", []):
-        result |= _collect_first_start_tokens(alt, tree)
-    return result
-
-
-def _seq_firsts(feat: dict, tree: dict | None) -> set[str]:
-    """seq：只有首个元素能作起始。"""
-    items = feat.get("items", [])
-    return _collect_first_start_tokens(items[0], tree) if items else set()
-
-
-def _repeat_firsts(feat: dict, tree: dict | None) -> set[str]:
-    """repeat/plus：下钻到被重复元素。"""
-    elem = feat.get("elem")
-    return _collect_first_start_tokens(elem, tree) if elem else set()
-
-
-# 元素类型 → First 集计算。未列出者（含 optional——可选元素的首 token 非强制
-# 起始）一律空集。
-_FIRST_HANDLERS: dict[str, Any] = {
-    "token": _token_first,
-    "call": _call_firsts,
-    "choice": _choice_firsts,
-    "seq": _seq_firsts,
-    "repeat": _repeat_firsts,
-    "plus": _repeat_firsts,
-}
-
-
 def _collect_first_start_tokens(feat: dict | None, tree: dict | None = None) -> set[str]:
-    """递归收集单个元素的起始 token。"""
-    if feat is None:
-        return set()
-    key = feat.get("type")
-    handler = _FIRST_HANDLERS.get(key) if isinstance(key, str) else None
-    return handler(feat, tree) if handler else set()
+    """强制起始 token（保守语义）——薄封装单一实现，见 linter/first_set.py。"""
+    return first_tokens(feat, tree, nullable=False)

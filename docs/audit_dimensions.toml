@@ -2,7 +2,7 @@
 #
 # 每个维度必须二选一：
 #   probe = "<可执行命令>"   → 该维度**可判定**，循环里能自动跑
-#   probe = "todo"           → 还没有探针，必须写 trigger（什么情况下必须补）
+#   probe = "adhoc"           → 还没有探针，必须写 trigger（什么情况下必须补）
 # 硬规则（tests/policy/test_audit_dimensions.py 校验）：
 #   · status = "closed" 的维度**必须有 probe**（没探针不允许宣布关闭）
 #   · todo 维度必须有 trigger（否则它就是"以后再说"的黑洞）
@@ -23,7 +23,8 @@ probe = "python tools/scan_redundant.py --only scratch"
 proxies = "仓库里没有指向不存在产物的引用，也没有该删未删的草稿"
 invalidated_if = "草稿区改名/取消，或引用改为配置注入（扫描器就看不见真实引用）"
 closure = "scratch 无残留；悬空引用仅剩 CHANGELOG 历史（不可改）"
-status = "open"
+status = "closed"
+closed_evidence = "悬空引用 16 条全为 CHANGELOG 历史，按反判据不改；scratch 无残留"
 
 [[dimension]]
 id = "D2"
@@ -53,14 +54,16 @@ probe = "python policy/check_doc_refs.py"
 proxies = "缺口档没有孤儿、没有同根因多档、引用未断链"
 invalidated_if = "缺口档改为别的组织形式（如并入 issues/看板），D4 的统计口径失效"
 closure = "D1-D4 全 0；同根因多档已合并；未合并的给出 Jaccard 证据"
-status = "open"
+status = "closed"
+closed_evidence = "Jaccard≤0.131 无实质重复，已合并 1 对同根因；D3/D4 全 0"
 
 [[dimension]]
 id = "D5"
 name = "门禁有效性（假绿）"
 origin = "agent"
-probe = "todo"
+probe = "adhoc"
 trigger = "新增或修改任何 policy/ 门禁时，必须为它加一条变异并跑 check_gate_efficacy"
+adhoc = "AST/文本扫 policy/ 各门禁是否有变异条目；每次现写，不入库"
 proxies = "每个门禁在被违反时确实会红（不是只在干净树上通过）"
 invalidated_if = "门禁改为外部服务/CI-only 校验，变异注入不再能触达"
 closure = "每个门禁至少一条变异能证明它变红；变异载荷与当前源码匹配"
@@ -70,8 +73,9 @@ status = "open"
 id = "D6"
 name = "静默降级（fail-open）"
 origin = "agent"
-probe = "todo"
+probe = "adhoc"
 trigger = "发现一次'跳过/丢弃但不记录'的路径，或新增任何 except/continue 兜底"
+adhoc = "AST 扫 except→给默认值/continue 与 if-not→return（作用域 policy/ + 配置加载面）"
 proxies = "无异常参与的丢弃（catch 后给默认值/if 不满足就返回）也会留可见痕迹，不会变成零违规"
 invalidated_if = "丢弃路径改为统一 helper（如 _skip(reason)），AST 形态识别不再覆盖真实出口"
 compare_tool = "slopcop（外部二进制，分钟级，不进门禁）"
@@ -84,8 +88,9 @@ status = "open"
 id = "D7"
 name = "测试断言强度"
 origin = "agent"
-probe = "todo"
+probe = "adhoc"
 trigger = "出现一次'测试全绿但回归未被拦住'的事故"
+adhoc = "AST 扫断言只查真值性/非空；配合外部工具对照，每次现写"
 proxies = "测试断言检查具体值/错误码，而不是只检查非空/不抛异常"
 invalidated_if = "断言风格转向快照/属性测试，弱断言口径不再适用"
 closure = "弱断言（仅真值性/非空/不抛异常）占比有基线且不上升；同源测试为 0"
@@ -99,14 +104,16 @@ probe = "python -m pytest tests/policy/test_structural_kept.py -q"
 proxies = "kept/baseline/ledger 的条目都还能解析到存在的符号或测试节点"
 invalidated_if = "账本改为自动生成（不再手工维护），腐化模式随之消失"
 closure = "所有 kept/baseline/ledger 条目可解析到存在的符号或测试节点"
-status = "open"
+status = "closed"
+closed_evidence = "test_structural_kept 绿；kept 条目均可解析"
 
 [[dimension]]
 id = "D9"
 name = "跨平台与编码假设"
 origin = "agent"
-probe = "todo"
+probe = "adhoc"
 trigger = "出现一次只在 Windows/某 locale 下失效的门禁或测试"
+adhoc = "AST 扫 open()/read_text() 缺 encoding、str(path) 参与比较、反斜杠字面量判断"
 proxies = "代码不依赖 locale 编码、路径分隔符、文件系统排序"
 invalidated_if = "开发/CI 统一到单一容器环境，跨平台差异不再暴露"
 closure = "open()/read_text() 无缺省编码；路径比较无 str(path) 拼接；无反斜杠字面量判断"

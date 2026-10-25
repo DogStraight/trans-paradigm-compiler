@@ -20,6 +20,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 from core.define import Token
+from linter.first_set import first_tokens
 from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia, split_token_types
 
 from .. import LintDiagnostic, token_span
@@ -802,80 +803,20 @@ class RuleMatcher:
         return self._match_optional(tokens, i, node, errors, limit)
 
     def _first_tokens(self, feat: dict, visited: set) -> set[str]:
-        """递归计算 feature 的必然首 token 类型集合（防环）。
-
-        逐类型实现分在 `_first_of_*`：call 带块起始/可空传播（最重）、
-        seq/choice 为并集、optional·repeat·plus 取其 elem。
-        """
-        typ = feat.get("type", "")
-        if typ == "call":
-            return self._first_of_call(feat, visited)
-        if typ == "seq":
-            return self._nullable_after(feat.get("items", []), visited)
-        if typ == "choice":
-            return self._first_of_choice(feat, visited)
-        if typ in ("optional", "repeat", "plus"):
-            return self._first_tokens(feat.get("elem", {}) or {}, visited)
-        if typ == "token":
-            return split_token_types(feat.get("token_type", ""))
-        return set()
-
-    def _first_of_call(self, feat: dict, visited: set) -> set[str]:
-        """call：目标规则首元素 firsts + block_start + **可空前缀传播**。
-
-        块规则：block_start 已从 production 剥离（如 BeginEnd 的
-        keyword.begin），需并入 firsts，否则 @BeginEnd 等块候选的
-        首 token 收集缺失（Stmt/CtrlStmt firsts 漏 begin）。
-        """
-        name = feat.get("name", "")
-        if name in visited:
-            return set()
-        info = self._tree.get(name)
-        if not info:
-            return set()
-        result: set[str] = set()
-        bs = info.get("block_start") or ""
-        if bs:
-            result.add(bs)
-        prods = info.get("prods", [])
-        first = prods[0] if prods and isinstance(prods[0], dict) else None
-        if first is None:
-            return result
-        result |= self._first_tokens(first, visited | {name})
-        if first.get("type") in ("optional", "repeat"):
-            result |= self._nullable_after(prods[1:], visited | {name})
-        return result
-
-    def _nullable_after(self, items: list, visited: set) -> set[str]:
-        """可空前缀传播：从 items 首元素起逐个并入 firsts，遇非可空元素停。
-
-        首元素是可空形态（optional/repeat）时，first 还要含"空之后那一元素"
-        的 first（如 GateInstance 的 @Identifier? 空 → first 应含 "("；
-        否则 overlap 判据漏判）。call / seq 两处共用。
-        """
-        result: set[str] = set()
-        for it in items:
-            result |= self._first_tokens(it, visited)
-            if it.get("type") not in ("optional", "repeat"):
-                break
-        return result
-
-    def _first_of_choice(self, feat: dict, visited: set) -> set[str]:
-        """choice：各分支 firsts 并集。"""
-        result: set[str] = set()
-        for a in feat.get("alternatives", []):
-            result |= self._first_tokens(a, visited)
-        return result
+        """可能起始 token（可空传播）——薄封装单一实现，见 linter/first_set.py。"""
+        return first_tokens(feat, self._tree, nullable=True, visited=frozenset(visited))
 
     def _first_tokens_of_rule(self, name: str, visited: set) -> set[str]:
-        """规则 production 首元素的必然首 token 集合。"""
+        """规则首个 production 的可能起始 token。"""
         info = self._tree.get(name)
         if not info:
             return set()
         prods = info.get("prods", [])
         if not prods or not isinstance(prods[0], dict):
             return set()
-        return self._first_tokens(prods[0], visited | {name})
+        return first_tokens(
+            prods[0], self._tree, nullable=True, visited=frozenset(visited | {name})
+        )
 
     def _match_seq(
         self,
