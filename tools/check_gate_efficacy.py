@@ -1245,6 +1245,39 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "            if True:  # 变异：R2 全部跳过\n                continue\n",
         "test": "tests/policy/test_check_hardcode.py",
     },
+    # ── D5 补齐第二轮：R5/R6/D2/INVARIANTS 四条默认 gate 变异（task-6）──
+    {
+        "why": "R5 若不识别 os.chdir（属性名判定被短路）⇒ tests/ 下进程级 CWD 泄漏会静默通过；"
+               "本变异证明 tests/policy/test_check_hardcode.py 真的握着 R5 的违规分支",
+        "file": "policy/check_hardcode.py",
+        "old": "                and func.attr == \"chdir\"\n",
+        "new": "                and func.attr == \"__never_chdir__\"  # 变异：R5 不识别 chdir\n",
+        "test": "tests/policy/test_check_hardcode.py",
+    },
+    {
+        "why": "R6 若把前缀族判定短路（所有字面量直接返回 None）⇒ 引擎写死具体 token 名也不会红；"
+               "本变异证明 tests/policy/test_check_hardcode.py 真的握着 R6 的分类违规分支",
+        "file": "policy/check_hardcode.py",
+        "old": "    if not lit.startswith(families):\n",
+        "new": "    if True:  # 变异：R6 分类全部短路\n",
+        "test": "tests/policy/test_check_hardcode.py",
+    },
+    {
+        "why": "D2 若不扫描任何导航索引行 ⇒ 导航引用不存在的 docs 文件也不会红；"
+               "本变异证明 tests/policy/test_check_doc_refs.py 真的握着 D2 的缺失目标分支",
+        "file": "policy/check_doc_refs.py",
+        "old": "        for line_no, line in _iter_md_lines(text):\n",
+        "new": "        for line_no, line in ():  # 变异：D2 不扫任何导航行\n",
+        "test": "tests/policy/test_check_doc_refs.py",
+    },
+    {
+        "why": "INVARIANTS 若不报告 mechanized 锚点解析错误 ⇒ 清单里的悬空 gate/violation_probe "
+               "可以静默腐烂；本变异证明 tests/policy/test_invariants_manifest.py 握着锚点校验分支",
+        "file": "policy/check_invariants.py",
+        "old": "            if err:\n",
+        "new": "            if False:  # 变异：不变量锚点错误不上报\n",
+        "test": "tests/policy/test_invariants_manifest.py",
+    },
 ]
 
 
