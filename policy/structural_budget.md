@@ -4,7 +4,7 @@
 > 建议"无穷无尽"。本文档把它折成**一个可跨时间比较的标量 + 一组决策规则**，
 > 回答两个问题：**这次改动值不值得做**、**主线何时收口**。
 > 度量工具：`tools/structural_score.py`（需外部二进制 bifrost，见 `bifrost_audit.md`）；
-> 基线文件：`tools/structural_baseline.json`。
+> 基线文件：`tools/baselines/structural_baseline.json`。
 
 ## 一、为什么不能按"命中个数"记进度
 
@@ -21,7 +21,7 @@
 | **R3 实体级重复门槛** | 重复对计入 D 需同时满足：tokens > 40，**且两侧不是"薄入口"**（体无控制流、去 docstring 后简单语句 ≤4），**且不两者都在 `policy/`** | 注册面（`@register` 原语 / handler 表 / `get_*` 声明读取）要求一个名一个函数，体里只剩"转调共享实现 + 协议样板"——这类对的相似度全在装饰器/签名/docstring 上，**共性已抽**。判据是"**是否还有未共享的逻辑**"，故按**体形态**判而非按 token 数判（2026-09-20 修正：旧口径 token≤40 把 45–80 tok 的样板入口误计入待办） |
 | **R4 制度执行者豁免** | 两侧都在 `policy/` 的重复对不计入 | 门禁脚本刻意各自独立、可单跑；抽公共会把门禁耦合（已有定调） |
 | **R5 热点加权（排序，不记分）** | 动手顺序按 `analyze_git_hotspots` 的 churn × complexity 排，冷文件超标排在后面 | 同等的欠账，改在热文件上的收益才真实（冷文件可能几年不动） |
-| **R6 判保持登记** | 已判保持的项记入 `tools/structural_kept.json`（**每条必须有理由与出处**），工具在计入前剔除——**对全部族（CC/COG/FUNC/CLASS/CLONE）生效** | 否则已判保持的项每轮重复计分、每轮重新论证（审计无法闭合）；登记表进 git，可 diff、可审计——"保持"是结论，不是"没看"。⚠ 口径含义：**S 度量的不是"总复杂度"，而是"未经处置的欠账"**——一旦逐项下了结论，它就该从 S 里出去 |
+| **R6 判保持登记** | 已判保持的项记入 `tools/baselines/structural_kept.json`（**每条必须有理由与出处**），工具在计入前剔除——**对全部族（CC/COG/FUNC/CLASS/CLONE）生效** | 否则已判保持的项每轮重复计分、每轮重新论证（审计无法闭合）；登记表进 git，可 diff、可审计——"保持"是结论，不是"没看"。⚠ 口径含义：**S 度量的不是"总复杂度"，而是"未经处置的欠账"**——一旦逐项下了结论，它就该从 S 里出去 |
 
 ## 三、度量：结构欠账分 S
 
@@ -47,13 +47,13 @@ S = C + L + D                                                 越低越好
 | **ROI** | `ROI = ΔS / 改动规模` | **ROI < 0.05 不做**（起始标定值，两次实测后定稿）：即"改 100 行至少降 5 点欠账" |
 | **验证面** | `score_diff` 的 `verification.untested_fraction` + `without_direct_test_reference` | 单次改动的报告项（不进 S）：改了却无直接测试引用的生产符号占比 |
 
-**不做也必须留痕**：判"保持"的项写入 `tools/structural_kept.json`（理由 + 出处，
+**不做也必须留痕**：判"保持"的项写入 `tools/baselines/structural_kept.json`（理由 + 出处，
 **逐条自足**——不许写"见某草稿某节"，`_drafts/` 会随收尾销毁；完整性由
 `tests/policy/test_structural_kept.py` 守：理由有实质长度 + 键能解析到真实定义），
 不许出现"没人管"的项——"保持"是结论，"没看"不是。
 
 **重构前的结构面锚点（2026-09-22）**：提交 `c63c6bb`，S = 0 已冻结于
-`tools/structural_baseline.json`。⚠ 跨"移文件"窗口请用能力族 ④ 的 `score_diff`
+`tools/baselines/structural_baseline.json`。⚠ 跨"移文件"窗口请用能力族 ④ 的 `score_diff`
 **聚合量**（见 `bifrost_audit.md`「重构期用法」节）——`--compare` 是**键级**基线
 （键含符号的路径），搬家会让旧键"消除"、新键"新增"，同时报大量两边条目，
 **那不等于回归**。

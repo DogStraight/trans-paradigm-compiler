@@ -32,7 +32,7 @@
 ## 实施记录（#68）
 
 - `_atom_parser_impl` 已按 `(token 位置, 作用域版本)` 缓存 atom 结果；`_ScopeStack` 增加 `version`（register/restore/push/pop 仅在真实状态变化时 +1）；`Parser.parse` 每次清空 memo；`restore` 增加无变化快速路径。
-- 同机对照：pre-memo 57.6s → 8.75s（median，6.6x）；AST 节点名序列 SHA1 与改前一致（25,230 节点）；全量 4377/14、A-B 0/144、门禁 7/7 0 诊断；`COG|_atom_parser_impl` 以性能分支理由进 `tools/structural_kept.json`。
+- 同机对照：pre-memo 57.6s → 8.75s（median，6.6x）；AST 节点名序列 SHA1 与改前一致（25,230 节点）；全量 4377/14、A-B 0/144、门禁 7/7 0 诊断；`COG|_atom_parser_impl` 以性能分支理由进 `tools/baselines/structural_kept.json`。
 - 剩余：直接成本仍 ~8–9s；继续优化需降候选/热点开销（见下）。
 
 ## 收口记录（#69）

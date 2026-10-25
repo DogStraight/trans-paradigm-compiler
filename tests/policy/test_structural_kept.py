@@ -1,4 +1,4 @@
-"""判保持登记表完整性门禁 —— `tools/structural_kept.json` 不许出现"没人管的项"。
+"""判保持登记表完整性门禁 —— `tools/baselines/structural_kept.json` 不许出现"没人管的项"。
 
 动机：`policy/structural_budget.md` 的口径是 **S 度量"未经处置的欠账"**，
 逐项下结论后该项从 S 里出去（R6）。这条口径成立的前提是**登记表本身可信**：
@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-KEPT_PATH = ROOT / "tools" / "structural_kept.json"
+KEPT_PATH = ROOT / "tools" / "baselines" / "structural_kept.json"
 
 FAMILIES = {"CC", "COG", "FUNC", "CLASS", "CLONE"}
 MIN_REASON_LEN = 30          # 短于此不构成"理由"（实测最长理由 200+ 字）

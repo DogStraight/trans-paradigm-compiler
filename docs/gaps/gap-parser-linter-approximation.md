@@ -107,7 +107,7 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
 - 判据：`tests/languages/c/test_c_block_diagnostics.py`——两条坏语句 **2 条 `phase-statement`**，
   位置分别落在 `+`（char 17/23），不再指块起点/`}`；合法块 0 诊断。
 - 回归：全量套件、A/B、C/Verilog/e2e linter 面全绿；`COG/CC` 与类规模增长按块 8 理由登记
-  `tools/structural_kept.json`。
+  `tools/baselines/structural_kept.json`。
 
 ## 关联条目
 

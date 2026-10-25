@@ -5,7 +5,7 @@
 
     插件内     实现与声明面（tpc.toml / 实现 .py / rules/*.toml）
     引擎侧登记 引擎/工具里必须跟着改的白名单、契约键、词汇表
-    行为基线   expected.json / diag_baseline.json / min_pack_baseline.json / 变异注入器
+    行为基线   expected.json / diag_baseline.json / baselines/min_pack_baseline.json / 变异注入器
     测试       测试文件（应该多，不计入"欠账"）
     文档       README / docs / CHANGELOG（应该多，不计入"欠账"）
 
@@ -13,7 +13,7 @@
 保持同步的位置**：`引擎侧登记` + `行为基线` 两类是"散点"，`插件内`是"实现面"。
 
 **口径与停止规则**：同 `policy/structural_budget.md`——度量的是"**未处置的欠账**"，
-逐项下结论（该合并 / 该接受）后记入 `feature_sites_kept.json` 即从预算里出去
+逐项下结论（该合并 / 该接受）后记入 `baselines/feature_sites_kept.json` 即从预算里出去
 （"保持"是结论，不是"没看"）。工具零猜测：所有实例与接触点都由正则/清单**扫出来**。
 
 用法::
@@ -37,11 +37,20 @@ from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BASELINE = ROOT / "tools" / "feature_sites_baseline.json"
-KEPT = ROOT / "tools" / "feature_sites_kept.json"
+BASELINE = ROOT / "tools" / "baselines" / "feature_sites_baseline.json"
+KEPT = ROOT / "tools" / "baselines" / "feature_sites_kept.json"
 # 已收敛的登记点（判据：**不再靠人手记着同步**——或由单一来源派生，或由门禁校验；
 # 每条须 reason + source 指向具体门禁/机制）。收敛点不计入散点欠账。
-CONVERGED = ROOT / "tools" / "feature_sites_converged.json"
+CONVERGED = ROOT / "tools" / "baselines" / "feature_sites_converged.json"
+
+# 实例枚举时读/解析失败的输入（可见通道；本工具只报告，无 strict）
+SKIPPED_INPUTS: list[tuple[str, str]] = []
+
+
+def _record_skipped_input(rel: str, reason: str) -> None:
+    entry = (rel, reason)
+    if entry not in SKIPPED_INPUTS:
+        SKIPPED_INPUTS.append(entry)
 
 # 扫面后缀（文本文件；二进制/构建产物不参与）
 SUFFIXES = (".py", ".md", ".toml", ".json", ".cfg", ".txt", ".yml", ".yaml")
@@ -157,7 +166,8 @@ def _instances_capability() -> dict[str, str]:
     for tpc in sorted(ROOT.glob("grammar/**/tpc.toml")):
         try:
             data = tomllib.loads(tpc.read_text(encoding="utf-8"))
-        except tomllib.TOMLDecodeError:
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            _record_skipped_input(tpc.relative_to(ROOT).as_posix(), f"读取/解析失败: {exc}")
             continue
         caps = data.get("capabilities")
         if not isinstance(caps, dict):
@@ -179,7 +189,8 @@ def _instances_config() -> dict[str, str]:
             continue
         try:
             tree = ast.parse((ROOT / rel).read_text(encoding="utf-8", errors="replace"))
-        except SyntaxError:
+        except SyntaxError as exc:
+            _record_skipped_input(rel, f"AST 解析失败: {exc}")
             continue
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -222,6 +233,7 @@ FAMILIES: dict[str, dict] = {
 
 def scan(families: list[str] | None = None) -> dict:
     """扫出各族每个实例的接触点集合（文件 → 角色）。"""
+    SKIPPED_INPUTS.clear()
     files = _iter_files()
     corpus = {rel: (ROOT / rel).read_text(encoding="utf-8", errors="replace") for rel in files}
     kept = _load_kept()
@@ -319,6 +331,14 @@ def _load_converged() -> dict[str, dict]:
 
 # ── 输出 ────────────────────────────────────────────────────
 
+def _report_skipped_inputs() -> None:
+    """实例枚举后的输入缺口汇总（只告警，不改变 report/compare 退出码）。"""
+    if not SKIPPED_INPUTS:
+        return
+    rows = "\n".join(f"  {rel}: {reason}" for rel, reason in SKIPPED_INPUTS)
+    print(f"\n[告警] {len(SKIPPED_INPUTS)} 处输入未能读取/解析，未纳入统计：\n{rows}")
+
+
 def cmd_list(result: dict, verbose: bool) -> None:
     for fam, data in result.items():
         s = data["summary"]
@@ -393,7 +413,14 @@ def main() -> int:
         # 旧写法每次 `--save` 都会把基线写脏——2026-10-08 实测）。
         BASELINE.write_text(
             json.dumps(
-                {"recorded": date.today().isoformat(), "families": result},
+                {
+                    "recorded": date.today().isoformat(),
+                    "families": result,
+                    "skipped_inputs": [
+                        {"path": rel, "reason": reason}
+                        for rel, reason in SKIPPED_INPUTS
+                    ],
+                },
                 ensure_ascii=False,
                 indent=1,
                 sort_keys=True,
@@ -402,10 +429,14 @@ def main() -> int:
             newline="",
         )
         print(f"[feature-sites] 已写基线：{BASELINE.relative_to(ROOT)}")
+        _report_skipped_inputs()
         return 0
     if args.cmd == "compare":
-        return cmd_compare(result)
+        rc = cmd_compare(result)
+        _report_skipped_inputs()
+        return rc
     cmd_list(result, args.verbose)
+    _report_skipped_inputs()
     return 0
 
 

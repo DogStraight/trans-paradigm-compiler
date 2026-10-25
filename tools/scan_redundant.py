@@ -48,6 +48,15 @@ BUILD_DIRS = ("dist", "build", ".pytest_cache", "trans_paradigm_compiler.egg-inf
 # 引用扫描时跳过的目录（本身是 scratch/产物，不算"引用者"）
 REF_SKIP = set(SCRATCH_DIRS) | set(BUILD_DIRS) | {".git", "node_modules", ".venv"}
 
+# 引用扫描时读取失败的输入（不能静默丢；JSON 与告警共享此清单）
+SKIPPED_INPUTS: list[tuple[str, str]] = []
+
+
+def _record_skipped_input(rel: str, reason: str) -> None:
+    entry = (rel, reason)
+    if entry not in SKIPPED_INPUTS:
+        SKIPPED_INPUTS.append(entry)
+
 
 def _tracked_files() -> list[str]:
     out = subprocess.run(
@@ -139,7 +148,8 @@ def _reference_hits(needle_prefix: str) -> list[dict]:
             continue
         try:
             text = p.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
+        except OSError as exc:
+            _record_skipped_input(rel, f"读取失败: {exc}")
             continue
         if needle_prefix not in text:
             continue
@@ -165,6 +175,7 @@ def scan_refs() -> dict:
     裸目录名（`_drafts/`）的提及算**约定陈述**，单独归入 `conventions`，不计悬空——
     否则政策文档会被长期误报，真正该修的失锚反而被噪音淹没。
     """
+    SKIPPED_INPUTS.clear()
     live, dangling, conventions = [], [], []
     for d in SCRATCH_DIRS:
         for h in _reference_hits(d + "/"):
@@ -217,6 +228,18 @@ def _report_group(kind: str, items: list[dict], limit: int = 25) -> None:
         print(f"  ... 另 {len(items) - limit} 项")
 
 
+def _skipped_payload() -> list[dict]:
+    return [{"path": path, "reason": reason} for path, reason in SKIPPED_INPUTS]
+
+
+def _report_skipped_inputs() -> None:
+    if not SKIPPED_INPUTS:
+        return
+    print(f"\n[告警] {len(SKIPPED_INPUTS)} 处输入未能读取，未纳入统计：")
+    for path, reason in SKIPPED_INPUTS:
+        print(f"  {path}: {reason}")
+
+
 def report(findings: list[dict], refs: dict | None, live: bool) -> None:
     print("=" * 78)
     print("冗余残留扫描（dry-run，未删除任何文件）")
@@ -231,6 +254,7 @@ def report(findings: list[dict], refs: dict | None, live: bool) -> None:
             _report_group(kind, groups[kind])
     print("\n提示：删除前按 policy/doc-alignment.md「删除判据」逐条复核；"
           "清理需显式 --clean <kind> --yes。")
+    _report_skipped_inputs()
 
 
 def _clean(findings: list[dict], kinds: set[str]) -> None:
@@ -267,7 +291,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json:
         Path(args.json).write_text(
-            json.dumps({"findings": findings, "refs": refs}, ensure_ascii=False, indent=2),
+            json.dumps(
+                {"findings": findings, "refs": refs, "skipped_inputs": _skipped_payload()},
+                ensure_ascii=False,
+                indent=2,
+            ),
             encoding="utf-8",
         )
         print(f"[json] {args.json}")

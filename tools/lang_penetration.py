@@ -37,6 +37,19 @@ DEFAULT_DIRS = ("analyzer", "preprocessor", "linter", "parser", "lexer",
                 "transform", "renderer", "pipeline", "core")
 PACK_GLOB = "grammar/**/*.toml"
 
+# 坏 TOML 不能静默丢：可见通道（本工具只报告，无 strict）
+SKIPPED_INPUTS: list[tuple[str, str]] = []
+
+
+def _record_skipped_input(path: pathlib.Path, reason: str) -> None:
+    try:
+        rel = path.relative_to(ROOT).as_posix()
+    except ValueError:
+        rel = str(path)
+    entry = (rel, reason)
+    if entry not in SKIPPED_INPUTS:
+        SKIPPED_INPUTS.append(entry)
+
 # ② 语义名词表（弱信号）。Tier A = 语言对象（强线索，优先看）；
 # Tier B = 通用/动作词（弱线索，只计数）。命中不等于渗透，须逐条看调用链。
 TIER_A = {
@@ -70,7 +83,8 @@ def _pack_declared_names() -> set[str]:
     for path in sorted(ROOT.glob(PACK_GLOB)):
         try:
             data = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (OSError, tomllib.TOMLDecodeError):
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            _record_skipped_input(path, f"读取/解析失败: {exc}")
             continue
         rule_names.update(k for k in _walk_keys(data) if re.fullmatch(r"[A-Z][A-Za-z0-9]*", k))
     return rule_names
@@ -149,6 +163,12 @@ def _scan(dirs: tuple[str, ...], rule_names: set[str]) -> tuple[
     return structural, tier_a, tier_b
 
 
+def _report_skipped_inputs() -> None:
+    if SKIPPED_INPUTS:
+        print(f"\n[告警] {len(SKIPPED_INPUTS)} 处输入未能读取/解析，未纳入统计：")
+        print(*(f"  {rel}: {reason}" for rel, reason in SKIPPED_INPUTS), sep="\n")
+
+
 def _report(structural: list[str], tier_a: dict[str, list[str]],
             tier_b: collections.Counter[str], rule_names: int, top: int) -> None:
     """打印三档结果（结构名字面量 / Tier A 明细 / Tier B 计数）。"""
@@ -175,9 +195,11 @@ def main() -> int:
     dirs = tuple(argv[argv.index("--dirs") + 1:]) if "--dirs" in argv else DEFAULT_DIRS
     top = int(argv[argv.index("--top") + 1]) if "--top" in argv else 12
 
+    SKIPPED_INPUTS.clear()
     rule_names = _pack_declared_names()
     structural, tier_a, tier_b = _scan(dirs, rule_names)
     _report(structural, tier_a, tier_b, len(rule_names), top)
+    _report_skipped_inputs()
     return 0
 
 

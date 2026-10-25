@@ -64,6 +64,15 @@ _SYNC_EXCLUDE_DIRS: tuple[str, ...] = (
 )
 _SYNC_EXCLUDE_FILES: tuple[str, ...] = ("CHANGELOG.md",)
 
+# 读取失败不能静默丢：可见通道（默认告警；本工具不是门禁，无 strict）
+SKIPPED_INPUTS: list[tuple[str, str]] = []
+
+
+def _record_skipped_input(rel: object, reason: str) -> None:
+    entry = (str(rel), reason)
+    if entry not in SKIPPED_INPUTS:
+        SKIPPED_INPUTS.append(entry)
+
 
 @dataclass(frozen=True)
 class _Ref:
@@ -191,7 +200,8 @@ def _refs_in_file(root: Path, rel: Path, target: str) -> Iterator[_Ref]:
     """单文件内的引用点（读失败 → 无产出）。"""
     try:
         text = (root / rel).read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    except OSError as exc:
+        _record_skipped_input(rel, f"读取失败: {exc}")
         return
     code_blocks = _md_codeblock_ranges(text) if rel.suffix == ".md" else []
     collector = _RefCollector(rel, text)
@@ -211,6 +221,7 @@ def collect_refs(root: Path, target: str) -> list[_Ref]:
     _DOC_LINK_RE（docs/ 链接形态）、_BARE_REF_RE（反引号裸名/子目录前缀）。
     区间重叠去重见 `_RefCollector`，各形态细则见 `_collect_*`。
     """
+    SKIPPED_INPUTS.clear()
     target = target.replace("\\", "/").lstrip("./")
     if not target.startswith("docs/"):
         target = f"docs/{target}"
@@ -301,6 +312,15 @@ def _apply_replacements(root: Path, refs: Sequence[_Ref], new_doc: str) -> list[
 
 
 # ── 输出 ────────────────────────────────────────────────────────────────────
+
+def _print_skipped_inputs() -> None:
+    """扫描结束后汇总读取失败输入（非门禁：只告警，不改变退出码）。"""
+    if not SKIPPED_INPUTS:
+        return
+    print(f"[告警] {len(SKIPPED_INPUTS)} 处输入未能读取，未纳入引用扫描：")
+    for rel, reason in SKIPPED_INPUTS:
+        print(f"  {rel}: {reason}")
+
 
 def _print_refs(refs: Sequence[_Ref]) -> None:
     if not refs:
@@ -469,12 +489,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
 
     if args.cmd == "refs":
-        return _cmd_refs(root, args.target)
-    if args.cmd == "rename":
-        return cmd_rename(root, args.old, args.new, args.apply)
-    if args.cmd == "delete":
-        return cmd_delete(root, args.target, args.apply)
-    return 1
+        rc = _cmd_refs(root, args.target)
+    elif args.cmd == "rename":
+        rc = cmd_rename(root, args.old, args.new, args.apply)
+    elif args.cmd == "delete":
+        rc = cmd_delete(root, args.target, args.apply)
+    else:
+        rc = 1
+    _print_skipped_inputs()
+    return rc
 
 
 if __name__ == "__main__":

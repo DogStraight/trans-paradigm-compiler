@@ -147,7 +147,7 @@ python tools/structural_score.py --compare     # 结构欠账分（新增即回�
   `score_diff` 的聚合量**，`--compare` 用于**同布局内**的回归。
 
 **当前锚点（精化基座重构前，2026-09-22）**：提交 `c63c6bb`，S=0 已冻结于
-`tools/structural_baseline.json`。同窗口实测（`HEAD~10..HEAD`）：认知 Δ **−23**、
+`tools/baselines/structural_baseline.json`。同窗口实测（`HEAD~10..HEAD`）：认知 Δ **−23**、
 ins 1143 / del 598、introduced 48 / deleted 17 / moved 69 / signature_changes 36、
 `untested_fraction` **0.9**（91/233 改动生产符号的 90% 无直接测试引用——本仓测试是
 行为面/语料驱动，非逐符号，属预期画像；**重构后该值若显著上升才是信号**）。
@@ -189,7 +189,7 @@ ins 1143 / del 598、introduced 48 / deleted 17 / moved 69 / signature_changes 3
 
 ## 判据集（跨项复用，2026-09-22 收口时固化）
 
-> 逐项理由（"这一条为什么保持"）落在 `tools/structural_kept.json`（可回滚、可 diff）；
+> 逐项理由（"这一条为什么保持"）落在 `tools/baselines/structural_kept.json`（可回滚、可 diff）；
 > 本节只留**决定"下一个同类命中怎么判"的判据**——没有它们，审计每轮都要重新论证。
 
 | 族 | 判据 | 本仓结论 |

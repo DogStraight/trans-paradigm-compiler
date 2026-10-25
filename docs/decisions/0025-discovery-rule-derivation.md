@@ -24,7 +24,7 @@
 即：**一个 C 语言形态（花括号语句容器）引发了 6+ 处点状补丁**。特征：
 - `_is_bracket_stmt_container`（discovery）与 `_is_pure_stmt_container`（scanner）
   **近乎逐行重复**，只差"首元素是否为当前开括号"一项；
-- `tools/structural_kept.json` 用**同一句理由**豁免了 5 个条目
+- `tools/baselines/structural_kept.json` 用**同一句理由**豁免了 5 个条目
   （`CLASS|discovery.py:Discovery`、`CLASS|lookahead.py:LookaheadTable`、
   `_is_bracket_stmt_container` 的 CC/COG、`_discover_statement` 的 CC/COG）——
   同一条理由登记 5 次，是"结构欠账未收敛"，不是"设计如此"。

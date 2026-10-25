@@ -1,36 +1,88 @@
-# tools/ — 开发自查工具（按需/人工跑，都不进日常门禁）
+# tools/ — 开发自查工具
 
-> 从 `AGENTS.md` 迁出的工具清单（2026-09-18）：命令与清单落就近 README，
-> `AGENTS.md` 只留一行指针。这些工具**不进日常门禁**（多为分钟级或有外部依赖），
-> 只在对应场景人工/按需跑。
+> 从 `AGENTS.md` 迁出的工具清单（2026-09-18）。这些工具**不进日常门禁**（多为分钟级或有外部依赖），
+> 只在对应场景人工/按需跑；**门禁那几条**（`check_hardcode` / `check_doc_refs` / `check_invariants`）
+> 在 `policy/` 下并挂 CI，不在此列。
+>
+> 基线数据在 `tools/baselines/`；本目录只放**可执行脚本**。
 
-| 工具 | 用途 | 何时跑 | 规程/判据 |
-|------|------|--------|-----------|
-| `config_sites.py` | 机械枚举语言包配置点位：`list` 清单 / `check` 漂移哨兵 / `rename` 逐项替换 | 引擎语义/键名变更时 | `policy/engine_config_sync.md` |
-| `ci_rehearsal.py` | **本地排练 `ci.yml` 的全部门禁**（发布/打标前一条命令自查）：主回归+覆盖率 / 乱序 smoke / 两条 policy 脚本 / pyright strict / edge / fuzz / CLI / wheel 安装冒烟，输出 PASS·FAIL·**SKIP** 矩阵。**SKIP 与「零步骤」都不算绿**（整体判 INCOMPLETE，exit 2）——CI 只在推分支时运行（触发是 `push.branches` + `pull_request`，**推 tag 不触发**），长期不推送时这是唯一的自查手段。`--only <子串>` / `--skip-wheel` / `--pyright <路径>` | 打 tag 或推送分支前；怀疑「CI 会不会红」时 | `policy/release-checklist.md` §1（排练口径与判读）；历史矩阵见 `CHANGELOG.md` 的 0.1.2/0.1.3 批条目 |
-| `check_coverage_delta.py` | 增量覆盖率（只看改动文件，几十秒） | 大改收尾看新增行是否被覆盖 | — |
-| `check_gate_efficacy.py` | 门禁有效性抽查（真实事故变异，期望门禁变红） | 怀疑门禁失灵时 | — |
-| `check_test_isolation.py` | 进程级隔离对照（每文件一进程 vs 单进程共享档；`--hashseed-scan N` 再换一维 PYTHONHASHSEED） | 排查"换跑法就变脸" | `tests/README.md` |
-| `dump_pipeline_state.py` | 管线语言状态转储（共享条目/组件/当前语言；`--pre grammar/c4` 复现"同进程先跑过别的语言"） | 诊断跨语言串味 | — |
-| `check_macro_coverage.py` | 宏位置透明性量化 + 失败面按 token 类型分布 | 动宏/预处理器相关路径 | `preprocessor/README.md`（宏形态 / 处置策略；"为什么不做 parser 恢复"内联在同文档） |
-| `bifrost_probe/` | 外部审计 Bifrost 的有效性抽查探针（刻意含坏味，`bifrost scan tools/bifrost_probe` 应报 5 条） | 接外部审计或怀疑其失效时 | `policy/bifrost_audit.md` |
-| `structural_score.py` | 结构欠账分 S（复杂度/规模/重复三分量取**超额量**；`--save` 写基线、`--compare` 新增即回归） | 结构性改动前后算收益 / 判主线是否收口 | `policy/structural_budget.md`（口径 R1–R6 与停止判据；判保持登记在 `structural_kept.json`） |
-| `feature_sites.py` | **功能散点计量（接触点清单 + 预算）**：按功能分族（加检查规则/语法构造/能力位/配置键）枚举现存实例，扫出"提及它的文件"并按角色归类（插件内 / 引擎侧登记 / 行为基线 / 测试 / 文档）；`list` 清单、`--save` 写基线、`--compare` 散点增长即 exit 1。判据不是"文件多"而是**同一事实被写在 ≥2 个必须手工同步的位置**（测试/文档不计欠账）；判保持记 `feature_sites_kept.json`、**已收敛**（不再靠人记着同步：单一来源派生或门禁校验）记 `feature_sites_converged.json`——两者都须 reason+source，门禁 `tests/policy/test_feature_sites.py` 守（含反向防滥用：路径/source 门禁须真实存在、不得空转登记） | 动插件登记面/基线/词汇表前后对照；判"该合并哪几处" | `docs/gaps/gap-feature-scatter.md`（口径与拆步；基线 `tools/feature_sites_baseline.json`） |
-| `render_coverage.py` | **渲染覆盖率盘点**：某语言包有多少规则带渲染配置（`layout`/`body`）、哪些没有（附 node 字段与叶子/非叶子标记，便于从叶子补起）。动机：引擎对无布局规则**静默输出空串**，缺布局是无声的保真度损失 | 补保真/原文打印前；新语言包接渲染面时 | `docs/gaps/gap-language-pack-scope.md`（「C 包渲染/保真面现状」） |
-| `c_acceptance.py` | **C 包接受面扫描**：45 条构造（词法/声明/类型/语句/表达式/预处理/增量）逐条试解析，报"进 AST / 空 AST / 词法抛错"并给接受-空洞计数（`--only-gaps` 只看空洞）。当前 **45 条 / 接受 45 / 空洞 0**（**口径注**：两条预处理用例按"被消费且无异常"接受——指令行被替换为整行 marker 注释，**不代表 `#include` / `#define` 已真实实现**，见 `docs/gaps/gap-c-preprocessor-scope.md` ⑭）。动机同 `render_coverage.py`：**空洞是无声的**——不属任何语句入口 FIRST 集的构造会被整体跳过、不报错，只跑测试套件看不出还差哪一族 | 阶段收尾对照接受域清单；补 C 能力前后 | `docs/gaps/gap-language-pack-scope.md`「C 语言包：接受域现状」 |
-| `lang_penetration.py` | 语言知识渗透探针（弱信号）：引擎里出现语言包规则/节点名（硬信号）+ 语言对象词作标识符（弱信号，需人工判） | L1 渗透复审 / 动 analyzer 语义面前后对照 | `docs/gaps/gap-language-penetration.md`（「判据（三条）」+「当前实测快照」） |
-| `min_pack_probe.py` | **最小语言包探针（行为面基线）**：把默认语言包换成迷你包跑引擎测试，记录"哪些引擎测试仍绿"（仍绿 = 引擎通用面）；`--record` 写基线，默认比对并「有回归即 exit 1」。机制 = `$TPC_CONFIG` 指向临时配置（**零引擎改动**）。⚠ **强制串行**（默认补 `-n 0`）——探针故意混跑双语，并行结果随 worker 分配漂移，不可作判据 | 动精化基座 / analyzer 语义面前后对照（机制见 `analyzer/elaboration/README.md`）；判"某测试是不是靠语言包声明才成立" | `docs/gaps/gap-language-penetration.md` 判据 1；基线 `tools/min_pack_baseline.json`（与探针包绑定，换包须重记；**必须串行重记**） |
-| `fragment_rewrite.py` | **片段变换 P0 原型**（记号模式）：显式行注释记号圈区域，纯语法规则 `always @(*)`→`always @*`；默认 dry-run diff、`--write` 落盘；bytes identity/死分支/假记号/fail-closed | 评估片段级改写、验证 identity/安全判据时 | `docs/gaps/gap-fragment-mode.md` |
-| `scan_test_redundancy.py` | **测试同构冗余扫描（只报告）**：同一文件/类内「结构相同、仅字面量不同」的测试函数组 → 参数化候选（不是可删覆盖）。输出组大小、成员名、以及是否被 `min_pack_baseline.json` 锚定（锚定的参数化会改 node id，须串行重录基线） | 审查任务 3（测试正交性）/ 新增一批同构用例后自查 | `AGENTS.md`「测试门禁 + 测后决策」 |
-| `scan_redundant.py` | **冗余残留扫描（审查会话复用）**：机械识别三类残留——草稿/临时物（`_drafts/`、`*.bak|*.orig|*~|*.tmp`、未跟踪探针脚本、根目录调试日志）、gitignored 大体积产物目录、以及**指向草稿区的悬空引用**（删除判据 B3）。默认 dry-run 只报告；`--live-refs` 列出「仍被引用的草稿」（删除前须迁走，否则制造悬空引用）；`--json` 出清单；`--clean <kind> --yes` 才真删 | 审查会话任务 1（冗余文件盘点）/ 清理 `_drafts` 前后 / 收尾确认无悬空引用 | `policy/doc-alignment.md`「删除判据」 |
-| `ab_pipeline_compare.py` | **PRE(HEAD)/POST(工作树) 对拍**：`git archive HEAD` 解到临时目录跑 PRE、当前树跑 POST，逐输入 diff 诊断/`success`/`error`/`output`（CLI 档另比 stdout+exit code；`--products` 再比 `tpc format` 渲染产物），支持 `--expect-changed N`（0 = 零用户可见变化）。**只读**：不写工作树、不提交、临时目录用完即删；⚠ 共享工作区里**不要**用"写回 HEAD 版本再恢复"的做法 | 每轮改动收口证明"零变化 / 只有预期变化" | — |
+## 快速索引（按问题找工具）
 
-另有非本目录的按需门禁：
+| 我想… | 用这个 |
+|---|---|
+| 确认"这轮改动有没有零变化/只有预期变化" | `ab_pipeline_compare.py` |
+| 算结构性改动收益、判主线是否收口 | `structural_score.py` |
+| 看"加一个功能要碰几处" | `feature_sites.py` |
+| 查"引擎语义一改，哪些语言包配置要跟着改" | `config_sites.py` |
+| 怀疑门禁失灵（门禁还在不在握着东西） | `check_gate_efficacy.py` |
+| 找冗余文件/草稿残留/悬空引用 | `scan_redundant.py` |
+| 找同构重复的测试用例 | `scan_test_redundancy.py` |
+| 查某语言包还差哪些构造没被接受 / 没渲染 | `c_acceptance.py` / `render_coverage.py` |
+| 查引擎里还有没有语言知识渗透 | `lang_penetration.py` |
+| 判断某个测试是不是"靠语言包声明才成立" | `min_pack_probe.py` |
+| 排查"换跑法就变脸"（进程/哈希隔离） | `check_test_isolation.py` |
+| 诊断跨语言串味 / 看管线状态 | `dump_pipeline_state.py` |
+| 发布前本地排练 CI 全部门禁 | `ci_rehearsal.py` |
+| 审计循环跑一轮（出候选、落账、自省） | `audit_cycle.py` |
 
-- **fuzz 回馈链路**（生成/变异 → 判据 → **最小化** → **沉淀**）：
-  `tests/fuzz/run_fuzz.py` 找、`tests/fuzz/shrink.py` 缩与沉淀、`tests/edge/run_edge.py` 门禁
-  （fuzz 与 edge 进 CI；最小化/沉淀按需跑，分钟级）。口径见 `tests/fuzz/README.md`
-- 真实语料误报基线：`tests/e2e/eval_diag_baseline.py`（**增长即失败**；查证误报用
-  `tests/e2e/eval_benchmark.py`，需外部 oracle）
-- 外部审计 Bifrost（Python 侧结构面信号：影响面/到达测试、复杂度、异常吞吃、结构
-  重复、死代码、弱断言、结构查询）：`policy/bifrost_audit.md`
+## 命名约定（一眼看出工具性质）
+
+| 前缀 | 语义 | 能否进 CI |
+|---|---|---|
+| `check_*` | **门禁式**：非零退出即失败 | 可以 |
+| `scan_*` | **只报告**：出候选，不裁决 | 否（人判） |
+| `*_coverage` / `*_probe` | **度量**：出数字/基线，`--compare` 增长即失败 | 可作 ratchet |
+| `*_compare` | **对拍**：PRE vs POST | 否 |
+| `*_sites` | **散点计量**：一处事实在几处登记 | 可作 ratchet |
+
+## 按角色分组
+
+### 1. 门禁与一致性
+
+- `check_gate_efficacy.py` — 门禁有效性抽查（真实事故变异，期望门禁变红）。怀疑门禁失灵时。规程见 `docs/audit_system.md`（D5 维度）。
+- `check_macro_coverage.py` — 宏位置透明性量化 + 失败面按 token 类型分布。动宏/预处理器路径时。见 `preprocessor/README.md`。
+- `check_test_isolation.py` — 进程级隔离对照（每文件一进程 vs 单进程共享档；`--hashseed-scan N` 再换一维）。排查"换跑法就变脸"。见 `tests/README.md`。
+- `check_coverage_delta.py` — 增量覆盖率（只看改动文件，几十秒）。大改收尾看新增行是否被覆盖。
+- `ci_rehearsal.py` — **本地排练 `ci.yml` 全部门禁**，输出 PASS·FAIL·**SKIP** 矩阵；**SKIP 与「零步骤」都不算绿**（整体 INCOMPLETE，exit 2）。打 tag 或推送分支前。见 `policy/release-checklist.md` §1。
+
+### 2. 审计循环（`docs/audit_system.md`）
+
+- `audit_cycle.py` — 按维度注册表跑探针、落账（`--ledger`）、记人判结论（`--judgement`）与制度改进候选（`--retro`）。**只收集，不裁决**。
+- `scan_redundant.py` — 冗余残留扫描：草稿/临时物、gitignored 大目录、**指向草稿区的悬空引用**。默认 dry-run；`--clean <kind> --yes` 才真删。见 `policy/doc-alignment.md`「删除判据」。
+- `scan_test_redundancy.py` — 测试同构冗余扫描（只报告）：同文件/同类内结构相同的测试组 → 参数化候选；标注是否被基线锚定。见 `AGENTS.md`「测试门禁 + 测后决策」。
+- `structural_score.py` — 结构欠账分 S（复杂度/规模/重复三分量取超额量）；`--save` 写基线、`--compare` 新增即回归。见 `policy/structural_budget.md`。
+- `feature_sites.py` — **功能散点计量**：按功能分族枚举实例，扫出"提及它的文件"并归类；`--save`/`--compare`。判保持记 `baselines/feature_sites_kept.json`、已收敛记 `baselines/feature_sites_converged.json`。见 `docs/gaps/gap-feature-scatter.md`。
+- `config_sites.py` — **配置同步点位**：`list` 清单 / `check` 漂移哨兵 / `rename` 逐项替换。见 `policy/engine_config_sync.md`。
+  > 与 `feature_sites` 的**划界**：`config_sites` 管"**配置键**在语言包里的同步点位"（含改名写回）；`feature_sites` 管"**功能**在插件/引擎/测试/文档里的登记散点"（含预算与判保持）。对象不同，不合并。
+- `lang_penetration.py` — 语言知识渗透探针（**弱信号**）：硬信号=规则/节点名，弱信号=语言对象词作标识符（需人判）。见 `docs/gaps/gap-language-penetration.md`。
+  > 与 `check_hardcode` R1–R6 的**划界**：门禁抓**硬约束**（可判定的字面量/路径/具体 token 名）；本工具补门禁**抓不到**的弱信号面，只出候选。
+
+### 3. 度量与对照
+
+- `ab_pipeline_compare.py` — PRE(`git archive HEAD`)/POST(工作树) 对拍：逐输入 diff 诊断/success/error/output；`--expect-changed 0` = 零用户可见变化。**只读**，不写工作树。
+- `min_pack_probe.py` — 最小语言包探针（行为面基线）：换迷你包跑引擎测试，记录哪些测试仍绿；`--record` 写 `baselines/min_pack_baseline.json`。**强制串行**（并行结果随 worker 分配漂移）。
+- `c_acceptance.py` — C 包接受面扫描：45 条构造逐条试解析，报"进 AST / 空 AST / 词法抛错"。**空洞是无声的**。见 `docs/gaps/gap-language-pack-scope.md`。
+- `render_coverage.py` — 渲染覆盖率盘点：哪些规则带 `layout`/`body`。引擎对无布局规则**静默输出空串**。见 `docs/gaps/gap-language-pack-scope.md`。
+- `fragment_rewrite.py` — 片段变换 P0 原型（记号模式）：显式行注释圈区域，纯语法规则改写；默认 dry-run diff、`--write` 落盘。见 `docs/gaps/gap-fragment-mode.md`。
+
+### 4. 诊断与实验
+
+- `dump_pipeline_state.py` — 管线语言状态转储（共享条目/组件/当前语言；`--pre grammar/c4` 复现"同进程先跑过别的语言"）。诊断跨语言串味。
+- `bifrost_probe/` — 外部审计 Bifrost 的有效性抽查探针（刻意含坏味，`bifrost scan tools/bifrost_probe` 应报 5 条）。见 `policy/bifrost_audit.md`。
+
+### 5. 基线数据（`tools/baselines/`）
+
+只读数据，由上述工具 `--save`/`--record` 生成，**不要手改**：
+
+| 文件 | 生成者 | 被谁守 |
+|---|---|---|
+| `structural_baseline.json` / `structural_kept.json` | `structural_score.py` | `tests/policy/test_structural_kept.py` |
+| `feature_sites_baseline.json` / `_converged.json` / `_kept.json` | `feature_sites.py` | `tests/policy/test_feature_sites.py` |
+| `min_pack_baseline.json` | `min_pack_probe.py --record` | `min_pack_probe.py`（比对即 exit 1） |
+
+## 非本目录的按需门禁
+
+- **fuzz 回馈链路**：`tests/fuzz/run_fuzz.py` 找、`tests/fuzz/shrink.py` 缩与沉淀、`tests/edge/run_edge.py` 门禁。见 `tests/fuzz/README.md`。
+- 真实语料误报基线：`tests/e2e/eval_diag_baseline.py`（增长即失败）。
+- 弱断言比例 ratchet：`tests/policy/test_assert_strength.py`。
+- 外部审计 Bifrost（结构面信号）：`policy/bifrost_audit.md`。

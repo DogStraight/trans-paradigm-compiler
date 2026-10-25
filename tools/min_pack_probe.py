@@ -60,7 +60,7 @@ _PACK_DEFAULT = "grammar/yaml"
 
 _TARGET_DEFAULT = ["tests/engine"]
 
-_BASELINE_PATH = os.path.join("tools", "min_pack_baseline.json")
+_BASELINE_PATH = os.path.join("tools", "baselines", "min_pack_baseline.json")
 
 
 # ── 跑探测 ──

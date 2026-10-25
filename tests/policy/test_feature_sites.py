@@ -2,10 +2,10 @@
 
 守两件事（对应 `policy/structural_budget.md` R6「判保持要登记」的同一哲学）：
 
-1. **基线覆盖全部功能族**：`tools/feature_sites_baseline.json` 里的族集合 ==
+1. **基线覆盖全部功能族**：`tools/baselines/feature_sites_baseline.json` 里的族集合 ==
    `tools/feature_sites.py::FAMILIES` 的族集合——新增一族却忘了 `--save`，
    该族就会**静默不设防**（"没看"被当成"没问题"）。
-2. **判保持必须可审计**：`tools/feature_sites_kept.json` 每条要有非空 `reason` 与非空
+2. **判保持必须可审计**：`tools/baselines/feature_sites_kept.json` 每条要有非空 `reason` 与非空
    `source`，且键指向基线里**真实存在**的 `family:instance`——否则等于把欠账洗掉。
 
 ⚠ 本测试**不**断言"散点数"（那是 `--compare` 的活，属按需门禁）：
@@ -21,9 +21,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = ROOT / "tools" / "feature_sites_baseline.json"
-KEPT = ROOT / "tools" / "feature_sites_kept.json"
-CONVERGED = ROOT / "tools" / "feature_sites_converged.json"
+BASELINE = ROOT / "tools" / "baselines" / "feature_sites_baseline.json"
+KEPT = ROOT / "tools" / "baselines" / "feature_sites_kept.json"
+CONVERGED = ROOT / "tools" / "baselines" / "feature_sites_converged.json"
 
 
 def _load(path: Path) -> dict:

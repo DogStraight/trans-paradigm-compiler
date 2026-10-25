@@ -24,7 +24,7 @@
 （`tpc.toml` 段声明 + 实现 `.py` + 规则表 `.toml`）／**引擎侧登记表**
 （`core/_protocol.py` 契约键常量、`declare_cfg` 配置段、`tools/config_sites.py` 词汇白名单）／
 **行为基线**（`tests/e2e/samples/*/expected.json`、`diag_baseline.json`、
-`tools/min_pack_baseline.json`、变异注入器、`run_all_tests.py`）／**文档治理**
+`tools/baselines/min_pack_baseline.json`、变异注入器、`run_all_tests.py`）／**文档治理**
 （插件 README、`linter_architecture.md`、`MODEL_INDEX.md`、CHANGELOG）。
 
 判据：**同一事实被写在 ≥2 个必须手工保持同步的位置**（不是"文件多"本身——测试与文档
@@ -55,7 +55,7 @@
 `check` 族接触点 **56 → 16**（中位 2→1、最大 5→3）。**门禁有效性（实测）**：注入假码
 `ZZ999` → 该门禁 **1 failed**、还原 **0**；三处实际校验 **11 / 13 / 7** 条码（非空转）。
 "已收敛/判保持"登记每条须有 `reason` + `source` 指向**真实存在**的门禁
-（`tools/feature_sites_converged.json` / `tools/feature_sites_kept.json`），否则洗欠账只需写一行 JSON。
+（`tools/baselines/feature_sites_converged.json` / `tools/baselines/feature_sites_kept.json`），否则洗欠账只需写一行 JSON。
 ⚠ 踩过的坑：码形态正则写成 `[A-Z]{2,4}` 会把**单字母前缀码**（`W101/W201/W202` 等 8 个）
 静默漏出校验面（已在两处注释显式记下）。
 
@@ -79,5 +79,5 @@
   token 协议）——本档讨论的是**这些机制之间的重复登记**，不推翻它们
 - `core/engine_compat.py`（契约协商）、`core/engine_capabilities.py`（能力表与版本语义）、
   `core/config_registry.py`（配置段登记面）
-- `policy/structural_budget.md` + `tools/structural_kept.json`（欠账口径与登记表先例）
-- `tools/feature_sites.py`（接触点计量）+ 基线 `tools/feature_sites_baseline.json`
+- `policy/structural_budget.md` + `tools/baselines/structural_kept.json`（欠账口径与登记表先例）
+- `tools/feature_sites.py`（接触点计量）+ 基线 `tools/baselines/feature_sites_baseline.json`

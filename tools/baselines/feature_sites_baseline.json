@@ -13,7 +13,7 @@
      "roles": {
       "引擎侧登记": 7,
       "插件内": 5,
-      "文档": 2,
+      "文档": 3,
       "测试": 3
      },
      "scatter": [
@@ -27,7 +27,7 @@
      "scatter_count": 6,
      "stage_count": 0,
      "stage_files": [],
-     "total": 17
+     "total": 18
     },
     "formatter": {
      "converged": [
@@ -37,11 +37,11 @@
      "declared_in": "grammar/verilog/plugins/formatter/tpc.toml",
      "kept": null,
      "roles": {
-      "引擎侧登记": 14,
+      "引擎侧登记": 13,
       "插件内": 14,
       "文档": 19,
-      "测试": 29,
-      "行为基线": 4
+      "测试": 30,
+      "行为基线": 5
      },
      "scatter": [
       "analyzer/elaboration/contract.py",
@@ -60,12 +60,12 @@
       "tests/fuzz/README.md",
       "tests/fuzz/oracle.py",
       "tests/fuzz/run_fuzz.py",
-      "tools/structural_kept.json"
+      "tools/baselines/structural_kept.json"
      ],
      "scatter_count": 17,
      "stage_count": 0,
      "stage_files": [],
-     "total": 80
+     "total": 81
     },
     "macro_policy": {
      "converged": [
@@ -77,7 +77,7 @@
      "roles": {
       "引擎侧登记": 10,
       "插件内": 6,
-      "文档": 3,
+      "文档": 5,
       "测试": 2
      },
      "scatter": [
@@ -94,7 +94,7 @@
      "scatter_count": 9,
      "stage_count": 0,
      "stage_files": [],
-     "total": 21
+     "total": 23
     }
    },
    "summary": {
@@ -431,8 +431,8 @@
      "roles": {
       "引擎侧登记": 1,
       "插件内": 4,
-      "文档": 2,
-      "测试": 2
+      "文档": 1,
+      "测试": 3
      },
      "scatter": [
       "tools/check_gate_efficacy.py"
@@ -500,15 +500,18 @@
      "total": 10
     },
     "MAC001": {
-     "converged": [],
-     "converged_count": 0,
+     "converged": [
+      "tests/e2e/eval_benchmark.py"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/c/plugins/checks/macro_args/rules/_macro_args_check.py",
      "kept": null,
      "roles": {
       "引擎侧登记": 2,
       "插件内": 4,
-      "文档": 5,
-      "测试": 4
+      "文档": 3,
+      "测试": 5,
+      "行为基线": 1
      },
      "scatter": [
       "analyzer/semantic_checks.md",
@@ -846,7 +849,7 @@
      "roles": {
       "引擎侧登记": 2,
       "插件内": 5,
-      "文档": 4,
+      "文档": 3,
       "测试": 2
      },
      "scatter": [
@@ -856,7 +859,7 @@
      "scatter_count": 2,
      "stage_count": 0,
      "stage_files": [],
-     "total": 13
+     "total": 12
     },
     "TAG002": {
      "converged": [],
@@ -887,14 +890,14 @@
      "roles": {
       "插件内": 3,
       "文档": 1,
-      "测试": 4,
+      "测试": 5,
       "行为基线": 4
      },
      "scatter": [],
      "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
-     "total": 12
+     "total": 13
     },
     "WC001": {
      "converged": [
@@ -922,7 +925,7 @@
    },
    "summary": {
     "budget": 16,
-    "converged_total": 40,
+    "converged_total": 41,
     "instances": 43,
     "scatter_max": 3,
     "scatter_median": 0,
@@ -951,6 +954,26 @@
      "stage_count": 0,
      "stage_files": [],
      "total": 3
+    },
+    "discovery.shape": {
+     "converged": [
+      "core/engine_capabilities.py"
+     ],
+     "converged_count": 1,
+     "declared_in": "linter/discovery_shape.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 2,
+      "插件内": 2,
+      "文档": 4
+     },
+     "scatter": [
+      "linter/discovery_shape.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 8
     },
     "lexer.bracket_map": {
      "converged": [],
@@ -1170,12 +1193,12 @@
     }
    },
    "summary": {
-    "budget": 27,
-    "converged_total": 1,
-    "instances": 13,
+    "budget": 28,
+    "converged_total": 2,
+    "instances": 14,
     "scatter_max": 3,
     "scatter_median": 2,
-    "scatter_total": 27,
+    "scatter_total": 28,
     "stage_max": 0,
     "stage_median": 0
    }
@@ -1337,5 +1360,6 @@
    }
   }
  },
- "recorded": "2026-10-23"
+ "recorded": "2026-10-25",
+ "skipped_inputs": []
 }

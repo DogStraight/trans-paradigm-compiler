@@ -18,7 +18,7 @@
        区间内可能夹着非目标测试）
     3) 再记录收集数，必须相等
 
-另检 `min_pack_baseline.json` 锚定：引擎测试的 node id 被该基线记录，
+另检 `baselines/min_pack_baseline.json` 锚定：引擎测试的 node id 被该基线记录，
 参数化会改 id（`::test_x` → `::test_x[case]`），须串行重录基线。
 
 用法：
@@ -37,6 +37,15 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# 解析失败不能静默丢：可见通道（本工具只报告，无 strict）
+SKIPPED_INPUTS: list[tuple[str, str]] = []
+
+
+def _record_skipped_input(rel: str, reason: str) -> None:
+    entry = (rel, reason)
+    if entry not in SKIPPED_INPUTS:
+        SKIPPED_INPUTS.append(entry)
 
 
 class _Blank(ast.NodeTransformer):
@@ -59,7 +68,7 @@ def _skeleton(fn: ast.FunctionDef) -> str:
 
 def _baseline_files() -> set[str]:
     """min_pack_baseline 锚定的测试文件（参数化会改 node id）。"""
-    p = ROOT / "tools" / "min_pack_baseline.json"
+    p = ROOT / "tools" / "baselines" / "min_pack_baseline.json"
     if not p.is_file():
         return set()
     data = json.loads(io.open(p, encoding="utf-8").read())
@@ -109,14 +118,16 @@ def _collect_groups(
 
 
 def scan(min_group: int = 4, min_body: int = 4) -> list[dict]:
+    SKIPPED_INPUTS.clear()
     anchored = _baseline_files()
     findings: list[dict] = []
     for path in sorted((ROOT / "tests").rglob("test_*.py")):
+        rel = path.relative_to(ROOT).as_posix()
         try:
             tree = ast.parse(io.open(path, encoding="utf-8", errors="ignore").read())
-        except SyntaxError:
+        except SyntaxError as exc:
+            _record_skipped_input(rel, f"AST 解析失败: {exc}")
             continue
-        rel = path.relative_to(ROOT).as_posix()
         for members in _collect_groups(tree, min_body).values():
             if len(members) < min_group:
                 continue
@@ -129,6 +140,13 @@ def scan(min_group: int = 4, min_body: int = 4) -> list[dict]:
             })
     findings.sort(key=lambda f: (-f["count"], f["file"]))
     return findings
+
+
+def _report_skipped_inputs() -> None:
+    if SKIPPED_INPUTS:
+        print(f"\n[告警] {len(SKIPPED_INPUTS)} 处测试输入未能解析，未纳入统计：")
+        for row in SKIPPED_INPUTS:
+            print(f"  {row[0]}: {row[1]}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -151,10 +169,17 @@ def main(argv: list[str] | None = None) -> int:
         more = " ..." if f["count"] > 6 else ""
         print(f"     {names}{more}")
     if args.json:
+        payload = {
+            "findings": findings,
+            "skipped_inputs": [
+                {"path": rel, "reason": reason} for rel, reason in SKIPPED_INPUTS
+            ],
+        }
         Path(args.json).write_text(
-            json.dumps(findings, ensure_ascii=False, indent=2), encoding="utf-8")
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n[json] {args.json}")
     print("\n改法：pytest.mark.parametrize 表驱动；收集数前后必须相等（覆盖不丢）。")
+    _report_skipped_inputs()
     return 0
 
 

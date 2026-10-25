@@ -25,7 +25,7 @@
 
 | # | 判据 | 性质 | 状态 |
 |---|---|---|---|
-| 1 | **最小语言包探针**：只加载最小骨架包跑全量测试，仍绿的引擎测试 = 普适面 | 行为面（强） | **已做**（`tools/min_pack_probe.py`；基线 `tools/min_pack_baseline.json`） |
+| 1 | **最小语言包探针**：只加载最小骨架包跑全量测试，仍绿的引擎测试 = 普适面 | 行为面（强） | **已做**（`tools/min_pack_probe.py`；基线 `tools/baselines/min_pack_baseline.json`） |
 | 2 | **声明面缺失探针**：临时删一段语言包声明跑测试，仍绿处 = 引擎替声明做事 | 行为面（强） | 待做 |
 | 3 | **弱信号面**：`tools/lang_penetration.py`——① 引擎字符串里出现语言包规则/节点名（硬信号）② 语言对象词作标识符（弱信号） | 词法面（仅线索） | 已跑（按需复跑） |
 
@@ -49,8 +49,8 @@
 不可作回归判据**。探针包 = `grammar/yaml`（仓库既有迷你语言包，**固定**——基线与该包绑定，
 换包须重记）；它仍是一门真语言，故结论只在"相对该包"的意义上成立，这是本判据的已知折扣。
 
-基线（`tools/min_pack_baseline.json`）：**`passed = 1186`**。复现：
-`python -c "import json;print(json.load(open('tools/min_pack_baseline.json',encoding='utf-8'))['passed'])"`。
+基线（`tools/baselines/min_pack_baseline.json`）：**`passed = 1186`**。复现：
+`python -c "import json;print(json.load(open('tools/baselines/min_pack_baseline.json',encoding='utf-8'))['passed'])"`。
 ⚠ 只有**仍绿集合**可作判据；`变红/报错` 的边界会漂（同一用例随分配落"失败"或"报错"，
 总数不变），计数仅供人看。判读方式：改动前后各跑一次（都串行），**仍绿集合缩小 = 回归**
 （曾有测试走引擎通用面，现在开始依赖语言包声明）——这是逐族搬迁的回归护栏。
@@ -82,4 +82,4 @@
   只声明字段名，引擎仍假设取值在 `Node.content`）
 - `core/component_protocol.md` §1b（精化器能力位）+ `analyzer/elaboration/README.md`（引擎侧职责）
 - 门禁/探针：`policy/check_hardcode.py`、`tools/config_sites.py check`、
-  `tools/lang_penetration.py`、`tools/min_pack_probe.py`（基线 `tools/min_pack_baseline.json`）
+  `tools/lang_penetration.py`、`tools/min_pack_probe.py`（基线 `tools/baselines/min_pack_baseline.json`）

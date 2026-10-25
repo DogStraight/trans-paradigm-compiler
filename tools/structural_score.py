@@ -17,14 +17,14 @@
 C 与 D 需要外部二进制 `bifrost`（Python 侧审计，见 `policy/bifrost_audit.md`）；
 L 与"模块即类"判定是纯 AST，无外部依赖。本工具**不进日常门禁**。
 
-已判保持的项（`tools/structural_kept.json`，**每条必须有理由与出处**）在计分前剔除
+已判保持的项（`tools/baselines/structural_kept.json`，**每条必须有理由与出处**）在计分前剔除
 （R6，对全部族生效）：S 度量的是**未经处置的欠账**，不是"总复杂度"——逐项下过结论的
 项就该从 S 里出去，否则审计无法闭合。
 
 用法：
     python tools/structural_score.py              # 打印各分量与总分
     python tools/structural_score.py --component C  # 只算某个分量（C / L / D）
-    python tools/structural_score.py --save       # 写基线（tools/structural_baseline.json）
+    python tools/structural_score.py --save       # 写基线（tools/baselines/structural_baseline.json）
     python tools/structural_score.py --compare    # 与基线比较，列出新增项（回归）
 """
 
@@ -354,11 +354,11 @@ def _print_score(score: _Score, components: set[str], n_files: int) -> None:
 
 
 def _baseline_path(root: pathlib.Path) -> pathlib.Path:
-    return root / "tools" / "structural_baseline.json"
+    return root / "tools" / "baselines" / "structural_baseline.json"
 
 
 def _kept_path(root: pathlib.Path) -> pathlib.Path:
-    return root / "tools" / "structural_kept.json"
+    return root / "tools" / "baselines" / "structural_kept.json"
 
 
 def _load_kept(root: pathlib.Path) -> dict[str, str]:
@@ -421,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="structural_score", description="结构欠账分（口径见 policy/structural_budget.md）")
     parser.add_argument("--component", action="append", choices=["C", "L", "D"],
                         help="只算指定分量（可重复；缺省全算）")
-    parser.add_argument("--save", action="store_true", help="写基线 tools/structural_baseline.json")
+    parser.add_argument("--save", action="store_true", help="写基线 tools/baselines/structural_baseline.json")
     parser.add_argument("--compare", action="store_true", help="与基线比较（新增即回归，退出码 1）")
     args = parser.parse_args(argv)
 
