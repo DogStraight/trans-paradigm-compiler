@@ -121,16 +121,19 @@
 ### P2.3 验证吞吐优化（backlog，非发布阻塞）
 
 > 动机：验证（fuzz/差分/edge）是"验证附着于配置驱动语言定义"的差异化能力，快速验证层是
-> "模型写配置 → 自动验证闭环"成立的前提（详见 `tests/fuzz/README.md`）。现状：linter
-> packrat 记忆化（管线 -92%）+ 渲染器 doc 布局记忆化（单遍 -57%）+ 回归并发化（`-n auto`：
-> 300s → ~78s）；fuzz 实测 ~40 iter/s。下一热点 = parser（单遍 ~50%）；packrat **失败**
-> 记忆化已回退（失败尝试也递增 `sibling_counter` ⇒ path 编号变，需先重构计数语义）。
+> "模型写配置 → 自动验证闭环"成立的前提（详见 `tests/fuzz/README.md`）。现状（2026-10-29
+> 实测重锚）：linter packrat 记忆化（管线 -92%）+ 渲染器 doc 布局记忆化（单遍 -57%）+
+> 回归并发化（`-n auto`：300s → ~78s）；fuzz 5 → **12 iter/s 单进程 / 32 iter/s（8 worker）**
+> ——已落地两处固定成本修复：resolve 不再每次重读重解析包内全部 tpc.toml、parser 预编译表
+> 随语言包复用；并行受本机有效核数限制（16 逻辑核实测 ~4x 上限）。旧"~40 iter/s"锚来自
+> 2026-08-27 的更小语料，与当前 185 文件/1.3MB 种子集不可比，故改用可复跑口径记数。
+> 下一热点 = 宏 splice 的"自述判据"渲染（~22% 运行时间；记忆化需先解决"标记节点改变
+> 渲染结果"的失效面）；packrat **失败**记忆化已回退（失败尝试也递增 `sibling_counter`
+> ⇒ path 编号变，需先重构计数语义）。
 
-- [ ] fuzz harness 吞吐三件套：语法表/parser 跨迭代缓存（~2.5x）/ fuzz 模式关闭管线
-      内部幂等复跑（~1.8x）/ multiprocessing 多 worker（~8x）
+- [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）
 - [ ] 随机合法程序 → 对拍 Verible：接受域从人工语料推到统计意义（GrammarFuzzer 生成器
       已由 `run_fuzz.py` 接线并进 CI；剩余 = 生成大批合法程序做 Verible 接受域统计对拍）
-- [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）
 - [ ] CI 补强：differential 门禁未接入——需 verible 二进制（`nightly.yml` 已留可选 job，
       接入时用 fetch 步骤或 `VERIBLE_FORMAT`）
 

@@ -5,7 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **fuzz 并行评估 `--workers`（块 11）**：输入生成/变异仍在父进程按一个 rng 顺序
+  展开（`_iter_inputs`），worker 只跑 `oracle.evaluate_format`；同一 `--seed` 的
+  输入串与 worker 数无关（两次构造计划哈希相同），`imap` 保序 ⇒ findings /
+  `index.jsonl` 与单进程一致。实测 500 iters（seed 42）：单进程 42.2s → 4 worker
+  19.2s → 8 worker 15.8s，16 worker 不再涨（本机 16 逻辑核纯 CPU 实测并行上限
+  ~4x）。`tests/fuzz/README.md` 补「吞吐与并行」节（口径/确定性判据/实测表）。
+
 ### Changed
+- **块 11 吞吐：两处固定成本修复（fuzz 5 → 12 iter/s 单进程，300 iters 57.8s → 26.4s）**：
+  · **配置声明装载晚于缓存命中**（`core/config_registry._resolve_cached`）：声明只由
+  (包目录, 档位) 决定，而缓存键还含 ext/plugins/base——原实现先装载再查缓存，于是
+  每次 resolve 重读重解析包内全部 tpc.toml（verilog 包 14 个插件，约 15 次 TOML
+  解析 + 目录扫描）。fuzz 单迭代 ~20 次 resolve，这项占运行时间 75%（3 行种子探针
+  10 → 40 iter/s）。配置文件在进程内不可变（`load_language` = 重新初始化），命中
+  缓存不再触碰声明；`reset()` 清缓存。新增判据测试「同键 resolve 只装载一次声明」。
+  · **parser 预编译表跨运行复用**（`pipeline._PIPELINE_SHARED`）：主解析 parser 给
+  最外层管线复用（`Parser.parse()` 每次重置解析期状态）、formatter wrap parser 也按
+  语言包缓存；幂等复跑的**嵌套**管线仍新建（`_IDEMPOTENT_REENTRY`），避免覆盖外层
+  `result["parser"]` 的注释锚点。100 iters 的 parser init 2.90s → 0.18s（58 → 4 次）。
+  · 新增 3 条判据测试；全量 4477 passed / 7 skipped；pyright strict 0 errors。
+
 - **块 10 收口：`eval_benchmark` 对拍口径（parse 失败事实码 + 语法 lint 不误排除，`#79`）**：
   `_tpc_diags_all` 原以 `not parse_ok or f["syntax"]` 排除文件——把**语法阶段 lint**
   （ST001 行尾空白等）当成 parse 失败，7 个真实语料组里 6 个被判 `TPC-PARSE-FAIL`
