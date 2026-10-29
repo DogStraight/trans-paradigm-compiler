@@ -45,6 +45,36 @@
 - **已修不再最小化**：类别不复现 → 直接走沉淀（避免"活着的被拒、修完的被跳过 ⇒
   永远沉淀不了"）。
 
+## 吞吐与并行（`--workers`）
+
+**口径**：同一 `--seed` + `--iters` 下测 `iterations` 行的 iter/s；记录机器核数
+（本机 16 逻辑核，实测纯 CPU 并行只到 ~4x，故 16 worker 不再涨）。对比数字必须
+同口径，否则不可比。
+
+```
+python tests/fuzz/run_fuzz.py --iters 500 --seed 42            # 单进程
+python tests/fuzz/run_fuzz.py --iters 500 --seed 42 --workers 8
+```
+
+**确定性**：输入生成/变异**全在父进程**按一个 rng 顺序展开（`_iter_inputs`），
+worker 只跑 oracle 评估 ⇒ 同一 `--seed` 的输入串与 worker 数无关（判据：probe
+构造两次计划哈希相同）；`imap` 保序 ⇒ findings 与 `index.jsonl` 顺序同单进程。
+`--workers` 只影响跑多快，不影响发现什么。
+
+**实测**（2026-10-29，块 11 优化前 → 后；默认混合 = 生成 30% + 变异 70%）：
+
+| 配置 | 基线（块 11 修复前） | 优化后 |
+|---|---|---|
+| 300 iters 单进程 | 57.8s（5 iter/s） | 26.4s（11 iter/s） |
+| 500 iters 单进程 | — | 42.2s（12 iter/s） |
+| 500 iters `--workers 4` | — | 19.2s（26 iter/s） |
+| 500 iters `--workers 8` | — | 15.8s（32 iter/s） |
+| 500 iters `--workers 16` | — | 16.0s（31 iter/s，已达本机并行上限） |
+
+固定成本来自两处（均已修，见 `CHANGELOG` 块 11 条目）：每次 resolve 重读重解析
+包内全部 tpc.toml；每次管线运行重建 Parser 预编译表。单进程是回归门禁的主指标
+（机器无关性更好），并行只用来压 CI 时间预算。
+
 ## 语言包
 
 `--pack <dir>` 一处指定，**生成器 / 词法 / 管线 / 种子**随之（缺一就会"用 A 包生成、

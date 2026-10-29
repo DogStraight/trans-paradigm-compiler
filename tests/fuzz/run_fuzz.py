@@ -15,6 +15,7 @@
     python tests/fuzz/run_fuzz.py --iters 500 --seed 42
     python tests/fuzz/run_fuzz.py --mutate-only            # 只跑变异
     python tests/fuzz/run_fuzz.py --pack grammar/c --iters 500
+    python tests/fuzz/run_fuzz.py --iters 800 --workers 8  # 并行评估（吞吐）
 
 Doc: tests/fuzz/README.md
 """
@@ -92,19 +93,33 @@ def seed_roots_for(pack: str) -> tuple[str, ...]:
     return tuple(roots)
 
 
-def check_one(src: str, lexer: Lexer, findings: list, label: str,
-              index: int, findings_dir: str, pack: str,
-              ext_dirs: list[str], advisories: list[str],
-              write_index: bool = True) -> None:
-    """对单个输入跑全部不变量；违反则记录（现场 + 索引）。
+def _iter_inputs(iters: int, rng, fuzzer, seeds: list[str],
+                 token_map: dict, pack: str, ext_dirs: list[str]):
+    """按 `--seed` 确定的迭代输入流：`(index, label, src)`。
 
-    已接受的一遍不幂等（展开路径 / 一遍收敛的空白漂移）由 oracle 判为 advisory
-    ——不进 findings、不落盘、不影响退出码，但汇总打印（判据见 README）。
+    生成/变异全在**父进程**（或单进程）按同一个 rng 顺序展开 ⇒ 同一 `--seed`
+    给出同一串输入，与 worker 数无关（并行只分发"评估"这一步）。
     """
-    violations = oracle.evaluate_format(
-        src, lexer, rules_dir=pack, ext_dirs=ext_dirs, label=label,
-        advisories=advisories,
-    )
+    for i in range(iters):
+        if fuzzer is not None and rng.random() < 0.3:
+            yield i, "gen", fuzzer.generate()
+        else:
+            if not seeds:
+                print("no seeds; add corpus files or drop --mutate-only")
+                sys.exit(2)
+            seed = rng.choice(seeds)
+            with open(seed, "r", encoding="utf-8", errors="replace") as f:
+                seed_src = f.read()
+            yield (
+                i,
+                f"mut:{os.path.basename(seed)}",
+                mutate_source(seed_src, rng, token_map, pack, ext_dirs=ext_dirs),
+            )
+
+
+def _record(violations, src: str, findings: list, label: str, index: int,
+            findings_dir: str, pack: str, write_index: bool = True) -> None:
+    """落盘 + 汇总 + 索引一条判据结果（单进程与并行共用，保序一致）。"""
     for v in violations:
         fname = _save(findings_dir, f"{index:05d}_{v.kind}_{label}.v", src)
         findings.append(f"{v} [{label}]")
@@ -122,6 +137,52 @@ def check_one(src: str, lexer: Lexer, findings: list, label: str,
             )
 
 
+def check_one(src: str, lexer: Lexer, findings: list, label: str,
+              index: int, findings_dir: str, pack: str,
+              ext_dirs: list[str], advisories: list[str],
+              write_index: bool = True) -> None:
+    """对单个输入跑全部不变量；违反则记录（现场 + 索引）。
+
+    已接受的一遍不幂等（展开路径 / 一遍收敛的空白漂移）由 oracle 判为 advisory
+    ——不进 findings、不落盘、不影响退出码，但汇总打印（判据见 README）。
+    """
+    violations = oracle.evaluate_format(
+        src, lexer, rules_dir=pack, ext_dirs=ext_dirs, label=label,
+        advisories=advisories,
+    )
+    _record(violations, src, findings, label, index, findings_dir, pack,
+            write_index)
+
+
+# ── 并行评估（--workers >1）───────────────────────────────
+# 父进程生成输入（保 `--seed` 语义），worker 只跑 oracle 一侧；
+# `imap` 保序 ⇒ findings/索引顺序与单进程一致。
+
+_WORKER: dict = {}
+
+
+def _worker_init(pack: str, ext_dirs: list[str]) -> None:
+    """worker 进程初始化：语言包 / 扩展目录 / 词法器（继承自父）。"""
+    _WORKER["pack"] = pack
+    _WORKER["ext_dirs"] = ext_dirs
+    _WORKER["lexer"] = Lexer(rules_dir=pack, ext_dirs=ext_dirs)
+
+
+def _worker_eval(task: tuple[int, str, str]):
+    """worker 侧：单个输入 → `([(kind, detail)], advisories)`。"""
+    _, label, src = task
+    advisories: list[str] = []
+    violations = oracle.evaluate_format(
+        src,
+        _WORKER["lexer"],
+        rules_dir=_WORKER["pack"],
+        ext_dirs=_WORKER["ext_dirs"],
+        label=label,
+        advisories=advisories,
+    )
+    return [(v.kind, v.detail) for v in violations], advisories
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="tpc formatter fuzz harness")
     ap.add_argument("--iters", type=int, default=500)
@@ -135,7 +196,12 @@ def main() -> None:
     ap.add_argument("--findings-dir", default=os.path.join(_HERE, "findings"))
     ap.add_argument("--no-index", action="store_true",
                     help="不写 findings/index.jsonl（临时探查用）")
+    ap.add_argument("--workers", type=int, default=1,
+                    help="并行评估进程数（默认 1；输入生成始终在父进程，"
+                         "同一 --seed 的输入串与 worker 数无关）")
     args = ap.parse_args()
+    if args.workers < 1:
+        ap.error("--workers 必须 >= 1")
 
     rng = random.Random(args.seed)
     pack = args.pack
@@ -153,21 +219,30 @@ def main() -> None:
     advisories: list[str] = []
     t0 = time.time()
 
-    for i in range(args.iters):
-        if fuzzer is not None and rng.random() < 0.3:
-            src = fuzzer.generate()
-            label = "gen"
-        else:
-            if not seeds:
-                print("no seeds; add corpus files or drop --mutate-only")
-                sys.exit(2)
-            seed = rng.choice(seeds)
-            with open(seed, "r", encoding="utf-8", errors="replace") as f:
-                seed_src = f.read()
-            src = mutate_source(seed_src, rng, token_map, pack, ext_dirs=ext_dirs)
-            label = f"mut:{os.path.basename(seed)}"
-        check_one(src, lexer, findings, label, i, args.findings_dir, pack, ext_dirs,
-                  advisories, write_index=not args.no_index)
+    if args.workers > 1:
+        # 并行：父进程生成全部输入（保 --seed 语义），worker 只评估
+        from multiprocessing import Pool
+
+        tasks = list(_iter_inputs(args.iters, rng, fuzzer, seeds, token_map,
+                                  pack, ext_dirs))
+        with Pool(
+            processes=args.workers,
+            initializer=_worker_init,
+            initargs=(pack, ext_dirs),
+        ) as pool:
+            results = pool.imap(_worker_eval, tasks, chunksize=1)
+            for (i, label, src), (violations, adv) in zip(tasks, results):
+                advisories.extend(adv)
+                _record(
+                    [oracle.Violation(k, d) for k, d in violations],
+                    src, findings, label, i, args.findings_dir, pack,
+                    write_index=not args.no_index,
+                )
+    else:
+        for i, label, src in _iter_inputs(args.iters, rng, fuzzer, seeds,
+                                          token_map, pack, ext_dirs):
+            check_one(src, lexer, findings, label, i, args.findings_dir, pack,
+                      ext_dirs, advisories, write_index=not args.no_index)
 
     dt = time.time() - t0
     print(f"iterations: {args.iters}  findings: {len(findings)}  "
