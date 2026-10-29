@@ -6,14 +6,13 @@
 | 文件 | 一句话 |
 |------|--------|
 | `scanner.py` | 两阶段 Linter 编排器（发现 + 扁平检查） |
-| `discovery.py` | 发现阶段：token 流 → 自动注册的扁平检查器列表 |
 | `checkers/` | 扁平检查器族（`matcher.py` 规则匹配 / `expression.py` pratt 复用 / `macro_hygiene.py` 宏指令卫生 / `style.py` 排版卫生 ST 族） |
-| `checker.py` | 扁平检查器协议、注册表与轻量 AST 节点 |
-| `lookahead.py` | 动态两级前瞻消歧表 |
-| `grammar_slicer.py` | 从语法规则推导切分层级映射 |
+| `checker.py` | 扁平检查器协议与注册表（不支持诊断语义，只做合并） |
 | `diagnose.py` | 条件编译多路径诊断（枚举所有路径逐条 lint 汇总） |
 | `macro_syntax.py` | 宏定义的**形式化语法**检查（AST 前；语言包声明 `[macro_syntax]` 才启用；`tpc lint` 与 `tpc check` 的语法阶段**共用同一实现**——后者按原文补查，见 `analyzer/structure.py::raw_source_macro_diags`） |
 
+> **语言无关的推导层在 `structure/`**（切片树 / FIRST / 前瞻消歧 / 发现树），本包只做
+> 检查器与诊断；`islands/`（片段模式）是同一推导层的第二个消费方。
 > 架构总述见 `linter/linter_architecture.md`；精度评测见
 > `tests/e2e/eval_lint_accuracy.py`（recall/误报门禁）。
 > CLI 诊断入口是 `main.py` 的 `tpc lint`（`cli.py` 重复实现已删）。

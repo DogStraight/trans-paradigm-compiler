@@ -82,7 +82,7 @@ flowchart LR
 
 ---
 
-## 2. 发现阶段（discovery.py）— 多层级递归
+## 2. 发现阶段（`structure/discovery.py`）— 多层级递归
 
 ```mermaid
 flowchart TD
@@ -145,7 +145,7 @@ ModuleDecl
 
 ---
 
-## 3. 动态两级路径消歧（lookahead.py）— A/B 类统一
+## 3. 动态两级路径消歧（`structure/lookahead.py`）— A/B 类统一
 
 ```mermaid
 flowchart TD
@@ -285,12 +285,13 @@ flowchart LR
 
 | 文件 | 职责 |
 |------|------|
-| `linter/scanner.py` | 编排 P1/P0/P2；深度优先注册节点 checker（每节点独立扁平验证） |
-| `linter/discovery.py` | 递归发现器：容器 children（块式+引用式+包装穿透）、容器边界=body 终止符（`_stmt_ends`）、块 body 生成式分析、结束符推导、上下文/深度 |
-| `linter/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析；表达式黑盒按 pratt 标识、入口选择器名校验 fail-fast、is_statement 显式收集、上下文名动态生成、`_stmt_ends` 句子结束符推导；`[` 括号配对跳过操作数延续、`@Range?` first 集） |
-| `linter/first_set.py` | **FIRST 集单一实现**：`nullable` 开关表达两种语义——`False`＝强制起始（lookahead/slicer 前缀判别）、`True`＝可能起始（matcher 候选筛选，含可空前缀传播）。历史两份独立实现曾语义分叉且 docstring 与实现矛盾 |
-| `linter/discovery_shape.py` | **语句发现形态声明**（`[discovery]`）：容器 / 容器延续关键字 / 属性对 / 子句分隔符全部读语言包声明，引擎零语言字面量；提供 `is_stmt_container` 单一口径（发现层与注册层共用，ADR-0025） |
-| `linter/grammar_slicer.py` | build_slice_tree：GrammarRule → feature 树 |
+| `linter/scanner.py` | 编排 P1/P0/P2；深度优先注册节点 checker（每节点独立扁平验证）；把结构层未识别位点转诊断 |
+| `structure/discovery.py` | 递归发现器（语言无关推导层）：容器 children（块式+引用式+包装穿透）、容器边界=body 终止符（`_stmt_ends`）、块 body 生成式分析、结束符推导、上下文/深度 |
+| `structure/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析；表达式黑盒按 pratt 标识、入口选择器名校验 fail-fast、is_statement 显式收集、上下文名动态生成、`_stmt_ends` 句子结束符推导；`[` 括号配对跳过操作数延续、`@Range?` first 集） |
+| `structure/first_set.py` | **FIRST 集单一实现**：`nullable` 开关表达两种语义——`False`＝强制起始（lookahead/slicer 前缀判别）、`True`＝可能起始（matcher 候选筛选，含可空前缀传播）。历史两份独立实现曾语义分叉且 docstring 与实现矛盾 |
+| `structure/discovery_shape.py` | **语句发现形态声明**（`[discovery]`）：容器 / 容器延续关键字 / 属性对 / 子句分隔符全部读语言包声明，引擎零语言字面量；提供 `is_stmt_container` 单一口径（发现层与注册层共用，ADR-0025） |
+| `structure/grammar_slicer.py` | build_slice_tree：GrammarRule → feature 树 |
+| `structure/node.py` | `DiscoveredNode` / `CTX_TOP` / `UnrecognizedSite`（中立位点） |
 | `linter/diagnose.py` | 条件编译多路径诊断：枚举各条件路径逐条 lint，汇总全路径诊断 |
 | `linter/checkers/statement.py` | 语句检查器（块规则先消费 block_start + 多候选取优） |
 | `linter/checkers/matcher.py` | 共享规则匹配器（token/choice/optional/repeat/call；表达式根按 pratt 标识 + `_is_atom_selector` 推导识别、@PrimaryExpr 原子走 `match_atom`（is_atom 规则 production 驱动）、choice/@Expression 先跳 trivia） |
@@ -298,4 +299,4 @@ flowchart LR
 | `linter/checkers/boundary.py` | 块/括号边界配对（P1） |
 | `linter/checkers/macro_token.py` | 非法 token 检查（P0） |
 | `linter/checkers/macro_hygiene.py` | 宏/指令卫生检查（MH001/MH002，文件级） |
-| `linter/checker.py` | Checker 协议 + 注册表 + DiscoveredNode |
+| `linter/checker.py` | Checker 协议 + 注册表（`DiscoveredNode` 在 `structure/node.py`） |

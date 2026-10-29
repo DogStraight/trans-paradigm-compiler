@@ -1,10 +1,10 @@
-"""discovery.py — 发现阶段：token 流 → 自动注册的扁平检查器列表。
+"""discovery.py — 发现阶段：token 流 → 轻量语法结构树。
 
 把源 token 流"变形"为轻量 AST（DiscoveredNode 列表），每个节点描述
-一种被发现的语法结构及其 token 区间。检查阶段据此实例化对应 Checker。
+一种被发现的语法结构及其 token 区间。消费方：linter 据此实例化 Checker；
+islands 据此把节点当语法岛候选（未识别位点 = water）。
 
-Doc: linter/linter_architecture.md
-Doc: linter/linter_architecture.md
+Doc: structure/README.md
 
 发现策略（决策 1：动态前瞻逐步缩小范围）：
     - 用块边界维护上下文栈（顶层 CTX_TOP + opener_context 配置的块内上下文）
@@ -20,13 +20,9 @@ from __future__ import annotations
 from core.define import Token
 from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia, split_token_types
 
-from . import LintDiagnostic, token_span
-from .checker import (
-    CTX_TOP,
-    DiscoveredNode,
-)
 from .discovery_shape import DiscoveryShape, is_stmt_container, load_shape
 from .lookahead import LookaheadTable, fallback_statement_names
+from .node import CTX_TOP, DiscoveredNode, UnrecognizedSite
 
 # discovery 递归深度上限（坏输入收敛防御，见 _discover_range 注释）
 _MAX_DISCOVER_DEPTH = 64
@@ -66,11 +62,11 @@ class Discovery:
         self._bracket_closers = bracket_closers
         # 语句发现形态（ADR-0025）：**全部来自语言包声明**，引擎不猜。
         # 属性/修饰前缀对、容器延续关键字、括号定界语句容器、子句分隔符
-        # 都由 `[discovery]` 声明（见 linter/discovery_shape.py）。
+        # 都由 `[discovery]` 声明（见 structure/discovery_shape.py）。
         self._shape: DiscoveryShape = load_shape()
         self._continuation_openers = self._shape.continuations
-        # 未识别语句诊断（本次 discover 累积，scan 后由 scanner 合并）。
-        self._unrecognized: list[LintDiagnostic] = []
+        # 未识别语句位点（本次 discover 累积，消费方自行转诊断/water）。
+        self._unrecognized: list[UnrecognizedSite] = []
         # 括号定界语句容器 body 的语句恢复深度（仅该上下文启用 fallback 候选，
         # 避免把全局"未识别"诊断语义改成 phase-statement）
         self._stmt_recovery_depth = 0
@@ -80,8 +76,8 @@ class Discovery:
         self._unrecognized = []
         return self._discover_range(tokens, 0, len(tokens), CTX_TOP, 0)
 
-    def unrecognized_diagnostics(self) -> list[LintDiagnostic]:
-        """本次 discover 期间记录的"未识别语句"诊断。"""
+    def unrecognized_sites(self) -> list[UnrecognizedSite]:
+        """本次 discover 期间记录的"未识别语句"位点（中立记录）。"""
         return list(self._unrecognized)
 
     def dump_nodes(
@@ -92,7 +88,7 @@ class Discovery:
         """把发现节点树 dump 为文本：rule + [start,end) → 行号。
 
         行号同时给 1-based（token.line，lexer/parser 惯例）与 0-based
-        （token_span.start.line，LSP 诊断惯例），便于与诊断位置对账。
+        （token.line - 1，LSP 诊断惯例），便于与诊断位置对账。
         """
         if nodes is None:
             nodes = self.discover(tokens)
@@ -105,7 +101,7 @@ class Discovery:
                 e = max(n.start, n.end - 1)
                 s_line = tokens[s].line if s < len(tokens) else "?"
                 e_line = tokens[e].line if e < len(tokens) else "?"
-                s_span0 = token_span(tokens[s])[0].line if s < len(tokens) else "?"
+                s_span0 = tokens[s].line - 1 if s < len(tokens) else "?"
                 lines.append(
                     f"{'  ' * depth}{rule} [{n.start},{n.end}) "
                     f"L{s_line}-{e_line} (span0 L{s_span0})"
@@ -116,23 +112,21 @@ class Discovery:
         return "\n".join(lines)
 
     def _record_unrecognized(self, tokens: list[Token], i: int) -> None:
-        """记录"未识别语句"诊断：有语句起点特征但无任何已知规则匹配。
+        """记录"未识别语句"位点：有语句起点特征但无任何已知规则匹配。
 
-        诊断 message 附带 token 窗口（前后文），覆盖"涉及上下文才触发"
-        的错误——单点 token 往往无法定位根因。
+        记录 message 附带 token 窗口（前后文），覆盖"涉及上下文才触发"
+        的错误——单点 token 往往无法定位根因。**只记中立位点**（结构层不产
+        诊断）：linter 转成 `phase-unrecognized`，islands 当 water。
         """
         from core.debug_report import format_token_window
 
-        t = tokens[i]
         self._unrecognized.append(
-            LintDiagnostic(
-                range=token_span(t),
+            UnrecognizedSite(
+                start=i,
                 message=(
                     "unrecognized statement: no grammar rule matches here "
                     f"| {format_token_window(tokens, i)}"
                 ),
-                severity=1,
-                code="phase-unrecognized",
             )
         )
 

@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **抽出语言无关结构推导层 `structure/`（片段模式 P1 前置，2026-10-30）**：把
+  `grammar_slicer / first_set / lookahead / discovery / discovery_shape` 从 `linter/`
+  移到新包 `structure/`——它们只吃语言包 TOML（规则表 → 切片树 → FIRST → 前瞻 →
+  发现树），不含语言字面量、不产诊断；linter 与即将落地的 `islands/`（片段模式）是
+  两个消费方。`linter/` 只留检查器/诊断；结构层产物 `DiscoveredNode`/`CTX_TOP`/
+  新增中立记录 `UnrecognizedSite` 移入 `structure/node.py`，linter `scanner` 负责把
+  未识别位点转 `phase-unrecognized` 诊断（结构层不依赖 linter 类型）。
+  · 动机（作者 2026-10-30 拍板「抽」）：片段模式要"先吃语法配置 → 得出分片信息"，
+  不能把 linter 包变成事实上的结构层；推导层单向后向依赖（linter / islands → structure）。
+  · 迁移面：外部引用仅 `tests/fuzz/generate.py` 与 `test_linter_slicer.py`；文档
+  （MODEL_INDEX / engine_overview / linter_architecture / ADR-0024/0025 / gap）与
+  基线（structural / feature_sites）路径同步；`check_gate_efficacy` 两条变异路径同步。
+  · 证据：全量测试绿、pyright strict 0、`structural_score --compare` Δ-74 / 新增 0、
+  `feature_sites compare` ✓。
+  · 随之定稿：P1 不再设 `[[island_rules]]`/`island_rewriter`（片段模式下语法配置推导的
+  语法单元默认就是岛，配置面零新增），记号机制退役（见 `docs/gaps/gap-fragment-mode.md`）。
+
 ### Added
 - **fuzz 并行评估 `--workers`（块 11）**：输入生成/变异仍在父进程按一个 rng 顺序
   展开（`_iter_inputs`），worker 只跑 `oracle.evaluate_format`；同一 `--seed` 的

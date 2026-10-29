@@ -4,16 +4,17 @@ grammar_slicer.py — 从语法规则推导切分层级映射。
 职责：
     读取 GrammarRule 的 structure/production/end_case 字段，
     用 parser.rule_selector.analyze_production_features 解析 production，
-    为 linter 构建按语法边界切分所需的层级映射。
+    为结构消费方（linter 的反解析器 / islands 的片段分片）构建按语法边界切分
+    所需的层级映射。
 
-Doc: linter/linter_architecture.md
+Doc: structure/README.md
 """
 
 from typing import Any
 
 from core.define import GrammarRule
-from linter.first_set import first_tokens
 from parser.rule_selector import analyze_production_features
+from structure.first_set import first_tokens
 
 
 def _rule_prods_raw(rule: GrammarRule) -> Any:
@@ -98,5 +99,5 @@ def get_start_tokens(parsed: list[dict], tree: dict | None = None) -> set[str]:
 
 
 def _collect_first_start_tokens(feat: dict | None, tree: dict | None = None) -> set[str]:
-    """强制起始 token（保守语义）——薄封装单一实现，见 linter/first_set.py。"""
+    """强制起始 token（保守语义）——薄封装单一实现，见 structure/first_set.py。"""
     return first_tokens(feat, tree, nullable=False)

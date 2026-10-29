@@ -56,7 +56,7 @@ E002·E003 安全网）在 C 上也不再被生产路径使用**（raw 位点只
     M1 资格代码同轮删除（内部 warning 只留收敛证据，raw 位点不再产生）；变异表去 5 条。
   - 遗留（T2d 收口）：`docs/gaps/gap-c-semantic-base.md`、两包 README、`linter/AGENTS.md`
     等对 pre_scan 的历史叙述按 T2d 统一改写。
-- **T2c（删除 raw 管线，需先证后删）**：`linter/lookahead.py` M1 资格证据（`_type_name_hits`/
+- **T2c（删除 raw 管线，需先证后删）**：`structure/lookahead.py` M1 资格证据（`_type_name_hits`/
   `_substitution_trial`/收敛 warning 面）、`scanner._apply_narrow_downgrade`、`parser` raw
   承载（`raw_sites`/`raw_source`/`try_raw_sentence`/`build_raw_candidate`）、
   `grammar/c/plugins/semantics/_raw_understand.py`/`_raw_transform.py`、
@@ -138,7 +138,7 @@ T2c（raw 管线大删：M2 摘诊断/parser raw 承载/P4 理解提升/E002·E0
 
 ## Impl 现状（#53）
 
-`linter/lookahead.py::_record_convergence`（M1①–④）、`linter/scanner.py::_apply_narrow_downgrade`
+`structure/lookahead.py::_record_convergence`（M1①–④）、`linter/scanner.py::_apply_narrow_downgrade`
 （M2）、`parser/block_parser.py::build_raw_candidate`（raw 承载）、
 `analyzer/primitives/_raw_validate.py::validate_raw_statement`（E002）、
 `grammar/c/plugins/semantics/_raw_understand.py`（E003）/`_raw_transform.py`（提升）；

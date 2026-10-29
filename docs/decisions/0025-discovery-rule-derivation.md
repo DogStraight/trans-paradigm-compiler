@@ -5,7 +5,7 @@
 
 ## 背景
 
-`linter/discovery.py`（816 行）负责"把 token 流切成语句区间并递归成树"，供
+`structure/discovery.py`（816 行）负责"把 token 流切成语句区间并递归成树"，供
 `StatementChecker` 逐句做精确诊断。它在**没有解析器**的前提下工作（坏输入也要能定位），
 因此不能直接用 parser 的 production 求值——这是它存在的正当理由（见
 `docs/gaps/gap-parser-linter-approximation.md`：parser 无错误恢复，linter 必须自己切边界）。
@@ -102,7 +102,7 @@ keywords = ["keyword.else", "keyword.default"]
 - 门禁补强：`policy/check_hardcode.py` 增设 **R6**——引擎字符串出现
   `bracket.*` / `symbol.*` 具体 token 名即报（当前 R1 盲区）。
 
-> Impl: linter/discovery.py（`_derive_attr_openers` / `_is_bracket_stmt_container` /
+> Impl: structure/discovery.py（`_derive_attr_openers` / `_is_bracket_stmt_container` /
 > `_derive_continuation_openers`）· linter/scanner.py（`_is_pure_stmt_container`）
 > Test: tests/engine/linter/test_linter_discovery.py ·
 > tests/languages/c/test_c_block_diagnostics.py · tests/languages/c4/test_c4_linter.py
@@ -114,7 +114,7 @@ keywords = ["keyword.else", "keyword.default"]
 
 **落地形态**：语言包新增 `base/_discovery.toml`（`[discovery]` 段）+ `tpc.toml`
 `[discovery] shape = {file, section}` + 能力 `discovery.shape.v1`；引擎侧新增
-`linter/discovery_shape.py`（`DiscoveryShape` + `load_shape` + 统一判定 `is_stmt_container`）。
+`structure/discovery_shape.py`（`DiscoveryShape` + `load_shape` + 统一判定 `is_stmt_container`）。
 
 | 期 | 内容 | 结果 |
 |---|---|---|

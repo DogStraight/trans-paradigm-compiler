@@ -52,7 +52,7 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
   **引擎既有赋值链宽松**（`x = (t)y + z = 1;` / `(int)` 版在改前也通过 ⇒ 单列的既有近似）、
   `tpc check` 对静默输入 `parse_ok=False` 却 `exit_code=0/syntax=[]` 的自相矛盾。
 - **覆盖边界（2026-10-11 循环 #6）**：资格判定原本只在**块体语句位**（根块 / `is_block` 规则体）
-  产生位点；**循环 #6 已把位点发现面扩到 production 层语句位**（`linter/discovery.py::
+  产生位点；**循环 #6 已把位点发现面扩到 production 层语句位**（`structure/discovery.py::
   _scan_container_sites`，`record=False` 只扫不建节点）⇒ C 函数体（`CompoundStmt`）与块内语句位
   **现已产生位点**（`void f(void){ x=(t)y; }` → 1 个 `eligible=true` (2,15)），且该扩展**零用户可见
   变化**（诊断 / `--json` / exit code 逐字节不变；对拍 0/144）。**raw 承载仍未做**（并入 M2+P4 原子批次）。

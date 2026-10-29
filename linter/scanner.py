@@ -1,8 +1,8 @@
 """
 scanner.py — 两阶段 Linter 编排器。
 
-发现阶段（discovery.py）：
-    token 流 → 自动注册的扁平节点列表（轻量 AST）
+发现阶段（`structure/discovery.py`，语言无关推导层）：
+    token 流 → 轻量语法结构树（structure.node.DiscoveredNode）
 
 检查阶段（checkers/）：
     每个节点实例化对应 Checker，扁平 validate，合并错误
@@ -31,11 +31,11 @@ from core.token_protocol import (
 from lexer import Lexer
 from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
+from structure.discovery import Discovery
+from structure.discovery_shape import is_stmt_container
+from structure.grammar_slicer import build_slice_tree
 
-from . import LintDiagnostic, Position
-from .grammar_slicer import build_slice_tree
-from .discovery import Discovery
-from .discovery_shape import is_stmt_container
+from . import LintDiagnostic, Position, token_span
 from .checker import CheckerRegistry
 from .checkers.boundary import BoundaryChecker
 from .checkers.macro_hygiene import MacroHygieneChecker
@@ -405,7 +405,17 @@ class LinterScanner:
         # 宏定义的**形式化语法**约束在此层（AST 前）：指令行已被扫指令消费、不进 lint
         # 流，故必须对**原始源码**检查；语言包未声明 `[macro_syntax]` ⇒ 空（语言无关）。
         errors = macro_syntax_diagnostics(source, self._rules_dir)
-        errors += self._discovery.unrecognized_diagnostics()
+        # 未识别语句位点（结构层只给中立记录，linter 转诊断）
+        if self.enable_phase2:
+            for site in self._discovery.unrecognized_sites():
+                errors.append(
+                    LintDiagnostic(
+                        range=token_span(tokens[site.start]),
+                        message=site.message,
+                        severity=1,
+                        code="phase-unrecognized",
+                    )
+                )
         errors += registry.validate_all(tokens)
         # 内的两类**结构类**码；其余码（phase1-boundary / lexer-error / 宏卫生 / ST*）
         # 一律保留 ⇒ 真错不被静默。

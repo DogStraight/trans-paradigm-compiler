@@ -1,4 +1,4 @@
-"""linter/first_set.py — FIRST 集的**单一实现**（可空传播由开关控制）。
+"""first_set.py — FIRST 集的**单一实现**（可空传播由开关控制）。
 
 历史：同一事实有两份实现（`grammar_slicer` 的保守版 = 强制起始；`matcher` 的
 可空传播版 = 可能起始），语义不同却都叫 first，且 matcher 的 docstring 说"必然"
@@ -11,7 +11,7 @@
                   call 在首元素可空时并入后续元素。用于**候选筛选**（matcher）。
 
 两者都不是"错"的——错的是让它们各自长大且互不知情。
-Doc: linter/linter_architecture.md（前瞻消歧 / 匹配器 first 口径）
+Doc: structure/README.md（前瞻消歧 / 匹配器 first 口径）
 """
 from __future__ import annotations
 

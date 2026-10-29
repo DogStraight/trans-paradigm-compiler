@@ -1,8 +1,8 @@
-"""Linter 发现阶段（Discovery）单元测试 — 节点树与未识别诊断。
+"""Linter 发现阶段（Discovery）单元测试 — 节点树与未识别位点。
 
 固定发现器的当前行为，独立于 lint_err 样本集：
     - 块式/引用式容器的多层级节点树（module → always → begin → 语句）
-    - 未识别语句诊断（phase-unrecognized）
+    - 未识别语句位点（结构层中立记录；linter 侧转 phase-unrecognized 诊断）
 
 通过 LinterScanner 暴露的内部 Discovery 直接断言 discover() 产出。
 """
@@ -20,10 +20,10 @@ def scanner(config_loaded):
 
 
 def _nodes(scanner, src):
-    """discover 源码，返回 (节点列表, 未识别诊断列表)。"""
+    """discover 源码，返回 (节点列表, 未识别位点列表)。"""
     tokens = scanner.lexer.tokenize(src)
     nodes = scanner._discovery.discover(tokens)
-    return nodes, scanner._discovery.unrecognized_diagnostics()
+    return nodes, scanner._discovery.unrecognized_sites()
 
 
 def _find_rule(nodes, rule):
@@ -70,27 +70,32 @@ class TestStatementDiscovery:
 
 
 class TestUnrecognized:
-    """未识别语句诊断（本次新增 phase-unrecognized）。"""
+    """未识别语句位点（结构层记录 → linter 转 phase-unrecognized）。"""
 
-    def test_typo_keyword_records_diagnostic(self, scanner):
-        # e07: alwayss 拼错 → 记录 phase-unrecognized
+    def test_typo_keyword_records_site(self, scanner):
+        # e07: alwayss 拼错 → 记录未识别位点
         src = "module m;\n    alwayss @(*) begin\n    end\nendmodule\n"
-        _, diags = _nodes(scanner, src)
-        assert any(d.code == "phase-unrecognized" for d in diags)
+        _, sites = _nodes(scanner, src)
+        assert sites
 
     def test_valid_code_no_unrecognized(self, scanner):
         src = "module m;\n    always @(*) begin\n        a = 1;\n    end\nendmodule\n"
-        _, diags = _nodes(scanner, src)
-        assert diags == []
+        _, sites = _nodes(scanner, src)
+        assert sites == []
 
-    def test_unrecognized_diagnostic_includes_token_window(self, scanner):
-        # 拼错关键字 → 诊断 message 附带 token 窗口（前后文定位）
+    def test_unrecognized_site_includes_token_window(self, scanner):
+        # 拼错关键字 → 位点 message 附带 token 窗口（前后文定位）
         src = "module m;\n    alwayss @(*) begin\n    end\nendmodule\n"
-        _, diags = _nodes(scanner, src)
-        unrec = [d for d in diags if d.code == "phase-unrecognized"]
-        assert unrec
-        assert ">>" in unrec[0].message  # 当前 token 标记
-        assert "alwayss" in unrec[0].message  # 出错 token 内容
+        _, sites = _nodes(scanner, src)
+        assert sites
+        assert ">>" in sites[0].message  # 当前 token 标记
+        assert "alwayss" in sites[0].message  # 出错 token 内容
+
+    def test_scanner_converts_site_to_phase_unrecognized(self, scanner):
+        """消费方契约：结构层只给位点，linter scanner 转 `phase-unrecognized` 诊断。"""
+        src = "module m;\n    alwayss @(*) begin\n    end\nendmodule\n"
+        diags = scanner.scan(src)
+        assert any(d.code == "phase-unrecognized" for d in diags)
 
     def test_dump_nodes_has_rule_and_range(self, scanner):
         # c) 节点树 token 区间 dump：rule + [start,end) → 行号
@@ -219,10 +224,10 @@ class TestElseChainDiscovery:
             "  end\n"
             "endmodule\n"
         )
-        _, diags = _nodes(scanner, src)
-        unrec = [d for d in diags if d.code == "phase-unrecognized"]
-        assert unrec
-        assert unrec[0].range[0].line == 6  # 指向 else 块内 b，不是 else 关键字
+        _, sites = _nodes(scanner, src)
+        assert sites
+        tokens = scanner.lexer.tokenize(src)
+        assert tokens[sites[0].start].line - 1 == 6  # 指向 else 块内 b，不是 else 关键字
 
     def test_dangling_else_clean(self, scanner):
         # 悬挂 else：内层 if 的 else 应正确归属，无未识别

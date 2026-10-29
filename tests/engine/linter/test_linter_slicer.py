@@ -12,7 +12,7 @@ import pytest
 
 from core.define import DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS, GrammarRulesRegister
 from parser import setup_grammar
-from linter.grammar_slicer import build_slice_tree, _collect_first_start_tokens
+from structure.grammar_slicer import build_slice_tree, _collect_first_start_tokens
 
 
 @pytest.fixture(scope="module")

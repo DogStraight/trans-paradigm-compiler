@@ -173,7 +173,7 @@ def _collect_block_rule_bounds(
     tree: dict, openers: set[str], closers: set[str]
 ) -> None:
     """第一轮：`is_block = True` 的规则 → openers/closers（含匿名块父规则）。"""
-    from linter.grammar_slicer import get_start_tokens
+    from structure.grammar_slicer import get_start_tokens
 
     anon_blocks: set[str] = set()
     for name, info in tree.items():
@@ -245,7 +245,7 @@ def _build_scope_kind_map(
     结构类别是规则自身的语义声明，非 formatter 单独映射表。副作用：向
     `openers` / `closers` 补入带配对结束符的块入口与终结符（与推导同源）。
     """
-    from linter.grammar_slicer import get_start_tokens
+    from structure.grammar_slicer import get_start_tokens
 
     scope_kind_map: dict[str, ScopeKind] = {}
     for name, rule in rules.items():
@@ -322,7 +322,7 @@ def _collect_stmt_headers(
     语义上是语句头。具体关键字一律由规则推导，不在此硬编码。已作块 openers/
     closers 的不重复。
     """
-    from linter.grammar_slicer import get_start_tokens
+    from structure.grammar_slicer import get_start_tokens
 
     stmt_headers: set[str] = set()
     for info in tree.values():
@@ -371,7 +371,7 @@ def _collect_decl_headers(rules: dict, tree: dict) -> set[str]:
     （input/output/reg/wire/localparam...）声明行不是语句（module 体内 ifdef 的
     端口声明等），不参与多行续行。
     """
-    from linter.grammar_slicer import get_start_tokens
+    from structure.grammar_slicer import get_start_tokens
 
     decl_headers: set[str] = set()
     for name, rule in rules.items():
@@ -405,7 +405,7 @@ def build_block_tokens(rules: dict) -> _BlockTokenMap:
         _BlockTokenMap 包含 openers / closers / ifdef_set / scope_kind_map
     """
     # 有配对结束符的块类别见模块级 `_PAIRED_BLOCK_KINDS`（判定 has_pair 用）
-    from linter.grammar_slicer import build_slice_tree
+    from structure.grammar_slicer import build_slice_tree
 
     tree = build_slice_tree(rules)
     openers: set[str] = set()
