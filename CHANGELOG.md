@@ -22,6 +22,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   pyright strict 0 errors。`format`/`lint` 等既有命令行为不变（片段模式独立入口）。
 
 ### Changed
+- **协作制度压缩：任务循环六步 → 四条硬规则（2026-10-30）**：`policy/collaboration.md`
+  「任务循环」由六步改为四条承重规则（一轮一个可审交付物 / 契约与判据先于代码 / 分层验证
+  改哪跑哪 / 收口四件）；取消"调查轮/实现轮"轮型标签——调查并入每轮前半段，只有需作者
+  拍板时才单独成轮。六步里独有的计划要素（预算 / 止损点 / 计划级证伪 / 前后一致）迁入
+  「循环执行细则·计划族」，其余细则族按规则号重编号。依据：复述约束的仪式未产生行为差
+  （实测仍需作者重申"不硬编码"）、分层验证与收口本就靠执行面遵守，不是流程节点能兜住。
+  同步 `AGENTS.md`、`policy/README.md`、`docs/audit_system.md`、`.agents/skills/task-cycle`
+  （本机文件，不入库）；顺带修正 `policy/README.md` 里 `check_hardcode.py` 的陈旧规则数
+  （1-4 → 1-6）。
 - **结构推导层留在 linter 内部（片段模式 P1 前置，2026-10-30）**：`grammar_slicer /
   first_set / lookahead / discovery / discovery_shape` 作为 linter 的**内部组件**
   保留（不设独立顶层包）——只吃语言包 TOML（规则表 → 切片树 → FIRST → 前瞻 →

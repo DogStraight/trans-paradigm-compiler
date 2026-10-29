@@ -4,7 +4,7 @@
 > 目的不是"把问题查完"（问题空间开放，永远查不完），而是**每一轮能关掉一个维度并冻结**。
 
 数据面：`docs/audit_dimensions.toml`（维度 + 槽位 + 本版闭合目标）
-制度正文：`policy/collaboration.md`（任务循环六步 + 「审计维度轮」）
+制度正文：`policy/collaboration.md`（任务循环四条规则 + 「审计维度轮」）
 执行器：`tools/audit_cycle.py`（只收集，不裁决）
 判断协议：`~/.agents/skills/invariant-falsifier`（证伪器，非检测器）
 
@@ -26,7 +26,7 @@
 | 层 | 内容 | 是否随项目变 |
 |---|---|---|
 | 数据 | `docs/audit_dimensions.toml`（维度/槽位/目标） | **变**（换项目换数据） |
-| 协议 | `policy/collaboration.md`「审计维度轮」 | 稳定（六步语义不变） |
+| 协议 | `policy/collaboration.md`「审计维度轮」 | 稳定（四条规则语义不变） |
 | 执行 | `tools/audit_cycle.py` + 各维度探针脚本 | 稳定（按需插拔） |
 | 判断 | 构造反例 + 证据种类（人/模型） | 不可外包 |
 | 自省 | `docs/audit-retro.jsonl`（每轮 1 条改进候选） | 累积后动制度 |
@@ -79,16 +79,16 @@
 
 ## 5. 一轮怎么走
 
-不是新流程——是任务循环六步的特化：
+不是新流程——是任务循环四条规则的特化：
 
 ```
-步1 取任务  → 取一个维度（status=open），一轮最多关 1–2 个
+规则1 取任务  → 取一个维度（status=open），一轮最多关 1–2 个
    ↓ 开局先做「探针有效性复核」（人判，不可外包）
-步3 计划    → 判据 = 该维 closure + 探针命令；无探针不得判 closed
-步4 验证    → 重跑探针 + 按影响范围取测试 + 三个基线数字前后对照
-              （structural S / 诊断基线 / lint 召回）
-步5 收口    → audit_cycle.py --ledger --judgement --retro 三件套落账
-步6 回起点  → 维度满足四条判据 → 标 closed 并**冻结**
+规则2 计划    → 判据 = 该维 closure + 探针命令；无探针不得判 closed
+规则3 验证    → 重跑探针 + 按影响范围取测试 + 三个基线数字前后对照
+               （structural S / 诊断基线 / lint 召回）
+规则4 收口    → audit_cycle.py --ledger --judgement --retro 三件套落账；
+               维度满足四条判据 → 标 closed 并**冻结**
 ```
 
 **关闭四条判据**（缺一不可）：findings 全关且有可复跑证据 / 探针存在 /
