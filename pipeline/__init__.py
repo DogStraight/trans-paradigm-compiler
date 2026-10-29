@@ -75,8 +75,16 @@ from preprocessor._expand import map_invocations_to_source
 from preprocessor._markers import line_form_re
 from lexer.comment_syntax import load_comment_syntax
 
-# 模块级共享状态：rules/lexer/renderer/transformer 按 rules_dir 缓存，避免重复初始化
+# 模块级共享状态：rules/lexer/renderer/transformer/parser 按 rules_dir 缓存，
+# 避免重复初始化（parser 的预编译表——FIRST/FOLLOW/atom/锚点——构建一次 ~50ms，
+# 单文件 CLI 无感，fuzz 每迭代一次时是 17% 运行时间）。
 _PIPELINE_SHARED: dict = {}
+
+# 幂等复跑的嵌套深度（>0 = 当前处于内建幂等检查的二次管线内）。共享 parser 只给
+# 最外层管线用：嵌套管线若复用同一实例，会把外层的注释锚点/失败现场覆盖掉
+# （外层 `_stage_render` 在幂等检查前已消费锚点，但 `result["parser"]` 对外暴露的
+# 状态仍是外层解析的），故嵌套层每次新建 parser。
+_IDEMPOTENT_REENTRY = 0
 
 
 # ── 管线共享上下文 ──────────────────────────────────────────
@@ -174,12 +182,21 @@ class _PipelineContext:
 
 # ── Core Pipeline ──
 def format_generated(
-    content: str, rules: Any, lexer: Any, rule_selector: Any = None, rules_dir: str | None = None
+    content: str,
+    rules: Any,
+    lexer: Any,
+    rule_selector: Any = None,
+    rules_dir: str | None = None,
+    parser: Any = None,
 ) -> str:
     """对生成文本跑 formatter（缩进/品类对齐/实例端口对齐）。
 
     复用管线已加载的 rules/lexer/rule_selector，避免重复初始化；失败时不阻断管线，
     返回原文本并记录 warning（formatter 是增强 pass，不影响主流程）。
+
+    `parser`：wrap 现场解析用的解析器。管线传入**共享的 formatter 专用实例**
+    （`_PIPELINE_SHARED[...]["formatter_parser"]`，预编译表随语言包复用一次）；
+    未传则现场新建（独立调用方/测试的行为不变）。
     """
     try:
         # formatter 能力经插件协议接入（P2.5 插件回调能力化）：组件在
@@ -208,15 +225,16 @@ def format_generated(
         contexts = scanner.scan(split_content)
         # 语法感知 wrap：复用管线已加载的 rule_selector/rules 建 parser（不重复
         # 初始化），wrap 对超宽行现场解析拿 AST 断点；失败回退文本启发式
-        parser = None
-        try:
-            from parser.parser_core import Parser
-            parser = Parser(
-                rules_dir=rules_dir, rules=rules, rule_selector=rule_selector, log_file=""
-            )
+        if parser is None:
+            try:
+                from parser.parser_core import Parser
+                parser = Parser(
+                    rules_dir=rules_dir, rules=rules, rule_selector=rule_selector, log_file=""
+                )
+            except Exception:  # noqa: BLE001 — parser 可选，构建失败回退启发式
+                parser = None
+        if parser is not None:
             parser.lexer = lexer  # wrap 的 AST 断点用它现场解析超宽行
-        except Exception:  # noqa: BLE001 — parser 可选，构建失败回退启发式
-            parser = None
         engine = build_engine(parser=parser)
         formatted = engine.run(lines, contexts)
         return "\n".join(l.rstrip() for l in formatted)
@@ -432,12 +450,20 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         # 渲染阶段由插件 handler 接管（覆盖式；与 analyze/transform 的叠加式
         # 不同）。未声明 → None（主管线源端渲染）。
         render_handler = _resolve_render_handler(ctx.rules_dir)
+        formatter_parser = Parser(
+            rules_dir=ctx.rules_dir, rules=rules, rule_selector=rule_selector
+        )
+        formatter_parser.lexer = lexer  # formatter wrap 现场解析超宽行用
         _PIPELINE_SHARED[key] = {
             "rules": rules,
             "rule_selector": rule_selector,
             "lexer": lexer,
             "linter": linter,
             "renderer": renderer,
+            "parser": Parser(
+                rules_dir=ctx.rules_dir, rules=rules, rule_selector=rule_selector
+            ),
+            "formatter_parser": formatter_parser,
             "mapping_cfg": mapping_cfg,
             "schedules": schedules,
             "render_handler": render_handler,
@@ -449,6 +475,12 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
     ctx.linter = shared["linter"]
     ctx.renderer = shared["renderer"]
     ctx.render_handler = shared["render_handler"]
+
+
+def _formatter_parser(ctx: _PipelineContext):
+    """formatter wrap 用的共享 parser（随语言包预编译表复用一次）。"""
+    shared = _PIPELINE_SHARED.get(_shared_key(ctx)) or {}
+    return shared.get("formatter_parser")
 
 
 def _stage_macro_scan(ctx: _PipelineContext) -> None:
@@ -672,8 +704,17 @@ def _style_notes_summary(notes: list) -> str:
 def _stage_parse(
     ctx: _PipelineContext, tokens: list
 ) -> Any | None:
-    """解析。返回 AST（失败返回 None）。"""
-    parser = Parser(
+    """解析。返回 AST（失败返回 None）。
+
+    复用共享 parser（`_PIPELINE_SHARED`）——其预编译表（FIRST/FOLLOW/atom/锚点）
+    与语言包绑定，`Parser.parse()` 每次重置全部解析期状态（注释锚点/去重集合/
+    atom memo/失败现场/作用域栈/截断标志，见 `parser_core.parse`）。幂等复跑的
+    嵌套管线例外：新建 parser，避免覆盖外层结果里 `parser` 的状态。
+    """
+    shared = _PIPELINE_SHARED.get(_shared_key(ctx)) or {}
+    parser = (
+        shared.get("parser") if _IDEMPOTENT_REENTRY == 0 else None
+    ) or Parser(
         rules_dir=ctx.rules_dir,
         rules=ctx.rules,
         rule_selector=ctx.rule_selector,
@@ -902,24 +943,29 @@ def _check_idempotent(ctx: _PipelineContext, content: str, parser: Any = None) -
     if not ctx.check_idempotent or expanded_path or not content.strip():
         return True
     ctx.log("[idempotency] re-running pipeline on generated output")
-    r2 = run_pipeline_on_source(
-        source=content,
-        input_path=ctx.input_path,
-        quiet=True,
-        expand_macros=ctx.expand_macros,
-        analyzer_enabled=False,
-        transform_enabled=False,
-        renderer_enabled=True,
-        no_lint=True,
-        format_output=ctx.format_output,
-        expand_enhanced=False,
-        rules_dir=ctx.rules_dir,
-        ext_dirs=ctx.ext_dirs,
-        include_dirs=ctx.include_dirs,
-        predefined=ctx.predefined,
-        undefine=ctx.undefine,
-        check_idempotent=False,
-    )
+    global _IDEMPOTENT_REENTRY
+    _IDEMPOTENT_REENTRY += 1
+    try:
+        r2 = run_pipeline_on_source(
+            source=content,
+            input_path=ctx.input_path,
+            quiet=True,
+            expand_macros=ctx.expand_macros,
+            analyzer_enabled=False,
+            transform_enabled=False,
+            renderer_enabled=True,
+            no_lint=True,
+            format_output=ctx.format_output,
+            expand_enhanced=False,
+            rules_dir=ctx.rules_dir,
+            ext_dirs=ctx.ext_dirs,
+            include_dirs=ctx.include_dirs,
+            predefined=ctx.predefined,
+            undefine=ctx.undefine,
+            check_idempotent=False,
+        )
+    finally:
+        _IDEMPOTENT_REENTRY -= 1
     p2 = r2.get("parser")
     truncated = bool(getattr(p2, "_parse_truncated", False)) if p2 else True
     idempotent = bool(r2.get("success")) and not truncated
@@ -1005,6 +1051,7 @@ def _prepare_render_output(
         content = format_generated(
             content, ctx.rules, ctx.lexer,
             rule_selector=ctx.rule_selector, rules_dir=ctx.rules_dir,
+            parser=_formatter_parser(ctx),
         )
         ctx.log("[formatter] formatted output")
 
@@ -1040,6 +1087,7 @@ def _render_extra_asts(
             extra_content = format_generated(
                 extra_content, ctx.rules, ctx.lexer,
                 rule_selector=ctx.rule_selector, rules_dir=ctx.rules_dir,
+                parser=_formatter_parser(ctx),
             )
         extra_outputs.append((out_name, extra_content))
         if ctx.gen_dir:
