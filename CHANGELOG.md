@@ -6,22 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
-- **抽出语言无关结构推导层 `structure/`（片段模式 P1 前置，2026-10-30）**：把
-  `grammar_slicer / first_set / lookahead / discovery / discovery_shape` 从 `linter/`
-  移到新包 `structure/`——它们只吃语言包 TOML（规则表 → 切片树 → FIRST → 前瞻 →
-  发现树），不含语言字面量、不产诊断；linter 与即将落地的 `islands/`（片段模式）是
-  两个消费方。`linter/` 只留检查器/诊断；结构层产物 `DiscoveredNode`/`CTX_TOP`/
-  新增中立记录 `UnrecognizedSite` 移入 `structure/node.py`，linter `scanner` 负责把
-  未识别位点转 `phase-unrecognized` 诊断（结构层不依赖 linter 类型）。
-  · 动机（作者 2026-10-30 拍板「抽」）：片段模式要"先吃语法配置 → 得出分片信息"，
-  不能把 linter 包变成事实上的结构层；推导层单向后向依赖（linter / islands → structure）。
-  · 迁移面：外部引用仅 `tests/fuzz/generate.py` 与 `test_linter_slicer.py`；文档
-  （MODEL_INDEX / engine_overview / linter_architecture / ADR-0024/0025 / gap）与
-  基线（structural / feature_sites）路径同步；`check_gate_efficacy` 两条变异路径同步。
-  · 证据：全量测试绿、pyright strict 0、`structural_score --compare` Δ-74 / 新增 0、
-  `feature_sites compare` ✓。
-  · 随之定稿：P1 不再设 `[[island_rules]]`/`island_rewriter`（片段模式下语法配置推导的
-  语法单元默认就是岛，配置面零新增），记号机制退役（见 `docs/gaps/gap-fragment-mode.md`）。
+- **结构推导层留在 linter 内部（片段模式 P1 前置，2026-10-30）**：`grammar_slicer /
+  first_set / lookahead / discovery / discovery_shape` 作为 linter 的**内部组件**
+  保留（不设独立顶层包）——只吃语言包 TOML（规则表 → 切片树 → FIRST → 前瞻 →
+  发现树），零语言字面量、不产诊断。linter 的 `scanner` 消费它做检查器注册与
+  `phase-unrecognized` 诊断；即将落地的 `islands/`（片段模式）直接消费同一套推导
+  API（"先吃语法配置 → 得分片信息"）。
+  · 过程：曾一次性抽离为顶层 `structure/` 包，按作者 2026-10-30 决定并回 linter
+  内部（"就像 linter 内部的一个组件"）；文档/基线/门禁路径同步回 linter。
+  · 随之定稿：片段模式 P1 不设 `[[island_rules]]`/`island_rewriter` 能力位，也不设
+  记号/范围可选模式——片段模式下语法配置推导出的语法单元默认就是岛（若只想限定某
+  部分语法有效 → 单开语法包）；处理 = 自顶向下过真实管线 + 合成，未处理区原样保留，
+  后验默认开（岛级重解析 + 双跑幂等 + 字节 identity）。
+  · 证据（组件面，按"改哪跑哪"纪律不跑全量）：linter 测试、受影响的 formatter/
+  typed_ports 用例、policy 基线门禁与 pyright 全绿。
 
 ### Added
 - **fuzz 并行评估 `--workers`（块 11）**：输入生成/变异仍在父进程按一个 rng 顺序

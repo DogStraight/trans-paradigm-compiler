@@ -20,7 +20,7 @@
 未声明本段 = 该语言没有这些形态（引擎按空集处理，**不猜**、不静默降级为推导）。
 
 Doc: docs/decisions/0025-discovery-rule-derivation.md
-Doc: structure/README.md（发现层）
+Doc: linter/linter_architecture.md（发现层）
 """
 
 from __future__ import annotations

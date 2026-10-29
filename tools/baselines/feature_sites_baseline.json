@@ -960,7 +960,7 @@
       "core/engine_capabilities.py"
      ],
      "converged_count": 1,
-     "declared_in": "structure/discovery_shape.py",
+     "declared_in": "linter/discovery_shape.py",
      "kept": null,
      "roles": {
       "引擎侧登记": 2,
@@ -968,7 +968,7 @@
       "文档": 4
      },
      "scatter": [
-      "structure/discovery_shape.py"
+      "linter/discovery_shape.py"
      ],
      "scatter_count": 1,
      "stage_count": 0,
@@ -985,7 +985,7 @@
      },
      "scatter": [
       "core/utils.py",
-      "structure/lookahead.py",
+      "linter/lookahead.py",
       "linter/scanner.py"
      ],
      "scatter_count": 3,

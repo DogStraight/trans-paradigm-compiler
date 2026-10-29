@@ -129,7 +129,7 @@ _MUTATIONS: list[dict[str, str]] = [
         "why": "discovery 的 `_advance_match` 对零进展元素做 `j + 1` 兜底 → 紧随其后的"
                "元素从错位 token 起匹配：C 包函数定义的 body 起点被算到参数位，"
                "多注册一个假子节点并误报（同轮定位）",
-        "file": "structure/discovery.py",
+        "file": "linter/discovery.py",
         "old": "            return matcher.match(tokens, j, feat, trial, end, strict=True)\n",
         "new": """            k = matcher.match(tokens, j, feat, trial, end, strict=True)
             return k if k > j else j + 1
@@ -139,7 +139,7 @@ _MUTATIONS: list[dict[str, str]] = [
     {
         "why": "discovery 的括号分支不把「块规则」转块分支 → 块内语句既不解析也不诊断"
                "（静默漏检，c4 的缺分号一度靠 `j + 1` 巧合发现才没暴露；同轮定位）",
-        "file": "structure/discovery.py",
+        "file": "linter/discovery.py",
         "old": """        if candidates and isinstance(candidates[0], str):
             info = self._tree.get(candidates[0], {}) or {}
             # 块规则（有 block_end）或括号定界语句容器（如 CompoundStmt

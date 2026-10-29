@@ -4,7 +4,7 @@
 一种被发现的语法结构及其 token 区间。消费方：linter 据此实例化 Checker；
 islands 据此把节点当语法岛候选（未识别位点 = water）。
 
-Doc: structure/README.md
+Doc: linter/linter_architecture.md
 
 发现策略（决策 1：动态前瞻逐步缩小范围）：
     - 用块边界维护上下文栈（顶层 CTX_TOP + opener_context 配置的块内上下文）
@@ -22,7 +22,7 @@ from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia, split_token_typ
 
 from .discovery_shape import DiscoveryShape, is_stmt_container, load_shape
 from .lookahead import LookaheadTable, fallback_statement_names
-from .node import CTX_TOP, DiscoveredNode, UnrecognizedSite
+from .checker import CTX_TOP, DiscoveredNode, UnrecognizedSite
 
 # discovery 递归深度上限（坏输入收敛防御，见 _discover_range 注释）
 _MAX_DISCOVER_DEPTH = 64
@@ -62,7 +62,7 @@ class Discovery:
         self._bracket_closers = bracket_closers
         # 语句发现形态（ADR-0025）：**全部来自语言包声明**，引擎不猜。
         # 属性/修饰前缀对、容器延续关键字、括号定界语句容器、子句分隔符
-        # 都由 `[discovery]` 声明（见 structure/discovery_shape.py）。
+        # 都由 `[discovery]` 声明（见 linter/discovery_shape.py）。
         self._shape: DiscoveryShape = load_shape()
         self._continuation_openers = self._shape.continuations
         # 未识别语句位点（本次 discover 累积，消费方自行转诊断/water）。

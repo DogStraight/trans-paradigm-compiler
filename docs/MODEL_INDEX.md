@@ -53,12 +53,12 @@
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
-| 前置 token 级 linter（反解析器总述） | `linter/linter_architecture.md` | `linter/scanner.py::LinterScanner.scan`<br>`structure/discovery.py::Discovery.discover`<br>`linter/checkers/matcher.py::RuleMatcher` | `tests/engine/linter/test_linter_discovery.py`<br>`tests/engine/linter/test_linter_matcher.py`<br>`tests/e2e/eval_lint_accuracy.py` |
-| 语言无关结构推导层（切片树 / FIRST / 前瞻 / 发现树） | `structure/README.md`<br>`linter/linter_architecture.md` | `structure/grammar_slicer.py::build_slice_tree`<br>`structure/first_set.py::first_tokens`<br>`structure/lookahead.py::LookaheadTable`<br>`structure/discovery.py::Discovery`<br>`structure/node.py` | `tests/engine/linter/test_linter_slicer.py`<br>`tests/engine/linter/test_linter_lookahead.py`<br>`tests/engine/linter/test_linter_discovery.py` |
+| 前置 token 级 linter（反解析器总述） | `linter/linter_architecture.md` | `linter/scanner.py::LinterScanner.scan`<br>`linter/discovery.py::Discovery.discover`<br>`linter/checkers/matcher.py::RuleMatcher` | `tests/engine/linter/test_linter_discovery.py`<br>`tests/engine/linter/test_linter_matcher.py`<br>`tests/e2e/eval_lint_accuracy.py` |
+| 结构推导（linter 内部组件：切片树 / FIRST / 前瞻 / 发现树） | `linter/linter_architecture.md` | `linter/grammar_slicer.py::build_slice_tree`<br>`linter/first_set.py::first_tokens`<br>`linter/lookahead.py::LookaheadTable`<br>`linter/discovery.py::Discovery`<br>`linter/checker.py` | `tests/engine/linter/test_linter_slicer.py`<br>`tests/engine/linter/test_linter_lookahead.py`<br>`tests/engine/linter/test_linter_discovery.py` |
 | Linter 两阶段架构（发现 + 扁平检查） | `linter/linter_architecture.md` | `linter/scanner.py`<br>`linter/checker.py::CheckerRegistry` | `tests/engine/linter/test_linter_checker.py` |
 | is_statement 显式声明 | `linter/linter_architecture.md`（is_statement 显式标记） | `grammar/verilog/**/*.toml`（`is_statement = true`）<br>`core/define.py` | `tests/engine/linter/test_linter_lookahead.py` |
-| 动态两级消歧（lookahead） | `linter/linter_architecture.md` | `structure/lookahead.py::LookaheadTable.classify` | `tests/engine/linter/test_linter_lookahead.py` |
-| 语法切片（grammar_slicer） | `linter/linter_architecture.md` | `structure/grammar_slicer.py::build_slice_tree` | `tests/engine/linter/test_linter_slicer.py` |
+| 动态两级消歧（lookahead） | `linter/linter_architecture.md` | `linter/lookahead.py::LookaheadTable.classify` | `tests/engine/linter/test_linter_lookahead.py` |
+| 语法切片（grammar_slicer） | `linter/linter_architecture.md` | `linter/grammar_slicer.py::build_slice_tree` | `tests/engine/linter/test_linter_slicer.py` |
 | 表达式检查（pratt 复用） | `linter/linter_architecture.md` | `linter/checkers/expression.py` | `tests/engine/linter/test_linter_matcher.py` |
 | 稳健性 / 畸形输入防御 | `linter/linter_architecture.md` | `linter/scanner.py::LinterScanner.scan` | `tests/engine/linter/test_linter_robustness.py` |
 | 诊断位置精度（token_span） | `linter/linter_architecture.md` | `linter/__init__.py::token_span` | `tests/engine/linter/test_lint_accuracy.py` |

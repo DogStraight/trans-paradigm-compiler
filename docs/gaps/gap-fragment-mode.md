@@ -1,7 +1,7 @@
 # Gap — 片段模式 P0（记号模式 / island rewrite 原型）
 
 - 状态：**P0 完成（#70，2026-10-23）**；**P1 契约已定稿（2026-10-30，全域岛 / 零声明面）**，
-  推导层已抽离到 `structure/`，`islands/` 模块未开工。
+  推导层留在 `linter/` 内部（组件，不设独立顶层包），`islands/` 模块未开工。
 - 实现：`tools/fragment_rewrite.py`（独立 CLI `tpc fragment`，dry-run diff；`--write` 落盘）；测试 `tests/engine/test_fragment_rewrite.py`。
 - 设计输入：已内联到本档「P1 契约」「P2/P3 契约与退出判据」节（原讨论稿随收尾销毁，不复用草稿路径）。
 - **调研输入（2026-10-30）**：`docs/references.md`「岛式分片 / 部分解析」——五档先例
@@ -44,14 +44,14 @@ identity/死分支/假记号/幂等四类安全判据可证；不触碰正式 gr
 淘汰，无兼容垫片）。
 
 **为什么原稿有"规则集合/岛声明"**：P0 用手写 `always @(*)`→`always @*` 证明标记与安全
-边界，P1 草稿沿用它、误当骨架。调研发现 linter 的语言无关推导层（现 `structure/`）已能从
+边界，P1 草稿沿用它、误当骨架。调研发现 linter 的语言无关推导层（`linter/discovery.py` 等，包内组件）已能从
 语法 TOML 得出同样的分片信息（规则表 → 切片树 → FIRST → 前瞻 → 发现树），零语言字面量
 ⇒ 岛种类/边界/结束全部可推导，配置面零新增（依据作者 2026-10-30：「根本没有必要有 island，
 开片段模式后，默认接触到的语法都是 island 了」）。
 
 **分片模型**：
 
-- 岛 = `structure.Discovery` 从 token 流产出的 `DiscoveredNode` 树节点（rule + token 区间
+- 岛 = `linter.discovery.Discovery` 从 token 流产出的 `DiscoveredNode` 树节点（rule + token 区间
   + children）：块级节点含 body children，叶节点到语句级，两者都可当岛。
 - water = 未被任何节点覆盖的 token / 未识别位点 / 含宏或指令行的区间（后两者不进管线，
   避免展开语义改动原文）；water 逐字节保留。
@@ -73,7 +73,7 @@ identity/死分支/假记号/幂等四类安全判据可证；不触碰正式 gr
 
 **P1 实施顺序（更新，待开工）**：
 
-1. ADR：片段模式机制立项（推导层 `structure/` 已抽离；契约 = 全域岛 / 零配置面 / 后验）。
+1. ADR：片段模式机制立项（推导层留在 linter 内部；契约 = 全域岛 / 零配置面 / 后验）。
 2. 引擎侧新包 `islands/`：`model.py`（语法 → 岛模型：种类/边界/FIRST 复用）、`segment.py`
    （token 流 + Discovery → 岛树 + water 区间）、`process.py`（岛文本 → 管线 → 片段文本，
    自顶向下成功即停）、`splice.py`（缩进基线回填 + 区间替换 + 后验）。
@@ -93,11 +93,11 @@ islands 模块的数据源。
 | 层 | 位置 | 吃什么 | 产出 |
 |---|---|---|---|
 | 语法加载 | `parser/__init__.py::setup_grammar` | 语言包 TOML 规则 | `GrammarRule` 表（`is_block`/`is_statement` 为规则自声明；`block_start`/`block_end` 由 production 首尾字面 token 推导） |
-| 切片树 | `structure/grammar_slicer.py::build_slice_tree` | 规则表 | `{rule: {prods, is_block, is_statement, block_start, block_end}}`（linter 与 islands 共用的中间形态，现居 `structure/`） |
-| FIRST 集 | `structure/first_set.py::first_tokens` | feature 树 | 每规则起始 token 集（保守/可空两种语义） |
-| 前瞻分类 | `structure/lookahead.py::LookaheadTable` | 切片树 + 匹配器 | token → 候选规则（A 类 keyword_map / B 类标识符+前缀路径） |
-| 结构发现 | `structure/discovery.py::Discovery` | 切片树 + 块/括号起止符 + `[discovery]` 声明 | **岛信息**：`DiscoveredNode(rule, start, end, children)` 树 + 未识别区间 |
-| 语言事实声明 | `structure/discovery_shape.py` + `base/_discovery.toml` | 语言包 `[discovery]` 段 | 容器/延续/属性对/子句分隔符（语义意图，声明而非猜；ADR-0025） |
+| 切片树 | `linter/grammar_slicer.py::build_slice_tree` | 规则表 | `{rule: {prods, is_block, is_statement, block_start, block_end}}`（linter 内部推导组件，islands 直接消费） |
+| FIRST 集 | `linter/first_set.py::first_tokens` | feature 树 | 每规则起始 token 集（保守/可空两种语义） |
+| 前瞻分类 | `linter/lookahead.py::LookaheadTable` | 切片树 + 匹配器 | token → 候选规则（A 类 keyword_map / B 类标识符+前缀路径） |
+| 结构发现 | `linter/discovery.py::Discovery` | 切片树 + 块/括号起止符 + `[discovery]` 声明 | **岛信息**：`DiscoveredNode(rule, start, end, children)` 树 + 未识别区间 |
+| 语言事实声明 | `linter/discovery_shape.py` + `base/_discovery.toml` | 语言包 `[discovery]` 段 | 容器/延续/属性对/子句分隔符（语义意图，声明而非猜；ADR-0025） |
 
 **实测（本机 probe）**：`module m(...); always @(*) begin ... end always @(...) begin : named ... end endmodule`
 → `ModuleDecl [0,57)`，children = 两个 `AlwaysStmt [15,28)` / `[29,55)`；未知构造
@@ -123,11 +123,12 @@ islands/
 
 **已拍板（作者 2026-10-30，两项）**：
 
-1. **推导层归属 → 抽取**：`grammar_slicer / first_set / lookahead / discovery /
-   discovery_shape` 已从 `linter/` 抽到独立引擎包 `structure/`（linter 与 islands 两个
-   消费方；外部引用仅 `tests/fuzz/generate.py` 与 `test_linter_slicer.py`）。
+1. **推导层归属 → 留在 linter 内部**：`grammar_slicer / first_set / lookahead /
+   discovery / discovery_shape` 不设独立顶层包（曾短暂抽离为 `structure/`，按作者决定
+   并回）；它们是 linter 的内部组件，`islands/` 直接消费其推导 API。
 2. **声明面 → 不建**：不设 `[[island_rules]]`、不设 `island_rewriter` 能力位——片段模式
    下语法配置推导出的语法单元默认就是岛（见「P1 契约」）。
+   若只想让某部分语法有效 → 单开语法包（作者定），不做记号/范围可选模式。
 
 ## P2/P3 契约与退出判据（立项后对照，防重考古）
 

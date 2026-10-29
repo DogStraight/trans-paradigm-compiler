@@ -11,7 +11,7 @@
                   call 在首元素可空时并入后续元素。用于**候选筛选**（matcher）。
 
 两者都不是"错"的——错的是让它们各自长大且互不知情。
-Doc: structure/README.md（前瞻消歧 / 匹配器 first 口径）
+Doc: linter/linter_architecture.md（前瞻消歧 / 匹配器 first 口径）
 """
 from __future__ import annotations
 

@@ -21,7 +21,7 @@ from contextlib import contextmanager
 
 from core.define import Token
 from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia, split_token_types
-from structure.first_set import first_tokens
+from linter.first_set import first_tokens
 
 from .. import LintDiagnostic, token_span
 
@@ -803,7 +803,7 @@ class RuleMatcher:
         return self._match_optional(tokens, i, node, errors, limit)
 
     def _first_tokens(self, feat: dict, visited: set) -> set[str]:
-        """可能起始 token（可空传播）——薄封装单一实现，见 structure/first_set.py。"""
+        """可能起始 token（可空传播）——薄封装单一实现，见 linter/first_set.py。"""
         return first_tokens(feat, self._tree, nullable=True, visited=frozenset(visited))
 
     def _first_tokens_of_rule(self, name: str, visited: set) -> set[str]:

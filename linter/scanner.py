@@ -1,8 +1,8 @@
 """
 scanner.py — 两阶段 Linter 编排器。
 
-发现阶段（`structure/discovery.py`，语言无关推导层）：
-    token 流 → 轻量语法结构树（structure.node.DiscoveredNode）
+发现阶段（`linter/discovery.py`，语言无关推导层）：
+    token 流 → 轻量语法结构树（linter.checker.DiscoveredNode）
 
 检查阶段（checkers/）：
     每个节点实例化对应 Checker，扁平 validate，合并错误
@@ -31,9 +31,9 @@ from core.token_protocol import (
 from lexer import Lexer
 from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
-from structure.discovery import Discovery
-from structure.discovery_shape import is_stmt_container
-from structure.grammar_slicer import build_slice_tree
+from linter.discovery import Discovery
+from linter.discovery_shape import is_stmt_container
+from linter.grammar_slicer import build_slice_tree
 
 from . import LintDiagnostic, Position, token_span
 from .checker import CheckerRegistry

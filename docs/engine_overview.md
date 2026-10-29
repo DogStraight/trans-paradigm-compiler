@@ -62,7 +62,6 @@ token 是 token 级 lint 与 parser 的输入，AST 是语义与变换的载体�
 | 预处理器 | 宏展开 + 条件块占位（str→str） | `preprocessor/`（`_expand.py`/`_reverse.py`/`_bridge.py`） | 宏是文本层机制，先于 token 化处理；反向映射供注释/诊断还原 | `MODEL_INDEX` preprocessor 行 |
 | lexer | str → token 流（token/数字形态配置驱动） | `lexer/`（`main_lexer.py` 等） | 词法边界：把源切成 token 再谈结构 | `MODEL_INDEX` lexer 行 |
 | 前置 lint | token 级 lint（**反解析器**：复用同一语法 TOML） | `linter/`（scanner/checkers/matcher） | 在 parser 之前用 token 流拦语法/风格问题，尽早报错 | `linter/linter_architecture.md` |
-| 结构推导 | 语法配置 → 切片树 / FIRST / 前瞻 / 发现树（语言无关） | `structure/`（slicer/first_set/lookahead/discovery） | linter 与 islands（片段模式）共用；把语言包规则变成可消费的分片信息 | `structure/README.md` |
 | parser | token → AST（递归下降 + 回溯 + Pratt + 规则选择） | `parser/`（`parser_core.py`/`pratt_parser.py`/`rule_selector.py`） | 语法结构由 grammar 规则数据驱动，非硬编码 | 表达式约定 `parser/expression_conventions.md` |
 | normalize | 消除 optional/repeat/seq 包装（AST 归一） | `parser/`（normalizer） | 让后续阶段看到统一节点形态，不感知 TOML 组合写法 | `MODEL_INDEX` parser 行 |
 | schedule | 编排 pass：analyze → transform（check 可插） | `pipeline/schedule.py` + `pipeline/__init__.py::run_pipeline_on_source` | analyze 先建语义（作用域/符号），transform 消费语义做变换（顺序因果） | `docs/pipeline_stages.md` + `pipeline/README.md` |
@@ -80,7 +79,7 @@ token 是 token 级 lint 与 parser 的输入，AST 是语义与变换的载体�
 | | 内容 | 位置 |
 |---|---|---|
 | 语言数据 | 语法规则 / token 定义 / 检查规则 / 插件声明——**全部 TOML** | `grammar/{verilog,c4,yaml}/` + 语言包 `tpc.toml` |
-| 引擎骨架 | 词法/语法/语义/变换/渲染的**通用算法 + 编排**——语言无关 | `lexer/` `parser/` `structure/` `linter/` `analyzer/` `transform/` `renderer/` `preprocessor/` `core/` `pipeline/` |
+| 引擎骨架 | 词法/语法/语义/变换/渲染的**通用算法 + 编排**——语言无关 | `lexer/` `parser/` `linter/` `analyzer/` `transform/` `renderer/` `preprocessor/` `core/` `pipeline/` |
 
 分界纪律（硬约束）：**语言知识不进代码**——引擎不得硬编码任何语言具体知识
 （规则名/token 类型/结构名/表达式形态一律由 grammar TOML 提供）。改语言行为

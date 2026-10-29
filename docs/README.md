@@ -48,7 +48,7 @@
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
 - 机制：core 配置生命周期 + 组件协议已就近 `core/config_lifecycle.md`、
   `core/component_protocol.md`（见 core/README）；语言无关结构推导层见
-  `structure/README.md`（切片树/FIRST/前瞻/发现树；linter 与片段模式共用）
+  `linter/linter_architecture.md`（切片树/FIRST/前瞻/发现树；linter 与片段模式共用）
 - 制度（该怎么做）：代码规约/发布 SOP/文档对齐约定已就近 `policy/`
   （`policy/coding-style.md` 代码风格 / `policy/release-checklist.md`
   发布 SOP / `policy/doc-alignment.md` Doc: 对齐约定——与门禁工具同层，

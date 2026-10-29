@@ -19,7 +19,7 @@ from typing import cast
 from core.define import GrammarRulesRegister, Token
 from core.token_protocol import TRIVIA_TOKEN_TYPES
 from lexer import Lexer
-from structure.grammar_slicer import build_slice_tree
+from linter.grammar_slicer import build_slice_tree
 from lexer.lexer_utils import get_token_define_merged
 from parser import setup_grammar
 
