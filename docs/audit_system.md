@@ -127,7 +127,7 @@
 |---|---|
 | 本制度（审计维度轮） | 这一轮关哪个维度、关没关 |
 | `invariant-falsifier` | 这个候选算不算真问题（反例 + 证据） |
-| `enumeration-illusion-audit` | 这段代码里有没有"表/分支链"（候选发生器，已冻结） |
+| `policy/pylance-cleanup.md`「补丁 vs 机制」 | 这次改动是补丁还是机制（三句自查；原 `enumeration-illusion-audit` 判据已并入） |
 | `docs/invariants.toml` | 判据本身是否还成立 |
 | `policy/check_hardcode.py` / `check_doc_refs.py` | 具体的机器化硬约束 |
 

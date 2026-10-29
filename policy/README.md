@@ -12,7 +12,7 @@
 | `collaboration.md` | 协作行为范式（**任务循环四条硬规则 + 循环执行细则（计划/判据/证据/归属/联动）** / 决策权归属与升级判据 / 克制推送 / 见贤思齐 / 实施节奏与结论分级 / TODO 纪律）+ 指令文件自身纪律 | （行为约定，无工具） |
 | `doc-alignment.md` | 文档↔代码对齐约定（`Doc:`/`Impl:`/`Test:` + MODEL_INDEX 三处同步）+ 引用纪律（锚机制不锚 ADR）+ 删除判据（先证后删） | `check_doc_refs.py` / `doc_sync.py` |
 | `engine_config_sync.md` | 引擎语义/键名变更的配置同步规程（四步“翻译”式：定位语言包 → 取配置字典 → 整键匹配 → 逐项替换；子串误伤防范） | `tools/config_sites.py`（`list` / `check` / `rename`，开发自查，见规程） |
-| `pylance-cleanup.md` | 改过哪个 py 就清哪个的静态诊断（含静/动态双面清理） | （人按需跑，无门禁） |
+| `pylance-cleanup.md` | 改过哪个 py 就清哪个的静态诊断（含静/动态双面清理）+ 补丁 vs 机制三句自查 | （人按需跑，无门禁） |
 | `bifrost_audit.md` | 外部审计规程（Bifrost 结构面信号：影响面/复杂度/异常吞吃/死代码/弱断言；先小后大） | （外部工具，开发自查） |
 | `structural_budget.md` | 结构欠账的度量与停止判据（超额量口径 R1–R5 / 结构欠账分 S / ROI 决策 / 三条停止规则） | `tools/structural_score.py`（开发自查，需外部二进制） |
 | `session-wire.md` | 多 agent 会话在同一仓库的交接制度（wire 消息格式/寻址/纪律；记录在 `.scratch/wire/` 不进库，教义进库） | `_drafts/session/tools/wirex.py`（前门：花名册解析 + 版本自检；开发自查） |

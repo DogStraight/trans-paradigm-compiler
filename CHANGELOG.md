@@ -22,6 +22,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   pyright strict 0 errors。`format`/`lint` 等既有命令行为不变（片段模式独立入口）。
 
 ### Changed
+- **技能面收敛：静态检查与补丁自查并入制度（2026-10-30）**：用户级技能 `pylance-cleanup`
+  的现场坑（下划线改名不豁免 / fallback 参数名须一致 / 模块级 `type: ignore` 不生效）并入
+  `policy/pylance-cleanup.md`；`enumeration-illusion-audit` 的判据（开放集 vs 封闭集三问 +
+  补丁比）并入同文档「补丁 vs 机制」；`docs/audit_system.md` 分工表改指该节。
+  三个用户级技能目录（`pylance-cleanup` / `enumeration-illusion-audit` /
+  `project-abstraction`）已从本机技能库删除，仓库零引用；`docs/enumeration-ledger.jsonl`
+  保留为历史扫描记录（冻结，不再追加）。
 - **协作制度压缩：任务循环六步 → 四条硬规则（2026-10-30）**：`policy/collaboration.md`
   「任务循环」由六步改为四条承重规则（一轮一个可审交付物 / 契约与判据先于代码 / 分层验证
   改哪跑哪 / 收口四件）；取消"调查轮/实现轮"轮型标签——调查并入每轮前半段，只有需作者
