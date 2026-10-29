@@ -950,14 +950,39 @@ class ConfigRegistry:
 
         ⚠ 缓存键必须含**档位**：同包两档的声明不同，键里没有它就会串档
         （上一轮该功能没生效的第二个根因）。
+
+        ⚠ **声明装载必须晚于缓存命中判断**（2026-10-29 块 11）：声明只由
+        (包目录, 档位) 决定，而键里还含 ext/plugins/base——先装载再查缓存会让
+        每次 resolve 重读重解析包内**全部** tpc.toml（verilog 包 14 个插件 ⇒
+        每次约 15 次 TOML 解析 + 目录扫描）。fuzz 单迭代 ~20 次 resolve 时，
+        这项固定成本占 75% 运行时间（实测 5 → 16 iter/s）。配置文件在进程内
+        视为不可变（`load_language` 是"重新初始化"而非热重载，见该方法说明），
+        故命中缓存即不再触碰声明。
         """
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         candidate = rules_dir
         if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
             candidate = os.path.join("grammar", rules_dir)
-        if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
-            # 非语言包目录（临时目录等低层契约）：用当前全局声明
-            decls = [
+        is_pack = os.path.isfile(os.path.join(root, candidate, "tpc.toml"))
+        if not is_pack:
+            # 非语言包目录（临时目录等低层契约）：保持现有 _entries 声明
+            candidate = rules_dir
+            tier: tuple[str, ...] = ()
+        else:
+            tier = cls._tier_for_resolve(candidate, enabled)
+        cache_key = (
+            candidate,
+            tuple(ext_dirs) if ext_dirs else (),
+            plugins_dir,
+            frozenset(base_dirs.items()),
+            tier,
+        )
+        if cache_key in cls._resolve_cache:
+            return cls._resolve_cache[cache_key]
+        decls = (
+            _load_meta_declarations(grammar_dir=candidate, enabled=list(tier))
+            if is_pack
+            else [
                 (
                     name,
                     spec.get("file", ""),
@@ -970,20 +995,7 @@ class ConfigRegistry:
                 )
                 for name, spec in cls._entries.items()
             ]
-            tier: tuple[str, ...] = ()
-            candidate = rules_dir
-        else:
-            tier = cls._tier_for_resolve(candidate, enabled)
-            decls = _load_meta_declarations(grammar_dir=candidate, enabled=list(tier))
-        cache_key = (
-            candidate,
-            tuple(ext_dirs) if ext_dirs else (),
-            plugins_dir,
-            frozenset(base_dirs.items()),
-            tier,
         )
-        if cache_key in cls._resolve_cache:
-            return cls._resolve_cache[cache_key]
         result = cls._resolve_decls(decls, candidate, ext_dirs, plugins_dir, base_dirs)
         cls._resolve_cache[cache_key] = result
         return result

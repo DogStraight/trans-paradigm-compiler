@@ -349,6 +349,37 @@ def test_switching_language_resets_undeclared_config_keys():
     assert sc._macro_hygiene_cfg == {}, sc._macro_hygiene_cfg
 
 
+# ── resolve 的声明装载只在缓存 miss 时发生（2026-10-29 块 11 吞吐）─────────────
+# 动机：声明只由 (包目录, 档位) 决定，而 `_resolve_cache` 键还含 ext/plugins/base。
+# 旧实现**先装载声明再查缓存** ⇒ 每次 resolve 都重读重解析包内全部 tpc.toml
+# （verilog 包 14 个插件）；fuzz 单迭代 ~20 次 resolve 时这项固定成本占总时间 75%
+# （实测 5 → 16 iter/s）。配置文件在进程内不可变（`load_language` = 重新初始化，
+# 非热重载），故命中缓存即不再触碰声明；`reset()` 清缓存后重新装载。
+
+
+def test_resolve_loads_declarations_only_on_cache_miss(isolated_registry, monkeypatch):
+    """同键 resolve 只装载一次声明；reset() 清缓存后再次装载。"""
+    from core import config_registry as cr
+
+    root = isolated_registry
+    _write_tpc(root, '[analyzer]\nprimitives = ["a", "b"]\n')
+    calls: list[str] = []
+    real = cr._load_meta_declarations
+
+    def _counting(grammar_dir: str = "", enabled=None):
+        calls.append(grammar_dir)
+        return real(grammar_dir, enabled)
+
+    monkeypatch.setattr(cr, "_load_meta_declarations", _counting)
+    first = ConfigRegistry.resolve(str(root))
+    second = ConfigRegistry.resolve(str(root))
+    assert first == second
+    assert len(calls) == 1, calls
+    ConfigRegistry.reset()
+    ConfigRegistry.resolve(str(root))
+    assert len(calls) == 2
+
+
 def test_declare_cfg_defaults_must_agree():
     """同一 key 的多处 `declare_cfg` 默认值不一致 → fail-fast。
 
