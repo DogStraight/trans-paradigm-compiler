@@ -18,7 +18,7 @@
 | 1 | **基线清算** | ✅ 三探针：S Δ0、feature 0、config_sites PASS（TODO 过期三项已清，`864e472`） |
 | 2 | **parser 性能收口** | ✅ atom memo + FIRST 早拒（#68/#69）：cJSON 57.6→**2.98s**（19.3x）；门禁 **20–23s**；A/B 0/144、全量 4377/14、7/7 0 诊断 |
 | 3 | **片段模式 P0** | ✅ 独立 `tpc fragment` + 显式记号 + bytes identity 四例 + `always @(*)` 规则 + dry-run diff；10 单测、真实语料 259 文件 0 变化；`gap-fragment-mode.md`（#70） |
-| 4 | **片段模式 P1** | ⏳ `[[island_rules]]` 声明面 + rewriter 能力位 + 多规则/冲突/后验；**契约面需作者批准**（P0 不碰声明面） |
+| 4 | **片段模式 P1** | ⏳ **契约已批（2026-10-30）**：岛式分片 = 岛进管线后合成（非改写规则集）；`[[island_rules]]` 声明段 + `island_rewriter` 能力位获批；未开工 |
 | 5 | **unit graph 内置能力** | ⏳ `unit_graph.v1`：C include 与 Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分支 |
 | 6 | **精化基座 graph 化** | ⏳ elaboration 只消费 graph 原子/边；T3 接受项 `inst_sites` 命名关闭 |
 | 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |
@@ -39,7 +39,7 @@
   阈值，可选 oracle 缺失即 skip）；再按需补阶段级 fuzz（lexer/parser-only 不变量）。
 - **待验证假设**：`eval_benchmark` 在 CI 无外部 oracle 二进制时的可复现面（ORACLE-SKIP
   组占比）；阈值只锚**共识下限**，不锚语料规模敏感的仅tpc/仅o 计数（避免语料变动假红）。
-- **台账**：块 1/2/3/8/10 ✅；块 9 ⏳（#72）、块 11 ⏳（fuzz 半已收口）；主线 2 当前 5/12；P1 待批准。
+- **台账**：块 1/2/3/8/10 ✅；块 9 ⏳（#72）、块 11 ⏳（fuzz 半已收口）；主线 2 当前 5/12；块 4 P1 契约已批、待开工。
 
 
 ## 估算依据（对照锚，可复核）

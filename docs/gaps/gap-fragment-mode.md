@@ -1,8 +1,9 @@
 # Gap — 片段模式 P0（记号模式 / island rewrite 原型）
 
-- 状态：**P0 完成（#70，2026-10-23）**；P1（声明面/能力位）**待作者批准**，未开工。
+- 状态：**P0 完成（#70，2026-10-23）**；**P1 已获作者批准（2026-10-30）**，契约按「岛式分片」
+  重述（见「P1 契约」节），未开工。
 - 实现：`tools/fragment_rewrite.py`（独立 CLI `tpc fragment`，dry-run diff；`--write` 落盘）；测试 `tests/engine/test_fragment_rewrite.py`。
-- 设计输入：已内联到本档「P1/P2 契约与退出判据」节（原讨论稿随收尾销毁，不复用草稿路径）。
+- 设计输入：已内联到本档「P1 契约」「P2/P3 契约与退出判据」节（原讨论稿随收尾销毁，不复用草稿路径）。
 - 关联：`PROGRESS.md` 块 3；`ROADMAP.md`「当前主线」；`docs/gaps/gap-parser-linter-approximation.md`（parser 无错误恢复为刻意接受，本工具不改 parser）。
 
 ## P0 契约（已实现）
@@ -32,25 +33,53 @@ identity/死分支/假记号/幂等四类安全判据可证；不触碰正式 gr
 - 不做隐式锚点（首 token/关键字预筛）；不做块注释/嵌套/无 id 记号；不做非 Verilog 规则；
 - 不做 `expanded` 面映射回原文；不新增 `[[island_rules]]` 声明段、不新增能力位、不改默认管线。
 
-## P1 开工前需作者拍板（框架级）
+## P1 契约（岛式分片，作者 2026-10-30 批复）
 
-1. 对外名：`tpc fragment` / 记号命名空间 `tpc:fragment`（内部名 `fragment rewrite`，不用 island）是否定稿？
-2. 批准新增 `[[island_rules]]` 声明段 + `island_rewriter` 能力位？（新配置 schema/组件类型 = 框架级，须先批）
-3. 规则集/优先级：P1 先做 Verilog `always @(*)`→`always @*` + 事件列表 `or`→`,` 两条？冲突默认 priority 平手拒绝？
-4. `end` 记号是否需要 id 匹配（P0 不要求）；记号是否允许同行 begin/end（P0 不支持）？
+**批复**：① 对外名 `tpc fragment` / 记号 `tpc:fragment` 定稿；② 批准新增 `[[island_rules]]`
+声明段 + `island_rewriter` 能力位；③ **不做"改写规则集合"**——岛式分片 = 能解析/能变换的
+区域进管线，管线输出替换原区间后合成，未处理部分原样保留；④ 记号按**语法岛**分片
+（`end` 不要求 id）。
 
-未获批准时 P0 保持独立工具、不动默认行为；批准后按草稿 P1（语法驱动+插件+后验）实施。
+**为什么原稿有"规则集合"**：P0 用手写 `always @(*)`→`always @*` 证明标记与安全边界，P1
+草稿沿用了这条演示规则、把它误当成骨架。实测管线本身**不做**该改写（CLI `format` 对
+`always @(*)` 原样保留）⇒ 手写改写不是管线能力；P1 删除 `_find_always_star_edits`
+（无兼容垫片，P0 原型随之淘汰）。
 
-## P1/P2 契约与退出判据（立项后对照，防重考古）
+**实测边界（P1 判据的输入）**：
 
-**P1（语法驱动 + 插件化）**
-- 依赖：`[[island_rules]]` 段 + `island_rewriter` 能力位（框架级，见上节待批项 2）。
-- 声明面：独立 loader/校验器（**不是**往 `GrammarRule` 塞未知字段）；`is_fragment_entry`/专用
-  fragment 规则；块规则 entry 须显式装配 `block_start`/`block_end`。
-- 匹配：隐式锚点（首 token + 关键字预筛）；多规则 + 冲突策略（默认 priority 平手拒绝）。
-- 变换：`island_rewriter` 能力面按规则参数（**不是**直接复用 pipeline units）；诊断 ISL 族；
-  后验 = 重解析 + token lint，稳定诊断键。
-- **退出判据**：C/Verilog 各 ≥3 条规则跑通；重叠/负例/双跑幂等/字节 identity 门禁；全量测试不回归。
+| 输入（单独喂管线） | 结果 |
+|---|---|
+| C `if (x) { y++; }` / Verilog `q = d;` | 成功，但输出缩进归零（合成须按插入位置重定基线） |
+| C `} else { y++; }` / `int f(` / Verilog `endmodule` / `always @(*) begin` | lint 失败（不是完整语法单元） |
+
+⇒ 岛必须圈**完整语法单元**；"哪些单元可解析/可变换"由语言包声明（岛类型），引擎不猜。
+
+**`[[island_rules]]` 语义 = 岛类型声明（不是改写规则）**：
+
+| 字段 | 含义 |
+|---|---|
+| `name` | 岛类型名（诊断/参数引用） |
+| `marker` | 记号命名空间（默认 `tpc:fragment`；显式记号圈定区域） |
+| `entry` | 岛入口：解析该岛的规则/块声明（如 `block_start`/`block_end` + 根规则） |
+| `wrapper` | 可选：把岛补成完整单元的模板（缺省 = 岛本身按根规则 parse） |
+| `pipeline` | 管线面：默认 `parse+render`；`transform`/`check` 须显式 opt-in（依赖岛外上下文，判据 = 与全文件同片段结果一致） |
+| `merge` | 合成策略：`reindent`（按插入位置重定缩进基线，默认）/ `verbatim` |
+
+**能力位**：`island_rewriter` 组件 handler（`[capabilities] island_rewriter = <component>`；
+能力表项 `capability.island_rewriter`）——引擎只做"岛文本 → handler → 片段文本"调用与合成
+后验（重解析 / 双跑幂等 / 字节 identity），不写任何语言规则。
+
+**合成契约**：岛输出替换原区间；管线失败或未命中的岛**原样保留**（fail-closed）；标记行本身
+不进岛内容；无岛或零变化 ⇒ 逐字节返回原 bytes；编辑区间重叠/未配对/嵌套 ⇒ 不落任何编辑。
+
+**记号**：`// tpc:fragment begin` … `// tpc:fragment end`（单层、标记独占行）；id 可选，
+若 begin/end 都带 id 则必须一致（错配 fail-closed）；同行 begin/end 不支持（P2 再评）。
+
+**P1 验收**：Verilog（module-item `always` 块、语句）与 C（函数体语句块、声明）各 ≥2 类真实
+岛经管线 + 缩进回填；负例（非语法单元 / 未配对 / 嵌套 / 管线失败）不落编辑；双跑幂等；无岛
+文件字节 identity；全量回归不绿不算完成。
+
+## P2/P3 契约与退出判据（立项后对照，防重考古）
 
 **P2（安全与组合）**
 - 覆盖率报告 / `--json` / `--require-coverage`（字节口径）；`--verify full` 可选；文件级并行（基准后）；
