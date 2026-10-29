@@ -580,7 +580,9 @@ def _add_config_parser(sub) -> None:
 
 def _add_fragment_parser(sub) -> None:
     p_frag = sub.add_parser(
-        "fragment", help="P0 片段变换（显式记号，dry-run diff；--write 落盘）"
+        "fragment",
+        help="片段模式：语法配置推导出的语法岛逐个过真实管线，water 原样保留"
+             "（dry-run diff；--write 落盘）",
     )
     p_frag.add_argument("file", help="Path to source file")
     p_frag.add_argument(
@@ -590,7 +592,7 @@ def _add_fragment_parser(sub) -> None:
 
 
 def _cmd_fragment(args: argparse.Namespace) -> None:
-    """tpc fragment — P0 原型：显式记号区域 always @(*) → always @*。"""
+    """tpc fragment — 片段模式：岛式分片 → 真实管线 → 合成（water 原样）。"""
     # 远端 Windows runner 默认 cp1252：中文 diff/摘要直接 print 会 UnicodeEncodeError。
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
@@ -599,10 +601,10 @@ def _cmd_fragment(args: argparse.Namespace) -> None:
                 reconfigure(errors="backslashreplace")
             except (OSError, ValueError):
                 pass
-    from tools.fragment_rewrite import _print_diff, rewrite_file
+    from islands import print_diff, rewrite_file
 
     result = rewrite_file(args.file, args.rules_dir, args.write)
-    _print_diff(args.file, result)
+    print_diff(args.file, result)
     if result.errors:
         raise SystemExit(1)
 

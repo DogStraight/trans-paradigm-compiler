@@ -122,7 +122,7 @@
 | 组件协议 + 插件加载 | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py`<br>`core/_protocol.py`（magic string 常量） | `tests/engine/core/test_plugin_cluster.py` |
 | 插件回调能力化（P2.5：`[capabilities]`） | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py::_load_capabilities`<br>`core/plugin_loader.py::get_capability`<br>`grammar/verilog/plugins/{typed_ports,formatter}/tpc.toml`（声明） | `tests/engine/core/test_capabilities.py`（9 用例） |
 | 核心类型（Token/GrammarRule/Node） | `docs/README.md`（对齐约定） | `core/define.py` | `tests/engine/core/test_rule_schema.py` |
-| Node 树通用工具（`iter_nodes` / `unwrap_optional` / `collect_nodes`） | `core/README.md`（define.py 行） | `core/define.py` | `tests/engine/analyzer/` + `tests/languages/`（经检查插件与 structure 间接覆盖） |
+| Node 树通用工具（`iter_nodes` / `unwrap_optional` / `collect_nodes`） | `core/README.md`（define.py 行） | `core/define.py` | `tests/engine/analyzer/` + `tests/languages/`（经检查插件与 linter 推导层间接覆盖） |
 | 引擎约定机器化（check_hardcode 门禁） | `AGENTS.md`（硬约束：语言知识不进代码/路径规范/Doc 反向引用）<br>`docs/README.md`（Doc: 约定） | `policy/check_hardcode.py`（规则 1-4） | `tests/policy/test_check_hardcode.py`（17 用例） |
 | 文档治理（调用点门禁 + 同步层 + 删除判据 + 引用纪律） | `policy/doc-alignment.md`（Doc: 约定 + 引用纪律 + 删除判据全表）<br>`docs/README.md`（导航索引） | `policy/check_doc_refs.py`（D1/D2 gate + D3/D4 info）<br>`policy/doc_sync.py`（refs/rename/delete 同步层） | `tests/policy/test_check_doc_refs.py`（24 用例）<br>`tests/policy/test_doc_sync.py`（15 用例） |
 | 审计制度（可插拔审计管线 + 维度注册表 + 证据规则） | `docs/audit_system.md`<br>`policy/collaboration.md`（审计维度轮） | `tools/audit_cycle.py`<br>`docs/audit_dimensions.toml` | `tests/policy/test_audit_dimensions.py` |
@@ -144,6 +144,8 @@
 |----------|----------|------------------|------------------|
 | 注释节点模型（P1.5：注释 = AST 一等节点 + 槽位约定） | `renderer/renderer_architecture.md`（注释处理节）<br>`references.md`（Veryl CommentDoc/注释机制对照） | `renderer/node_renderer.py`（_comment_slots 槽位消费；`head_trailing` 经 `_insert_before_trailing_break` 插到 head 末尾换行点前）<br>`renderer/primitives/line.py`（inline_after 锚 token 定位）<br>`parser/_production.py`（行中注释挂载 + 行尾 trailing + 块头 trailing→head_trailing 迁槽）<br>`transform/engine.py::migrate_comments`（变换注释迁移） | `tests/engine/renderer/test_comment_slots.py`<br>`tests/engine/parser/test_comment_attachment.py`（含 `TestBlockEndTrailing` 逐行位置断言）<br>`tests/engine/transform/test_comment_migrate.py` |
 | 注释单机制设计（源注释 = AST 节点元信息 + Comment 节点，普通注释锚点回插已删，tpc marker 独立通道；遗留边界 ①② 闭环） | `renderer/renderer_architecture.md`（注释处理节）<br>`references.md`（Veryl 对照） | 已实现（pratt op 间隙行中注释挂表达式节点 / 容器项间与首元素前独占注释 Comment 节点 / 块结束符与行尾 trailing / join 注释段与分隔符锚消费 / restore 纯 tpc） | `tests/e2e/test_comment_restore.py` + `test_comment_container.py`（门禁）<br>注释测试 4 文件（`test_comment_attachment`/`test_comment_slots`/`test_comment_migrate`/`test_pratt_comment_keep`） |
+
+| 片段模式（岛式分片：语法单元 → 真实管线 → 合成；water 原样） | `docs/gaps/gap-fragment-mode.md`（契约/退出判据）<br>`islands/README.md` | `islands/model.py`<br>`islands/segment.py`<br>`islands/process.py`<br>`islands/splice.py`<br>`islands/rewrite.py` | `tests/engine/test_islands.py` |
 
 | 引擎能力面抽象审查（能力×语言矩阵 / 第二语言复用判据） | `docs/gaps/gap-engine-abstraction-audit.md`（方法 + 矩阵 + 每行证据；刻度完成后执行） | —（审查对象 = 引擎能力面，非代码路径） | —（台账；判据随审查轮落地，日常由 `tests/policy` 守文档完整性） |
 

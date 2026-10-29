@@ -1,13 +1,15 @@
 # Gap — 片段模式 P0（记号模式 / island rewrite 原型）
 
-- 状态：**P0 完成（#70，2026-10-23）**；**P1 契约已定稿（2026-10-30，全域岛 / 零声明面）**，
-  推导层留在 `linter/` 内部（组件，不设独立顶层包），`islands/` 模块未开工。
-- 实现：`tools/fragment_rewrite.py`（独立 CLI `tpc fragment`，dry-run diff；`--write` 落盘）；测试 `tests/engine/test_fragment_rewrite.py`。
+- 状态：**P0 完成（#70，2026-10-23）**；**P1 已落地（2026-10-30，全域岛 / 零声明面）**：
+  `islands/` 五模块 + `tpc fragment` 改走；P0 记号原型与 `tools/fragment_rewrite.py`
+  已删除（无兼容垫片）。
+- 实现：`islands/`（model/segment/process/splice/rewrite；CLI `tpc fragment`，dry-run diff；
+  `--write` 落盘）；测试 `tests/engine/test_islands.py`。
 - 设计输入：已内联到本档「P1 契约」「P2/P3 契约与退出判据」节（原讨论稿随收尾销毁，不复用草稿路径）。
 - **调研输入（2026-10-30）**：`docs/references.md`「岛式分片 / 部分解析」——五档先例
   （岛式语法 / included ranges / 标记忽略 / 范围格式化 / 轻量结构改写）的共性提炼；
   以下三条已并入 P1 契约：**边界落在语法单元**、**岛内只走真实管线**、**后验默认开**。
-- 关联：`PROGRESS.md` 块 3；`ROADMAP.md`「当前主线」；`docs/gaps/gap-parser-linter-approximation.md`（parser 无错误恢复为刻意接受，本工具不改 parser）。
+- 关联：`PROGRESS.md` 块 3/4；`docs/decisions/0026-fragment-mode-islands.md`；`ROADMAP.md`「当前主线」；`docs/gaps/gap-parser-linter-approximation.md`（parser 无错误恢复为刻意接受，本工具不改 parser）。
 
 ## P0 契约（已实现）
 
@@ -67,20 +69,21 @@ identity/死分支/假记号/幂等四类安全判据可证；不触碰正式 gr
 无岛或零变化 ⇒ 逐字节返回原 bytes；后验**默认开启且无跳过开关**：岛级重解析 + 双跑幂等 +
 字节 identity（P2 的 `--verify full` 只增加"全文件级"档，不是跳过手段）。
 
-**P1 验收**：Verilog 与 C 各 ≥2 类真实岛（块级 + 语句级）经管线 + 缩进回填；负例（水区间 /
-非语法单元 / 管线失败）不落编辑；双跑幂等；无岛文件字节 identity；真实语料 A/B 无岛区间
-0 变化；`eval_lint_accuracy` 不回归；全量绿。
+**P1 验收（2026-10-30 证据）**：
+- 单测 `tests/engine/test_islands.py` 10 passed（identity/BOM+CRLF/岛处理/water 保留/
+  宏落水/双跑幂等/C 包同机制）；
+- 真实语料冒烟 12 文件：0 crash、0 non-idempotent、处理后再次改写逐字一致；
+- `eval_lint_accuracy`：33 hit / 0 miss / 0 fp（linter 面未回归）；
+- 默认行为不变：片段模式是独立命令，`format`/`lint` 等入口未改。
 
-**P1 实施顺序（更新，待开工）**：
+**P1 落地内容（2026-10-30）**：
 
-1. ADR：片段模式机制立项（推导层留在 linter 内部；契约 = 全域岛 / 零配置面 / 后验）。
-2. 引擎侧新包 `islands/`：`model.py`（语法 → 岛模型：种类/边界/FIRST 复用）、`segment.py`
-   （token 流 + Discovery → 岛树 + water 区间）、`process.py`（岛文本 → 管线 → 片段文本，
-   自顶向下成功即停）、`splice.py`（缩进基线回填 + 区间替换 + 后验）。
-3. CLI：`tpc fragment` 改走 `islands/`；删除 `tools/fragment_rewrite.py`（含记号与手写
-   规则）；参数沿用 `--write`/dry-run diff，`--pack` 取语言包。
-4. 门禁：单测（岛树/water/缩进/幂等/字节 identity/负例）+ 真实语料 A/B + `eval_lint_accuracy`
-   + 全量回归。
+1. ADR-0026（`docs/decisions/0026-fragment-mode-islands.md`）：全域岛 / 零声明面 / 后验。
+2. `islands/`：`model.py`（复用 linter 推导组件）、`segment.py`（字符区间/water/缩进）、
+   `process.py`（真实管线 + 重解析 + 双跑幂等）、`splice.py`（重定缩进基线 + 编辑集）、
+   `rewrite.py`（自顶向下编排 + bytes identity）。
+3. CLI：`tpc fragment` 改走 `islands/`；`tools/fragment_rewrite.py` 与 P0 记号测试删除。
+4. 门禁：单测 10 条 + 真实语料冒烟 + `eval_lint_accuracy`；按「改哪跑哪」纪律未跑全量。
 
 ## 岛信息如何从语法配置推导（调研 2026-10-30）
 

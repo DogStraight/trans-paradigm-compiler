@@ -57,6 +57,7 @@
   （renderer layout 空格纪律已就近 `renderer/layout_spacing_prompt.md`，见 renderer/README）
   （功能切面打包已就近 `packaging/packaging.md`，facets.json 规格随目录）
 - 验证（fuzz/差分/边缘）：`tests/fuzz/README.md`（语法驱动 + 变异 fuzzing，不变量：不崩溃/token 保序/幂等）、`tests/edge/run_edge.py`（边缘语料门禁）、`tests/differential/run_differential.py`（与 verible-verilog-format 对拍，可选依赖）
+- 片段模式：`islands/README.md`（岛式分片实现）+ `docs/gaps/gap-fragment-mode.md`（契约/退出判据）
 - 缺口档案：`docs/gaps/README.md`（档案规约 + 登记表）——能力边界/缺口一个
   `gaps/gap-*.md`，宽泛条目（TODO/ROADMAP）链接过来
 - 地图/索引：各引擎子包目录 `README.md`（部件就近说明：每文件一句话，随目录同步）、
@@ -83,6 +84,9 @@
   设计型（**未立项**）：`decisions/0025-discovery-rule-derivation.md`
   （语句发现改为声明式形态推导：消除 C 花括号容器引发的 6+ 处引擎特例补丁，
   恢复开闭原则；D1–D4 分期见该档）。
+  设计型（**已落地**）：`decisions/0026-fragment-mode-islands.md`
+  （片段模式 = 语法配置驱动的岛式分片：全域岛 / 零声明面 / 后验默认开；
+  落地 `islands/`，P0 记号原型与手写规则已删）。
 - **长期暂缓项/触发条件（策略）** → `decisions/` 的**策略型 ADR**（"长期项不列待办" +
   「结论/为什么不做/触发条件」表，现存 `decisions/0021-long-term-deferral-strategy.md`）；
   **不进 TODO**——触发出现时按体量取回 TODO/ROADMAP，

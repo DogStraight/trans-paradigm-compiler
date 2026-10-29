@@ -18,7 +18,7 @@
 | 1 | **基线清算** | ✅ 三探针：S Δ0、feature 0、config_sites PASS（TODO 过期三项已清，`864e472`） |
 | 2 | **parser 性能收口** | ✅ atom memo + FIRST 早拒（#68/#69）：cJSON 57.6→**2.98s**（19.3x）；门禁 **20–23s**；A/B 0/144、全量 4377/14、7/7 0 诊断 |
 | 3 | **片段模式 P0** | ✅ 独立 `tpc fragment` + 显式记号 + bytes identity 四例 + `always @(*)` 规则 + dry-run diff；10 单测、真实语料 259 文件 0 变化；`gap-fragment-mode.md`（#70） |
-| 4 | **片段模式 P1** | ⏳ 契约定稿（2026-10-30 最终版：全域岛 / 零声明面 / 无记号或范围模式 / 后验默认开）；推导层作为 linter 内部组件（不设独立包）；`islands/` 模块未开工 |
+| 4 | **片段模式 P1** | ✅ 全域岛 / 零声明面 / 无记号（`islands/` 五模块 + `tpc fragment`；ADR-0026）；单测 10、真实语料 12 文件 0 crash/0 non-idem、lint 33/0/0 |
 | 5 | **unit graph 内置能力** | ⏳ `unit_graph.v1`：C include 与 Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分支 |
 | 6 | **精化基座 graph 化** | ⏳ elaboration 只消费 graph 原子/边；T3 接受项 `inst_sites` 命名关闭 |
 | 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |
@@ -28,18 +28,18 @@
 | 11 | **吞吐/基准** | ⏳ 实测基线重锚：fuzz 5 → 12 iter/s（单进程 2.2x）/ 32 iter/s（8 worker）；配置声明缓存 + parser 预编译表复用已落地；**benchmark 阈值进 CI 待做**；阶段级 fuzz 未做 |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 
-**当前 5 / 12**。基线锚：A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、
+**当前 6 / 12**。基线锚：A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、
 `feature_sites compare` ✓（散点已收敛，基线已刷新）；全量复现 `pytest tests/`
 （未通过数记 CHANGELOG 当轮条目）。
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 11 收口段——benchmark 阈值进 CI：先把 `tests/e2e/eval_benchmark.py`
-  的 verilator 口径（共识 53 / 仅tpc 18 / 仅o 343）落成基线文件 + 门禁（稳定项才设
-  阈值，可选 oracle 缺失即 skip）；再按需补阶段级 fuzz（lexer/parser-only 不变量）。
+- **意图**：块 11 收口段——benchmark 阈值进 CI：把 `tests/e2e/eval_benchmark.py` 的
+  verilator 稳定项（共识 53 / 仅tpc 18 / 仅o 343）落成基线文件 + 门禁（缺 oracle 即
+  skip）；再按需补阶段级 fuzz（lexer/parser-only 不变量）。
 - **待验证假设**：`eval_benchmark` 在 CI 无外部 oracle 二进制时的可复现面（ORACLE-SKIP
   组占比）；阈值只锚**共识下限**，不锚语料规模敏感的仅tpc/仅o 计数（避免语料变动假红）。
-- **台账**：块 1/2/3/8/10 ✅；块 9 ⏳（#72）、块 11 ⏳（fuzz 半已收口）；主线 2 当前 5/12；块 4 P1 契约已批、待开工。
+- **台账**：块 1/2/3/4/8/10 ✅；块 9 ⏳（#72）、块 11 ⏳（fuzz 半已收口）；主线 2 当前 6/12。
 
 
 ## 估算依据（对照锚，可复核）

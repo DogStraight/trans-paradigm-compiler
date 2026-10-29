@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **片段模式 P1：语法配置驱动的岛式分片（`tpc fragment`，块 4 ✅，2026-10-30）**
+  · 新包 `islands/`：`model`（复用 linter 内部推导组件，零语言字面量）、`segment`
+  （token 区间 → 字符区间 + water 判据 + 行首缩进）、`process`（岛文本 → 真实管线
+  parse+render+formatter；后验 = 重解析 + 双跑逐字幂等）、`splice`（编辑集从右向左 +
+  缩进基线回填）、`rewrite`（自顶向下编排：成功即整段替换、失败递归子节点、仍失败落
+  water；无岛/零变化逐字节 identity）。
+  · **零声明面**：不设 `[[island_rules]]` / `island_rewriter` / 记号 / 范围可选模式——
+  片段模式下语法配置推导出的语法单元默认就是岛；要限定"只有某部分语法有效"单开语言包。
+  · P0 原型 `tools/fragment_rewrite.py`（记号 + 手写 `always @(*)` 规则）与其测试删除，
+  无兼容垫片；`tpc fragment` 改走 `islands/`（dry-run diff / `--write` 不变）。
+  · 证据（按"改哪跑哪"纪律，未跑全量）：`tests/engine/test_islands.py` 10 passed
+  （identity/BOM+CRLF/岛处理/water 保留/宏落水/双跑幂等/C 包同机制）；真实语料冒烟
+  12 文件 0 crash / 0 non-idempotent；`eval_lint_accuracy` 33 hit / 0 miss / 0 fp；
+  pyright strict 0 errors。`format`/`lint` 等既有命令行为不变（片段模式独立入口）。
+
 ### Changed
 - **结构推导层留在 linter 内部（片段模式 P1 前置，2026-10-30）**：`grammar_slicer /
   first_set / lookahead / discovery / discovery_shape` 作为 linter 的**内部组件**

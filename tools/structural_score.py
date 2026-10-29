@@ -40,7 +40,7 @@ import sys
 from dataclasses import dataclass, field
 
 # ── 口径常量（改动须同步 policy/structural_budget.md）──────────────────────
-SKIP_DIRS = ("tests", "_drafts", "dist", ".git", "__pycache__", "egg-info", ".agents")
+SKIP_DIRS = ("tests", "_drafts", "dist", ".git", "__pycache__", "egg-info", ".agents", ".scratch")
 CC_BASE = 10                     # 工具阈值（提示线）
 COG_BASE = 15
 FUNC_LIMIT = 120                 # 内部线 = 阈值 × 1.5

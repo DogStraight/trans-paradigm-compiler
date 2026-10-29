@@ -591,6 +591,27 @@ def _install_config_declarations():
         )
 
 
+def _decl_specs_for(
+    candidate: str, tier: tuple[str, ...], is_pack: bool, entries: dict
+) -> list[tuple]:
+    """按 (包目录, 档位) 取声明元组；非语言包目录沿用当前 `_entries`（低层契约）。"""
+    if is_pack:
+        return _load_meta_declarations(grammar_dir=candidate, enabled=list(tier))
+    return [
+        (
+            name,
+            spec.get("file", ""),
+            spec.get("section"),
+            spec.get("base", "rules"),
+            spec.get("required", True),
+            spec.get("description", ""),
+            spec.get("bare_value"),
+            spec.get("merge"),
+        )
+        for name, spec in entries.items()
+    ]
+
+
 class ConfigRegistry:
     """配置注册中心。"""
 
@@ -951,13 +972,9 @@ class ConfigRegistry:
         ⚠ 缓存键必须含**档位**：同包两档的声明不同，键里没有它就会串档
         （上一轮该功能没生效的第二个根因）。
 
-        ⚠ **声明装载必须晚于缓存命中判断**（2026-10-29 块 11）：声明只由
-        (包目录, 档位) 决定，而键里还含 ext/plugins/base——先装载再查缓存会让
-        每次 resolve 重读重解析包内**全部** tpc.toml（verilog 包 14 个插件 ⇒
-        每次约 15 次 TOML 解析 + 目录扫描）。fuzz 单迭代 ~20 次 resolve 时，
-        这项固定成本占 75% 运行时间（实测 5 → 16 iter/s）。配置文件在进程内
-        视为不可变（`load_language` 是"重新初始化"而非热重载，见该方法说明），
-        故命中缓存即不再触碰声明。
+        ⚠ 声明装载必须晚于缓存命中判断（块 11）：声明只由 (包目录, 档位) 决定，
+        缓存键还含 ext/plugins/base——命中即不再触碰，否则每次 resolve 重解析包内
+        全部 tpc.toml（曾占 fuzz 75% 运行时间；细节见 CHANGELOG 块 11 条目）。
         """
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         candidate = rules_dir
@@ -979,23 +996,7 @@ class ConfigRegistry:
         )
         if cache_key in cls._resolve_cache:
             return cls._resolve_cache[cache_key]
-        decls = (
-            _load_meta_declarations(grammar_dir=candidate, enabled=list(tier))
-            if is_pack
-            else [
-                (
-                    name,
-                    spec.get("file", ""),
-                    spec.get("section"),
-                    spec.get("base", "rules"),
-                    spec.get("required", True),
-                    spec.get("description", ""),
-                    spec.get("bare_value"),
-                    spec.get("merge"),
-                )
-                for name, spec in cls._entries.items()
-            ]
-        )
+        decls = _decl_specs_for(candidate, tier, is_pack, cls._entries)
         result = cls._resolve_decls(decls, candidate, ext_dirs, plugins_dir, base_dirs)
         cls._resolve_cache[cache_key] = result
         return result

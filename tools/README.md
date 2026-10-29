@@ -63,7 +63,6 @@
 - `min_pack_probe.py` — 最小语言包探针（行为面基线）：换迷你包跑引擎测试，记录哪些测试仍绿；`--record` 写 `baselines/min_pack_baseline.json`。**强制串行**（并行结果随 worker 分配漂移）。
 - `c_acceptance.py` — C 包接受面扫描：45 条构造逐条试解析，报"进 AST / 空 AST / 词法抛错"。**空洞是无声的**。见 `docs/gaps/gap-language-pack-scope.md`。
 - `render_coverage.py` — 渲染覆盖率盘点：哪些规则带 `layout`/`body`。引擎对无布局规则**静默输出空串**。见 `docs/gaps/gap-language-pack-scope.md`。
-- `fragment_rewrite.py` — 片段变换 P0 原型（记号模式）：显式行注释圈区域，纯语法规则改写；默认 dry-run diff、`--write` 落盘。见 `docs/gaps/gap-fragment-mode.md`。
 
 ### 4. 诊断与实验
 
