@@ -4,6 +4,9 @@
   重述（见「P1 契约」节），未开工。
 - 实现：`tools/fragment_rewrite.py`（独立 CLI `tpc fragment`，dry-run diff；`--write` 落盘）；测试 `tests/engine/test_fragment_rewrite.py`。
 - 设计输入：已内联到本档「P1 契约」「P2/P3 契约与退出判据」节（原讨论稿随收尾销毁，不复用草稿路径）。
+- **调研输入（2026-10-30）**：`docs/references.md`「岛式分片 / 部分解析」——五档先例
+  （岛式语法 / included ranges / 标记忽略 / 范围格式化 / 轻量结构改写）的共性提炼；
+  以下三条已并入 P1 契约：**边界落在语法单元**、**岛内只走真实管线**、**后验默认开**。
 - 关联：`PROGRESS.md` 块 3；`ROADMAP.md`「当前主线」；`docs/gaps/gap-parser-linter-approximation.md`（parser 无错误恢复为刻意接受，本工具不改 parser）。
 
 ## P0 契约（已实现）
@@ -65,12 +68,21 @@ identity/死分支/假记号/幂等四类安全判据可证；不触碰正式 gr
 | `pipeline` | 管线面：默认 `parse+render`；`transform`/`check` 须显式 opt-in（依赖岛外上下文，判据 = 与全文件同片段结果一致） |
 | `merge` | 合成策略：`reindent`（按插入位置重定缩进基线，默认）/ `verbatim` |
 
+**声明位置（P1）**：语言包根 `tpc.toml`（`[[island_rules]]`，与 `[commands]`/`[plugins]` 同层；
+组件目录声明留 P2）。
+
+**岛边界判据**：岛起止必须落在 **token 边界**，且岛文本单独进管线**解析成功**（声明了
+`entry` 时还须 AST 根节点名匹配）；不满足 ⇒ 该岛**原样保留**并记诊断，不延展猜测
+（依据：`} else {` / `int f(` / `endmodule` / `always @(*) begin` 单独喂管线均 lint 失败）。
+
 **能力位**：`island_rewriter` 组件 handler（`[capabilities] island_rewriter = <component>`；
 能力表项 `capability.island_rewriter`）——引擎只做"岛文本 → handler → 片段文本"调用与合成
-后验（重解析 / 双跑幂等 / 字节 identity），不写任何语言规则。
+后验，不写任何语言规则。
 
 **合成契约**：岛输出替换原区间；管线失败或未命中的岛**原样保留**（fail-closed）；标记行本身
 不进岛内容；无岛或零变化 ⇒ 逐字节返回原 bytes；编辑区间重叠/未配对/嵌套 ⇒ 不落任何编辑。
+后验**默认开启且无跳过开关**：岛级重解析 + 双跑幂等 + 字节 identity（P2 的 `--verify full`
+只增加"全文件级"档，不是跳过手段）。
 
 **记号**：`// tpc:fragment begin` … `// tpc:fragment end`（单层、标记独占行）；id 可选，
 若 begin/end 都带 id 则必须一致（错配 fail-closed）；同行 begin/end 不支持（P2 再评）。
@@ -79,9 +91,25 @@ identity/死分支/假记号/幂等四类安全判据可证；不触碰正式 gr
 岛经管线 + 缩进回填；负例（非语法单元 / 未配对 / 嵌套 / 管线失败）不落编辑；双跑幂等；无岛
 文件字节 identity；全量回归不绿不算完成。
 
+**P1 实施顺序（准备就绪，待开工）**：
+
+1. ADR：岛式分片机制立项（声明段 + 能力位 + 边界/后验契约）→ 落 `decisions/`。
+2. 引擎侧新包 `fragment/`：记号解析（迁 P0 安全判据）、岛声明 loader/校验（fail-fast）、
+   管线调用（parse+render，含 wrapper/reindent）、合成与后验（重解析/幂等/字节 identity）。
+3. 声明面接线：`[[island_rules]]` → 能力 `island.rules`（`core/engine_capabilities.py`
+   的 CAPABILITIES/SECTION_CAPABILITY + 语言包 `[engine] uses`）；能力位
+   `capability.island_rewriter`（组件 handler，参照 formatter 的 `[capabilities]` 形态）。
+4. CLI：`tpc fragment` 改读声明面（`--pack`/`--write`/dry-run 不变）；删除
+   `tools/fragment_rewrite.py` 的 `_find_always_star_edits`（P0 演示规则，无兼容垫片）。
+5. 语言包声明：verilog（module-item `always` 块、语句）+ C（语句块、声明）各 ≥2 类岛。
+6. 门禁：单测（记号/声明 fail-fast/负例/缩进/幂等/字节 identity）+ 真实语料 A/B（无记号
+   0 变化）+ `eval_lint_accuracy` 不回归 + 全量。
+
 ## P2/P3 契约与退出判据（立项后对照，防重考古）
 
 **P2（安全与组合）**
+- **范围作为对外接口**：`--lines`/`--offset` 形态（对齐 clang-format）与 LSP
+  `textDocument/rangeFormatting` 形状的输出，编辑器只需给选区；显式记号仍是主入口。
 - 覆盖率报告 / `--json` / `--require-coverage`（字节口径）；`--verify full` 可选；文件级并行（基准后）；
 - `inner-first` 外层重解析、默认平手拒绝策略的命中率统计；
 - 真实语料（C + Verilog；SV 若可用）A/B：无规则 0 变化、有规则只改目标片段、输出可 parse 保持可 parse。

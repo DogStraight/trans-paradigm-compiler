@@ -51,6 +51,9 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [ISO C99 标准文法](https://port70.net/~nsz/c/c99/n1256.html)（n1256，WG14 草案） | 设计参考 | C 包的**权威依据**：左递归的 `postfix-expression` 六形态（§6.5.2）、`integer-suffix`/`floating-suffix`（§6.4.4.1）、说明符分层（§6.7.1–6.7.4）——凡"C 到底怎么规定"的问题先查标准再决定取舍（详见深调研「C 语言文法参照」） |
 | [tree-sitter-c](https://github.com/tree-sitter/tree-sitter-c)（grammar.js） | 设计参考 | 生产级 C 文法（GLR）：后缀**各自成规则 + 显式优先级**（SUBSCRIPT 17 / FIELD 16 / CALL 15 > UNARY 14）、`number_literal` 后缀按**字符类宽进**、`case_statement` **吸收**后续语句、前缀/后缀自增按位置区分——C 包三处取舍的直接参照（详见深调研「C 语言文法参照」） |
 | 延迟消歧对照（[slang](https://github.com/MikePopoloski/slang) / SGLR-SDF / Roslyn） | 深度参考 | "语法阶段不判、语义阶段再判"的项目谱系：slang 的 **CST/AST 分离两步**（解析期 documented "no name resolution"）、SGLR 解析森林后期消歧过滤、Roslyn 的语法树中性 + `SemanticModel`——tpc raw 机制（P3/P4）在成熟解法中的位置参照（详见深调研「C 语言文法参照」§7） |
+| [Island grammars](https://pure.uva.nl/ws/files/3485102/21286_UBA002000680_08.pdf)（van Deursen & Klint） | 深度参考 | "只写关心的构造、其余文本按 water 跳过"的轻量部分语法路线：岛内用真实语法，water 由词法规则跳过——片段模式的直接理论来源（详见深调研「岛式分片 / 部分解析」） |
+| [comby](https://github.com/comby-tools/comby) | 设计参考 | 不做完整语法、按**均衡定界符**匹配/替换（holes + 平衡组）：轻量结构改写的工业先例，与 tpc"限制在可判定片段"的边界同族（详见同节） |
+
 
 | 宏处理机制对照（[Lean 4](https://github.com/leanprover/lean4) / [Clang](https://github.com/llvm/llvm-project) / Verible / GLR） | 深度参考 | 结构宏进树（Lean syntax + macro scope 卫生）/ 编辑/格式化不展开宏 + raw 进 CST（Verible）/ 全展开 + 双位置 + 旁路记录表（Clang）——宏体入树（ADR-0016）的机制输入（详见深调研） |
 
@@ -66,6 +69,9 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [verible-verilog-format](https://github.com/chipsalliance/verible) | 架构对比 | Google Verilog/SystemVerilog 官方 formatter（token 流 + 布局决策 + 注释锚定）；tpc 差分测试已带其 exe，是高精度目标参照（详见深调研） |
 | [istyle-verilog-formatter](https://github.com/thomasrussellmurphy/istyle-verilog-formatter) | 概念参考 | 独立开源 Verilog formatter（C++，~187★，2026 仍活跃）——Astyle 式缩进风格引擎，验证"格式即风格选项"路线 |
 | [verilog-format](https://github.com/ericsonj/verilog-format) | 概念参考 | Java 独立 Verilog formatter（~207★，2019 起维护）：`-s verilog-format.properties` 属性文件驱动选项——"配置是选项非布局规则"的另一实证 |
+| [clang-format](https://clang.llvm.org/docs/ClangFormat.html) | 设计参考 | 细粒度格式化的工业先例：`--lines`/`--offset` 范围、`--output-replacements-xml` 先出补丁、编辑器选区格式、`// clang-format off/on` 区段忽略（详见深调研「岛式分片 / 部分解析」） |
+| [Black](https://black.readthedocs.io/en/stable/usage_and_configuration/the_basics.html) | 设计参考 | `# fmt: off/on` 区段忽略 + `--line-ranges` 选区格式化 + `--safe` 的 AST 等价后验——"局部处理 + 后验不变量"的成熟形态（详见同节） |
+
 
 ### 静态检查（HDL lint）
 
@@ -2518,4 +2524,59 @@ HN：[C semantics 48 分](https://news.ycombinator.com/item?id=25395934) /
 `--supercool`（仅见于 PL 教程课名，未在 `KompileOptions.java` 核实）。
 **二轮采集已证实并补入上文**：`kdist` 是 pyk 的打包模块 · `claim` 的声明形态 ·
 `ksearch` / `kcfg` **不存在**。
+
+### 岛式分片 / 部分解析（2026-10-30 调研，片段模式 P1 前置）
+
+**定位**：回答"完整 SystemVerilog 语法写不出来、写出来性能也差，能否只写关心的片段、
+其余文本原样跳过"。这类需求在语言工具链里反复出现，成熟解法可归为五档；共性是
+**边界用文本/词法判定，岛内用真实工具，安全性靠标记契约 + 后验**。
+
+| 档 | 代表 | 边界判定 | 岛内处理 | 后验 / 安全 |
+|---|---|---|---|---|
+| ① 岛式语法（island grammar / water） | [Island grammars](https://pure.uva.nl/ws/files/3485102/21286_UBA002000680_08.pdf)（van Deursen & Klint）· [SDF 实例（eelcovisser 2012）](https://eelcovisser.org/publications/2012/JongeKVS12.pdf) · [Bounded seas（ScienceDirect 摘要）](https://www.sciencedirect.com/science/article/abs/pii/S1477842415000536) | 词法层扫描：water 由词法规则跳过，岛起点由关键字/首 token 触发 | 真实语法解析岛 | 语法层保证；water 不承诺语义 |
+| ② 范围解析（included ranges） | [tree-sitter 多语言文档 / `ts_parser_set_included_ranges`](https://tree-sitter.github.io/tree-sitter/using-parsers/3-advanced-parsing.html) | 先建宿主语言树，按节点 range 交给嵌入语言 | 宿主 + 嵌入语言各自的真实 parser | 组合由调用方负责；`ERROR` 节点只保底 |
+| ③ 标记忽略 | [Black `# fmt: off/on`](https://black.readthedocs.io/en/stable/usage_and_configuration/the_basics.html) · [Prettier `prettier-ignore-start/end`](https://prettier.io/docs/ignore) · [clang-format `// clang-format off/on`](https://clang.llvm.org/docs/ClangFormatStyleOptions.html) | 行注释标记 + 约束（同缩进 / 需空行 / 成对） | 区域内不进格式化，原样保留 | 未配对 / 跨层即拒 |
+| ④ 范围格式化 / 替换 | [clang-format `--lines` / `--offset` / `--output-replacements-xml` / `--cursor`](https://clang.llvm.org/docs/ClangFormat.html) · Black `--line-ranges` · [LSP `textDocument/rangeFormatting`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_rangeFormatting) | 行列 / 字节范围（编辑器选区） | 真实格式化器处理选区 | 先出 replacements/diff 再应用；LSP 由编辑器原子提交 |
+| ⑤ 轻量结构改写 | [comby](https://comby.dev/docs/syntax-reference) | 均衡定界符 + holes（`:[var]` / `...`），不做完整语法 | 模板替换（无 AST） | 定界符平衡约束 |
+
+**共性（可迁移）**：
+
+1. **边界判定都在词法/文本层**（water、range、标记、定界符），不要求宿主完整语法——
+   这正是"完整 SV 语法写不出来"的解法：语法子集只描述岛内。
+2. **岛内一律用真实解析器/格式化器**（tree-sitter included ranges 用真实语言 parser；
+   clang-format 用真实 formatter；Black 用真实格式化逻辑），不是第二套近似规则。
+   ⚠ P0 手写的 `always @(*)` 改写规则违反这条：实测正式管线**不做**该改写，规则与管线
+   脱节 ⇒ P1 删除该规则（见 `docs/gaps/gap-fragment-mode.md`）。
+3. **局部处理有边界效应，成熟实现只有两种应对**：扩展到语法实体（clang-format vim
+   "extend to next bigger syntactic entity"；Black `--line-ranges` 明说可能格式化范围外
+   多行）或拒绝（fail-closed）。共同前提 = **岛边界必须落在语法单元边界**。
+4. **后验是硬要求**：Black `--safe` 做 AST 等价检查；clang-format 先
+   `--output-replacements` 再应用；Prettier range ignore 有形状约束。tpc P0 已有
+   byte identity + 双跑幂等 + fail-closed，方向一致，P1 再加"岛级重解析"。
+5. **对外接口呈"范围"形态**：clang-format `--lines`、Black `--line-ranges`、LSP
+   rangeFormatting——编辑器只给选区。P2 对齐这个形状，P1 先用显式记号。
+
+**对 tpc 片段模式的实现输入**（落到 `docs/gaps/gap-fragment-mode.md`「P1 契约」）：
+
+- 岛类型声明 = ①的"water / island"结构：显式记号圈定岛，未圈定文本 = water；岛入口 /
+  包装由语言包声明，引擎不猜。
+- 岛内只走现有管线（parse+render，可选 transform/check），**不引入第二套解析器或改写规则**。
+- 边界判据：岛起止必须落在 token 边界且解析成功。实测反例（`} else { y++; }`、`int f(`、
+  `endmodule`、`always @(*) begin` 单独喂管线均 lint 失败）说明"非完整语法单元"必须拒绝，
+  不能靠延展猜测。
+- 合成：按插入位置重定缩进基线（边界效应的直接应对）；越界 / 重叠 ⇒ 不落任何编辑。
+- 后验默认开：岛级重解析 + 双跑幂等 + 字节 identity（对应 ④ 的 replacements 预演与
+  Black `--safe`）。
+
+**明确不做 / 不适用**：
+
+- 📌 **不做"先建宿主完整树再嵌岛"**（tree-sitter included ranges 模式）：前提是有完整宿主
+  语法树，正是 tpc 要省掉的成本。
+- 📌 **不做错误恢复式全语法解析**（tree-sitter `ERROR` 节点 / Roslyn 恢复）：仍需完整语法，
+  且错误节点不保语义；tpc 选择"岛外 water 不解析"。
+- 📌 **P1 不做隐式自动发现**（关键字触发岛起点）：先显式记号；待岛边界判据有实测数据后，
+  P2 再评估 `marker = implicit`。
+- 💡 增量解析（tree-sitter `ts_tree_edit` 复用子树、增量 packrat）解决"编辑后复用"，与
+  "语法子集"正交；P3 增量接合再评估。
+
 
