@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   pyright strict 0 errors。`format`/`lint` 等既有命令行为不变（片段模式独立入口）。
 
 ### Changed
+- **会话协作前置判据（2026-10-30）**：`policy/session-wire.md` 开头新增「先判：会话间对话 vs
+  Teams」——按**上下文归属**判模式（对方上下文/目标 → 只能提问 + 给证据；我播种 → 交付物
+  导向、可派活/终止），并写明混用代价；`AGENTS.md` 加一行指针，用户级
+  `dsh-session-messaging` 技能首屏加同一判据（本机文件，不入库）。
 - **技能面收敛：静态检查与补丁自查并入制度（2026-10-30）**：用户级技能 `pylance-cleanup`
   的现场坑（下划线改名不豁免 / fallback 参数名须一致 / 模块级 `type: ignore` 不生效）并入
   `policy/pylance-cleanup.md`；`enumeration-illusion-audit` 的判据（开放集 vs 封闭集三问 +
