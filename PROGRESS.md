@@ -18,7 +18,7 @@
 | 1 | **基线清算** | ✅ 三探针：S Δ0、feature 0、config_sites PASS（TODO 过期三项已清，`864e472`） |
 | 2 | **parser 性能收口** | ✅ atom memo + FIRST 早拒（#68/#69）：cJSON 57.6→**2.98s**（19.3x）；门禁 **20–23s**；A/B 0/144、全量 4377/14、7/7 0 诊断 |
 | 3 | **片段模式 P0** | ✅ 独立 `tpc fragment` + 显式记号 + bytes identity 四例 + `always @(*)` 规则 + dry-run diff；10 单测、真实语料 259 文件 0 变化；`gap-fragment-mode.md`（#70） |
-| 4 | **片段模式 P1** | ⏳ 契约已批 + 调研完成（`references.md`「岛式分片 / 部分解析」：五档先例 → 边界/真实管线/后验三约束）；`[[island_rules]]` 岛类型声明 + `island_rewriter` 能力位；实施顺序就绪，未开工 |
+| 4 | **片段模式 P1** | ⏳ 契约已批 + 调研完成（`references.md` 岛式分片；`gap-fragment-mode.md` 岛信息推导：复用 linter 语言无关推导层——规则表→切片树→FIRST→前瞻→Discovery 岛树，实测零语言字面量）；待拍板：推导层抽 `structure/` + `[[island_rules]]` 收缩为策略段 |
 | 5 | **unit graph 内置能力** | ⏳ `unit_graph.v1`：C include 与 Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分支 |
 | 6 | **精化基座 graph 化** | ⏳ elaboration 只消费 graph 原子/边；T3 接受项 `inst_sites` 命名关闭 |
 | 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |

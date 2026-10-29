@@ -105,6 +105,59 @@ identity/死分支/假记号/幂等四类安全判据可证；不触碰正式 gr
 6. 门禁：单测（记号/声明 fail-fast/负例/缩进/幂等/字节 identity）+ 真实语料 A/B（无记号
    0 变化）+ `eval_lint_accuracy` 不回归 + 全量。
 
+## 岛信息如何从语法配置推导（调研 2026-10-30）
+
+**结论**：不需要在引擎里写任何语言字面量，也不需要为每个语言手写"岛类型清单"——
+现有 linter 的**语言无关推导层**已经从语法配置得出同样的分片信息，可直接作为
+islands 模块的数据源。
+
+**现有设施的分工**（`优先看 linter`）：
+
+| 层 | 位置 | 吃什么 | 产出 |
+|---|---|---|---|
+| 语法加载 | `parser/__init__.py::setup_grammar` | 语言包 TOML 规则 | `GrammarRule` 表（`is_block`/`is_statement` 为规则自声明；`block_start`/`block_end` 由 production 首尾字面 token 推导） |
+| 切片树 | `linter/grammar_slicer.py::build_slice_tree` | 规则表 | `{rule: {prods, is_block, is_statement, block_start, block_end}}`（linter 与 islands 共用的中间形态） |
+| FIRST 集 | `linter/first_set.py::first_tokens` | feature 树 | 每规则起始 token 集（保守/可空两种语义） |
+| 前瞻分类 | `linter/lookahead.py::LookaheadTable` | 切片树 + 匹配器 | token → 候选规则（A 类 keyword_map / B 类标识符+前缀路径） |
+| 结构发现 | `linter/discovery.py::Discovery` | 切片树 + 块/括号起止符 + `[discovery]` 声明 | **岛信息**：`DiscoveredNode(rule, start, end, children)` 树 + 未识别区间 |
+| 语言事实声明 | `linter/discovery_shape.py` + `base/_discovery.toml` | 语言包 `[discovery]` 段 | 容器/延续/属性对/子句分隔符（语义意图，声明而非猜；ADR-0025） |
+
+**实测（本机 probe）**：`module m(...); always @(*) begin ... end always @(...) begin : named ... end endmodule`
+→ `ModuleDecl [0,57)`，children = 两个 `AlwaysStmt [15,28)` / `[29,55)`；未知构造
+（`class C; endclass`）→ `unrecognized: 1`（岛外 = water）。全程零语言字面量。
+
+**islands 模块设计（吃语法配置 → 分片信息）**：
+
+```
+islands/
+  model.py     # 语法配置 → IslandModel：岛种类（is_statement/is_block 规则）、
+               #   块起止符、每规则 FIRST 集、（可选）语句结束推导
+  segment.py   # token 流 + IslandModel → 岛树（rule/span/children）+ water 区间
+  markers.py   # 记号扫描（行注释语法取 lexer 配置；死分支水域取 scan_directives）
+  process.py   # 岛文本 → 管线（parse+render，可选 transform/check）→ 片段文本
+  splice.py    # 缩进基线回填 + 区间替换 + 后验（重解析/双跑幂等/字节 identity）
+```
+
+- **岛种类/边界/结束**全部来自 `build_slice_tree` + `Discovery` 的推导结果，引擎零
+  语言知识；`[discovery]` 段里已有的语言事实（容器/延续等）同样被复用。
+- **water** = 未被岛树覆盖的 token 区间 / 未识别区间 / 含宏与指令行的区间（后者不
+  进管线，避免展开语义改动原文）；water 原样保留。
+- **标记（`tpc:fragment`）降级为"范围选择"**：只处理被圈中的岛；无标记时先不处理
+  （自动全文件模式留 P2，避免 P1 一次改变默认行为）。
+
+**待作者拍板（框架级，两项）**：
+
+1. **推导层归属**：把 `grammar_slicer / first_set / lookahead / discovery /
+   discovery_shape` 从 `linter/` 抽到独立引擎包（建议名 `structure/`），linter 与
+   islands 各为一个消费方；`linter/` 只留检查器/诊断。代价 = 5 模块搬家 + import
+   同步（外部引用只有 `tests/fuzz/generate.py` 与 `test_linter_slicer.py`，其余全在
+   linter 内）+ 门禁/文档/结构基线同步。
+   备选：islands 直接 import `linter.*`（改动小，但把 linter 变成事实上层）。
+2. **声明面收缩**：既然岛种类可由 `is_statement`/`is_block` 推导，原批的
+   `[[island_rules]]` 可缩为**策略段**（`[island]`：pipeline face / wrapper / 标记
+   命名空间；可选按规则名覆盖），不必逐岛类型列举。若同意，ADR 按此写；不同意则
+   保留逐岛声明（多一层配置负担但语义显式）。
+
 ## P2/P3 契约与退出判据（立项后对照，防重考古）
 
 **P2（安全与组合）**
