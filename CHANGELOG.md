@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **块 5 调查轮：unit graph 现状测绘（2026-10-31，仅文档）**：`docs/gaps/gap-unit-graph.md`——
+  两套索引现状（V `ModuleIndexer` name→file 无导出；C `include.py` 解析出路径但不输出边）、
+  方案 A（analyzer 内 `unit_graph` 组件 + 语言包 `[unit_graph]` 声明；C 边由 preprocessor
+  现算现出）/ B（否：C 无单元声明规则）/ C（否：不改引擎则判据不可达）、7 条实现轮判据与
+  预声明止损（若须重构 `scan_directives` ctx 契约 → 只落 V 侧、块 5 报 partial）。
+  发现：`ProjectChecker.check()` 多入口已在库层支持（L105 / L148-159），CLI 仍单值
+  （`main.py` L534-549）——多入参属 CLI 契约面，**待作者拍板**；C 未声明 `path_forms`
+  （用引擎默认的 C 系约定，图化须复用同一解析口径）。
 - **benchmark 共识下限门禁（块 11 ✅，2026-10-30）**：`tests/e2e/samples/real/benchmark_baseline.json`
   + `tests/policy/test_benchmark_baseline.py`——把 verilator 对拍能力卡成 CI 判据：
   **共识 53 下限**（只许增不许降；单次约 46s）与 **tpc 解析失败 = 0**；「仅 tpc 18 /

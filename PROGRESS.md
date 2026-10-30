@@ -34,11 +34,12 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 5 unit graph——`unit_graph.v1`：C include 与 Verilog module 同一张图、
-  `ProjectChecker.check([roots])` 同 API、无语言分支；块 9（#72 源行感知）按触发条件插入。
-- **待验证假设**：现有依赖收集点（C include / V module 实例化）能否归一到"原子 + 边"两层
-  而不引入语言字面量；先摸 planner/analyzer 的现有收集与调用面，再定 manifest 键形态。
-- **台账**：块 1/2/3/4/8/10/11 ✅；块 9 ⏳（#72）、块 5/6/7 未开工；主线 2 当前 7/12。
+- **意图**：块 5 实现轮（调查已落 `docs/gaps/gap-unit-graph.md`）——方案 A：analyzer 内
+  `unit_graph` 组件 + 语言包 `[unit_graph]` 声明；C 的 include 边走 `include.py` 现算现出；
+  CLI 多入参待作者拍板（P1 不动 CLI，只加 check `--json` 的 graph 字段）。
+- **待验证假设**：`include.py` 加 `included_files` 输出不改变展开文本（A/B 逐字节）；V 的边可在
+  `discover()` 同遍历产出而不重扫；同名首定义胜语义保持。
+- **台账**：块 1/2/3/4/8/10/11 ✅；块 9 ⏳（#72）、块 5 调查完成待实现、6/7 未开工；主线 2 当前 7/12。
 
 
 ## 估算依据（对照锚，可复核）
