@@ -14,6 +14,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   发现：`ProjectChecker.check()` 多入口已在库层支持（L105 / L148-159），CLI 仍单值
   （`main.py` L534-549）——多入参属 CLI 契约面，**待作者拍板**；C 未声明 `path_forms`
   （用引擎默认的 C 系约定，图化须复用同一解析口径）。
+  · **外部调研**（`docs/references.md`「依赖/单元图工作链调研」）：Verilator `V3LinkCells`
+  （编译器内 module 图：link pass 边产边、`rank()` → level/depth 排序、图环报递归多模块、
+  `autoLoad` 缺定义占位延后报错）、slang `Compilation`（`topModules` 配置 roots、
+  `getDefinition(name, scope)` 带作用域查找、`getUnreferencedDefinitions` 反推 top）、
+  GCC/make `-M` depfile（预处理器产边、构建工具消费）、hdl_checker（项目级 LSP 依赖/编译序）。
+  提炼 6 条共性 + 4 条明确不适用，落 gap 档「先例调研结论」三条加固。
 - **benchmark 共识下限门禁（块 11 ✅，2026-10-30）**：`tests/e2e/samples/real/benchmark_baseline.json`
   + `tests/policy/test_benchmark_baseline.py`——把 verilator 对拍能力卡成 CI 判据：
   **共识 53 下限**（只许增不许降；单次约 46s）与 **tpc 解析失败 = 0**；「仅 tpc 18 /

@@ -2,7 +2,7 @@
 
 - 状态：**调查完成（2026-10-31）**；实现未开工；方案 A 待实现轮
 - 关联：`docs/gaps/gap-engine-abstraction-audit.md` 矩阵 #4（文件链接/入口点）；`ROADMAP.md`「用户侧 CLI 形态」；`PROGRESS.md` 块 5
-- 参照：Veryl `sort_filelist`（符号依赖图拓扑序，`docs/references.md:236`）、hdl_checker design-unit + 依赖图/编译序（`docs/references.md:1514`）
+- 参照：Veryl `sort_filelist`（符号依赖图拓扑序，`docs/references.md:236`）、hdl_checker design-unit + 依赖图/编译序（`docs/references.md:1514`）；**工作链图化调研（2026-10-31）**：`docs/references.md`「依赖/单元图工作链调研」（Verilator V3LinkCells / slang Compilation / GCC -M depfile / hdl_checker 六条共性）
   Doc: docs/gaps/README.md
 
 ## 缺口是什么（矩阵 #4 原文）
@@ -36,6 +36,19 @@ Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分�
    CLI 多入口（CLI 属契约面）。
 5. **删除测试视角**：图若无消费者就是摆设——必须至少一个消费点（`tpc check --json` 输出
    `graph`/`edges`，或 `tpc trace`），且删掉消费者后对应测试红。
+
+## 先例调研结论（2026-10-31，详见 `docs/references.md`「依赖/单元图工作链调研」）
+
+三条对方案 A 的加固：
+
+1. **边由阶段产、图只装配**：Verilator 在 link pass 边遍历边产边；GCC 在预处理器产 `.d` 交给
+   make。⇒ C 的边由 `include.py` 现算现出、V 的边在 `discover()` 同遍历产出，图组件不做第二遍
+   解析（与「反例与风险·双算法」一致）。
+2. **roots 显式化**：slang `topModules` / Verilator `--top-module` 都把根当配置，"自动推 top"
+   只作兜底（slang 取"未被引用定义"）。⇒ P1 只做显式 roots（`check([...])`），自动推断后置。
+3. **策略位复用既有声明**：搜索路径（C `path_forms`/`search_dirs`）、失败策略（C `on_missing`）、
+   重定义策略（slang flag / Verilator MODDUP）都是声明/参数，不是引擎判断。⇒ `[unit_graph]`
+   只加 `edge_kinds`，其余策略复用既有声明面。
 
 ## 方案候选
 

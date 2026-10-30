@@ -2579,4 +2579,48 @@ HN：[C semantics 48 分](https://news.ycombinator.com/item?id=25395934) /
 - 💡 增量解析（tree-sitter `ts_tree_edit` 复用子树、增量 packrat）解决"编辑后复用"，与
   "语法子集"正交；P3 增量接合再评估。
 
+### 依赖/单元图（unit graph）工作链调研（2026-10-31，块 5 调查轮）
+
+问题：块 5 要把 C 的 `#include` 链与 Verilog 的 `module_index` 收成同一张 file→file 图，
+引擎提供 `ProjectChecker.check([roots])` 同 API。调研四类工作链怎么"图化"：编译器前端
+（Verilator / slang）、C 工具链（GCC + make）、多语言 HDL 检查器（hdl_checker）、
+项目级构建（Veryl）。
+
+| 工作链 | 图在哪 | 节点/边 | 边由谁产 | roots | 消费 |
+|---|---|---|---|---|---|
+| Verilator | 编译器内部 `LinkCellsGraph`（[`src/V3LinkCells.cpp`](https://raw.githubusercontent.com/verilator/verilator/master/src/V3LinkCells.cpp)） | 顶点=module（+library 假顶点）；边=cell 实例 / package import / iface ref | link pass 遍历 AST 时顺带建边 | `--top-module`；缺省按"未被实例化"推 top | `rank()` → module `level`/`depth` 决定排序；图环报"递归多模块"；缺定义用 `AstNotFoundModule` 占位延后报错 |
+| slang | `Compilation`（前端中央对象，[`Compilation.h`](https://raw.githubusercontent.com/MikePopoloski/slang/master/include/slang/ast/Compilation.h)） | 定义（module/iface/program/primitive）+ 实例；查找带 scope | `getDefinition(name, scope)` 时解析；`addSyntaxTree` 后 `getRoot()` 一次性 finalize | `CompilationOptions.topModules`（空 ⇒ 自动取未被引用定义） | `getUnreferencedDefinitions()` 反推 top；`defaultLiblist` 搜索序；库重定义由 flag 决定 |
+| GCC + make | 不在单进程内：`.d` 依赖文件 | 目标文件 → 源/头文件 | **预处理器**算 include 边（`-M`；`-MM` 去系统头） | makefile 目标 | make 读 `.d` 做增量重编（[GNU make 手册 §4.14](https://www.gnu.org/software/make/manual/html_node/Automatic-Prerequisites.html)） |
+| hdl_checker | 项目级检查器（Python，LSP，[README](https://raw.githubusercontent.com/suoto/hdl_checker/master/README.md)） | 设计单元 + 文件；VHDL/Verilog 混合 | 三方编译器输出 + 项目配置 `.hdl_checker.config` | 项目配置的顶层单元 | LSP：依赖路径/库归属、编译序、go-to-definition |
+| Veryl | 构建命令 | 文件 / 符号 | 解析后按符号依赖 `type_dag` 拓扑排序 filelist | `veryl.toml` 项目配置 | 生成 filelist / 编译序（`references.md:236` 已记） |
+
+**共性（可迁移）**：
+
+1. **图归引擎/前端，边归各阶段产**——Verilator 在 link pass 产边，GCC 在预处理器产边并序列化
+   成 `.d` 交给 make。产边者与消费图者可跨进程/跨阶段。→ 支持 tpc 方案 A：C 边由
+   preprocessor 现算现出、V 边在 `discover()` 同遍历产出，图组件只装配。
+2. **roots 显式化是常态**：slang `topModules` / Verilator `--top-module` / hdl_checker 项目配置；
+   "自动推 top"都只作兜底（slang 用"未被引用"推）。→ tpc `check([roots])` 先把 roots 显式，
+   自动推断不进 P1。
+3. **顺序由图派生，不由目录遍历序**：Verilator `rank()`→level/depth；Veryl toposort filelist；
+   hdl_checker 报编译序。→ tpc 图至少应能回答"拓扑序/层级"，供报告与后续 LSP。
+4. **搜索与失败策略可声明**：Verilator liblist/uselist、slang `defaultLiblist` + 重定义 flag、
+   C `path_forms`/`search_dirs`/`on_missing`。→ `[unit_graph]` 声明除 edge kinds 外，重定义/
+   缺文件策略复用既有声明，不新增引擎判断。
+5. **按名找文件要防重复读**：Verilator `autoLoad` 每个名字最多读一次 + 缺文件占位延后报错；
+   tpc 已有 `dir_module_files` 目录缓存，图化必须复用、不重扫。
+6. **图是诊断载体**：Verilator 用图环报递归多模块；tpc 可用图解释"跨目录多入口 / 同名首定义胜 /
+   include 循环"三条既有语义（对应判据④"不变量不变"）。
+
+**明确不适用（不抄）**：
+
+- 📌 不做 full elaborate：Verilator/slang 图之后要参数化实例化/层次化/绑定；tpc 只做
+  file→file + 定义索引，语义留给插件 postpass（ADR-0019 已定）。
+- 📌 不引入 library/liblist 概念：tpc 无 config 语义，`include_dirs` + 同名文件优先足够；
+  需要时由语言包声明搜索路径。
+- 📌 不把图序列化成 depfile：tpc 在单进程内消费，不需要外部工具中转（GCC 模式解决的是
+  跨进程问题）。
+- 📌 不做跨语言混合编译序：块 5 是"同 API 服务不同语言包"，不是"同一工程混编多语言"。
+
+
 
