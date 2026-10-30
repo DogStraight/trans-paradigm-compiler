@@ -1,0 +1,16 @@
+{
+  "oracle": "verilator",
+  "corpus": "tests/e2e/samples/real/ref（7 工程：uart / darkriscv / ice40 / picorv32 / serv / simcells / tv80）",
+  "measured_at": "2026-10-30",
+  "consensus_floor": 53,
+  "context": {
+    "consensus": 53,
+    "only_tpc": 18,
+    "only_oracle": 343,
+    "suppressed": 34,
+    "scope_out": 163,
+    "oracle_skip": 0,
+    "tpc_parse_fail": 0
+  },
+  "note": "只锚共识下限：only_tpc / only_oracle 对语料规模与 oracle 版本敏感（锚死会假红），仅作上下文记录；更新须说明原因并重测"
+}

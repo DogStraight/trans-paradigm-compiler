@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **benchmark 共识下限门禁（块 11 ✅，2026-10-30）**：`tests/e2e/samples/real/benchmark_baseline.json`
+  + `tests/policy/test_benchmark_baseline.py`——把 verilator 对拍能力卡成 CI 判据：
+  **共识 53 下限**（只许增不许降；单次约 46s）与 **tpc 解析失败 = 0**；「仅 tpc 18 /
+  仅 oracle 343」只作上下文记录、不锚（对语料与 oracle 版本敏感，锚死会假红）。
+  oracle 缺失（无 MSYS2/verilator）即 skip，不假红；基线缺失/字段不全则失败，不假绿。
+  · 区分力实测（PRE/POST）：基线抬到 54 ⇒ `test_consensus_not_below_floor` 红
+  （`53 >= 54` 失败）；恢复 53 ⇒ 3 passed（42.5s）。`_verilator_ready` 对假 bash 路径
+  返回 False（skip 路径可达）。
+  · 阶段级 fuzz（lexer/parser-only 不变量，比全管线快 10–50x）仍留 `ROADMAP.md`
+  P2.3 backlog——非发布阻塞，不进块 11 收口。
 - **片段模式 P1：语法配置驱动的岛式分片（`tpc fragment`，块 4 ✅，2026-10-30）**
   · 新包 `islands/`：`model`（复用 linter 内部推导组件，零语言字面量）、`segment`
   （token 区间 → 字符区间 + water 判据 + 行首缩进）、`process`（岛文本 → 真实管线
