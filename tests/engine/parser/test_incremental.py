@@ -144,6 +144,55 @@ def test_real_corpus_speedup_at_least_5x():
     t_inc = time.perf_counter() - t0
 
     assert res.fallback == "", res.fallback
+    assert res.level in {"fragment", "unit"}, res.level
     assert 0 < res.tokens_reparsed < res.tokens_total
     assert _fingerprint(res.ast) == _fingerprint(full_ast)
     assert t_full / max(t_inc, 1e-9) >= 5.0, f"full={t_full:.3f}s inc={t_inc:.3f}s"
+
+def test_fragment_level_reparse_is_finer_than_unit():
+    """语句级编辑 → 片段级（level=fragment），重解析 token 数 < 整个顶层单元。"""
+    lexer, parser = _load()
+    src = (
+        "module m;\n"
+        "  always @(*) begin\n"
+        "    q = d;\n"
+        "  end\n"
+        "endmodule\n"
+    ).replace("\\n", "\n")
+    old_tokens = lexer.tokenize(src)
+    old_ast = parser.parse(old_tokens)
+    new_tokens = lexer.tokenize(src.replace("q = d;", "q = e;"))
+    res = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
+    assert res.fallback == "", res.fallback
+    assert res.level == "fragment", res.level
+    assert res.tokens_reparsed < res.tokens_total
+    assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))
+
+
+def test_comment_inside_region_fragment_equals_full():
+    """片段区间含注释 → 仍走片段级（实测等价；注释锚边界另靠等价测试盯住）。"""
+    lexer, parser = _load()
+    src = "module m;\n  wire w; // keep\nendmodule\n".replace("\\n", "\n")
+    old_tokens = lexer.tokenize(src)
+    old_ast = parser.parse(old_tokens)
+    new_tokens = lexer.tokenize(src.replace("wire w;", "wire w2;"))
+    res = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
+    assert res.fallback == "", res.fallback
+    assert res.level == "fragment", res.level
+    assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))
+
+@pytest.mark.timeout(300)
+def test_real_corpus_statement_level_fragment():
+    """tv80 语句级编辑 → 片段级（level=fragment）、重解析 <400 tokens、AST = 全量。"""
+    lexer, parser = _load()
+    src = (_REF / "ref_tv80_core.v").read_text(encoding="utf-8")
+    expanded, old_tokens, old_ast = _expand(lexer, parser, src)
+    idx = expanded.find("1'b0")
+    assert idx > 200
+    edited = expanded[:idx] + "1'b1" + expanded[idx + len("1'b0"):]
+    new_tokens = lexer.tokenize(edited)
+    res = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
+    assert res.fallback == "", res.fallback
+    assert res.level == "fragment", res.level
+    assert res.tokens_reparsed < 400, res.tokens_reparsed
+    assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))

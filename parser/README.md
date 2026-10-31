@@ -10,7 +10,7 @@
 | `_production.py` | 生产式匹配主循环（parse_token/call/seq/choice + 注释收集挂载） |
 | `_comment_trivia.py` | 注释位置判定单点实现（前一显著 token / 独占行 / 行中）——生产侧与表达式侧共用 |
 | `block_parser.py` | 块 & 语句级解析（行首规则领挂独立行注释 / Comment 子节点） |
-| `incremental.py` | **同文件增量重解析**（块 7 P1）：token diff → 单顶层单元重解析 → 替换子节点；判不准（多单元/首尾/符号门控）保守回退全量 |
+| `incremental.py` | **同文件增量重解析**（块 7 P2 片段级）：token diff → 最深 span 节点按规则名片段解析（`Parser.parse_fragment`）→ 替换子节点；逐级回退单元/全量 |
 | `pratt_parser.py` | Pratt 表达式解析（运算符优先级 + 行中/行尾/独占行三分类注释挂载） |
 | `rule_selector.py` | 候选规则过滤（start token 匹配）+ production 树序列化 |
 | `follow.py` | FOLLOW 集派生（后继合法性，对标 yacc，end_case 已并入） |

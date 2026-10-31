@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **增量重解析升级到片段级（块 7 P2，2026-10-31）**：`Parser.parse_fragment(tokens, rule_name)`
+  ——按 AST 节点名（配置派生）把 token 子集解析成子树；`incremental_reparse` 改三级：
+  **片段级**（最深 span 节点）→ 单元级 → 全量，`ReparseResult.level` 记录层级。
+  · tv80：语句级编辑重解析 **329/22,604 tokens**，**1540ms → 22.9ms（67x）**；模块级 23x；
+  增量 AST 与全量逐节点相等。含注释片段实测等价（采样 5/5）走片段级，注释锚跨边界无形式
+  保证，由等价测试盯住。8 测试。
+  · 边界：增量 check 语义层（跨文件失效传播/常驻 watch）= v0.2 P3.4。
 - **同文件增量重解析（块 7 P1，2026-10-31）**：`parser/incremental.py::incremental_reparse`
   ——token diff（公共前后缀）→ 用 `_tok_span` 定位被改顶层单元 → 只 parse 该单元 token 子集
   → 替换 AST 子节点；多单元/首尾/符号门控语言（C typedef）一律保守回退全量。

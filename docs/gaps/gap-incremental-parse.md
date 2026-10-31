@@ -86,3 +86,24 @@
   测试内用 `scan_directives` + `expand_tokens` 复现 check 同路。
 - 回退保守面的实测边界：增量只对"完整落在某顶层单元 span 内"的改动生效；注释/空白区改动、
   跨单元改动、符号门控语言均走全量（漏失效 = 漏报，宁可慢不可错）。
+
+## 实现记录（P2 片段级，2026-10-31）
+
+- 思路（作者提出）：**片段模式本身就是增量解析的前置**——岛 = 语法配置推导的片段；拿变更
+  片段的上下界喂片段解析得到片段树，并回父节点即增量解析。
+- 落点：
+  - `parser/parser_core.py::Parser.parse_fragment(tokens, rule_name)`——按**规则名**解析
+    token 子集（规则名来自 AST 节点名 = 配置派生，零语言知识）；要求恰好吃完（尾随 trivia 除外）。
+  - `parser/incremental.py` 三级：**片段级**（最深覆盖变更的 span 节点 → `parse_fragment`）
+    → **单元级**（顶层单元整段 `parse`，P1）→ **全量**；`ReparseResult.level` 记录实际层级。
+- 判据结果（tv80，22,604 tokens / 127 顶层单元）：
+  | 编辑 | level | 重解析 tokens | 全量 parse | 增量 | 加速 | AST=全量 |
+  |---|---|---|---|---|---|---|
+  | 模块级（改 `clk`） | fragment（ModuleDecl） | 733 | 1386ms | 61.4ms | 23x | ✓ |
+  | 语句级（`1'b0`→`1'b1`） | **fragment（AlwaysStmt）** | **329** | 1540ms | **22.9ms** | **67x** | ✓ |
+- 注释边界：初版"含注释即回退单元级"，实测 tv80 采样 5/5 编辑在含注释片段上与全量逐节点
+  等价 → 去掉该闸门（含注释也走片段级）；注释锚跨片段边界仍**无形式保证**，由
+  `test_comment_inside_region_fragment_equals_full` + 真实语料等价用例盯住，出现不等价即回退。
+- 测试：`tests/engine/parser/test_incremental.py` 8 测试（无变更复用、单/多单元、C 符号门控
+  回退、片段级、注释片段、tv80 模块级 ≥5x、tv80 语句级 <400 tokens、多单元回退=全量）。
+- 复跑：`python -m pytest tests/engine/parser/test_incremental.py -q`；`python -m pytest tests/engine/parser -q`。

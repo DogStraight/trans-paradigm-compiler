@@ -1,17 +1,22 @@
-"""incremental.py — 同文件增量重解析（0.1.4 块 7 · P1 解析层）。
+"""incremental.py — 同文件增量重解析（0.1.4 块 7 · P2 片段级）。
 
-范围与判据见 `docs/gaps/gap-incremental-parse.md`：只做**单文件、单顶层单元被编辑**的
-token 级增量；判不准一律**保守回退全量**（漏失效 = 漏报，宁可慢不可错）。跨文件语义
-失效传播 / 常驻 watch 属 v0.2（ROADMAP P3.4），不在本模块。
+范围与判据见 `docs/gaps/gap-incremental-parse.md`。与片段模式同源思路：**语法岛 = 片段**
+（岛由语法配置推导，零文件级声明面）；这里把"岛"缩到变更所在的 **AST span 节点**，
+按该节点的规则名做片段解析，再并回父节点。
 
-流程：token 级 diff（公共前缀/后缀）→ 用旧 AST 顶层子节点的 `_tok_span` 定位被改单元
-→ 只 `parser.parse(new_tokens[s:e])` 该单元的 token 子集 → 替换顶层 children 的对应项。
+三级执行（逐级保守）：
+1. **片段级**：最深覆盖变更的 span 节点、且区间内无注释 → `parser.parse_fragment`；
+2. **单元级**：顶层单元整段 `parser.parse`（含注释，沿用 P1）；
+3. **全量**：任何判不准（多单元/首尾/符号门控/片段未恰好吃完）→ 全量 parse。
+
+含注释区间也走片段级（实测 tv80 采样编辑逐节点等价，见 gap 档）；注释锚跨片段边界的
+形式保证仍欠，靠等价测试盯住，出现不等价即回退单元级。跨文件语义失效传播 / 常驻 watch
+属 v0.2（ROADMAP P3.4）。
 
 API：
     result = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
-    result.ast              # 新 AST（增量成功 = 同一对象被替换后返回；回退 = 新全量 AST）
-    result.tokens_reparsed  # 实际重解析的 token 数（0 = 无变更复用）
-    result.fallback         # "" = 增量成功；非空 = 回退原因（结果仍等于全量）
+    result.ast / result.tokens_reparsed / result.fallback / result.level
+    # level: "fragment" / "unit" / "full"（"none" = 无变更复用）
 
 Doc: docs/gaps/gap-incremental-parse.md
 """
@@ -22,6 +27,8 @@ from dataclasses import dataclass
 
 from core.define import CHILDREN_FIELD, Node
 
+_Item = tuple[list, int, Node, int, int]
+
 
 @dataclass
 class ReparseResult:
@@ -31,6 +38,7 @@ class ReparseResult:
     tokens_total: int
     tokens_reparsed: int
     fallback: str = ""
+    level: str = "full"  # fragment / unit / full / none
 
 
 def _token_key(tok) -> tuple[str, str]:
@@ -54,76 +62,92 @@ def _diff(old: list, new: list) -> tuple[int, int, int]:
     return pfx, n_old - sfx, n_new - sfx
 
 
-def _children(ast: Node) -> list:
-    return list(getattr(ast, CHILDREN_FIELD, []) or [])
+def _children(node: Node) -> list:
+    return list(getattr(node, CHILDREN_FIELD, []) or [])
+
+
+def _span(node: Node) -> tuple[int, int] | None:
+    span = getattr(node, "_tok_span", None)
+    if isinstance(span, tuple) and len(span) == 2 and span[0] < span[1]:
+        return span
+    return None
 
 
 def _fallback(parser, tokens: list, reason: str) -> ReparseResult:
     """回退：重解析全量；`ast` 即全量结果，语义与直接 parse 等价。"""
     total = len(tokens)
-    return ReparseResult(parser.parse(tokens), total, total, reason)
+    return ReparseResult(parser.parse(tokens), total, total, reason, "full")
 
 
-def _locate_unit(ast: Node, pfx: int, old_end: int) -> tuple[int, int, int] | None:
-    """顶层子节点里找**完整覆盖**旧变更区间的单元 → `(下标, 旧起点, 旧终点)`。"""
-    for index, child in enumerate(_children(ast)):
-        span = getattr(child, "_tok_span", None)
-        if not isinstance(span, tuple) or len(span) != 2:
-            continue
-        start, end = span
-        if start < end and start <= pfx and old_end <= end:
-            return index, start, end
-    return None
+def _locate_chain(ast: Node, pfx: int, old_end: int) -> list[_Item]:
+    """覆盖旧变更区间的节点链（自顶向下 → 最深）；空表 = 无节点完整覆盖。"""
+    chain: list[_Item] = []
+    container = _children(ast)
+    while True:
+        hit = None
+        for index, child in enumerate(container):
+            span = _span(child)
+            if span is not None and span[0] <= pfx and old_end <= span[1]:
+                hit = (container, index, child, span[0], span[1])
+                break
+        if hit is None:
+            return chain
+        chain.append(hit)
+        container = _children(hit[2])
 
 
-def _reparse_unit(parser, new_tokens: list, start: int, end: int) -> Node | None:
-    """只解析 `[start, end)` 的 token 子集；必须恰好得到一个顶层单元，否则 None。"""
-    sub_ast = parser.parse(new_tokens[start:end])
-    if sub_ast is None or getattr(parser, "_parse_truncated", False):
+def _splice_node(
+    parser, item: _Item, new_tokens: list, level: str, delta: int
+) -> tuple[Node, int] | None:
+    """对单个节点重解析并替换 → `(新节点, 重解析 token 数)`；判不准 → None。"""
+    container, index, node, start, end = item
+    new_end = end + delta
+    if new_end <= start or new_end > len(new_tokens):
         return None
-    children = _children(sub_ast)
-    return children[0] if len(children) == 1 else None
+    if level == "fragment":
+        new_node = parser.parse_fragment(new_tokens[start:new_end], node.node_name)
+    else:
+        sub_ast = parser.parse(new_tokens[start:new_end])
+        kids = _children(sub_ast) if sub_ast is not None else []
+        new_node = kids[0] if len(kids) == 1 else None
+    if new_node is None or getattr(parser, "_parse_truncated", False):
+        return None
+    new_node._tok_span = (start, new_end)
+    container[index] = new_node
+    return new_node, new_end - start
 
 
 def incremental_reparse(
     parser, old_tokens: list, new_tokens: list, old_ast: Node | None
 ) -> ReparseResult:
-    """单文件增量重解析：返回新 AST + 统计；任何判不准的情形回退全量。
+    """单文件增量重解析：片段级 → 单元级 → 全量（逐级保守）。
 
     Args:
-        parser: 已装载规则/词法的 `Parser`（`parse()` 每次重置内部状态，可复用）。
+        parser: 已装载规则/词法的 `Parser`（`parse()` / `parse_fragment()` 每次重置状态，可复用）。
         old_tokens: 旧源词法结果（与 `old_ast` 同一 token 空间）。
         new_tokens: 新源词法结果（行/列为**新源**绝对坐标）。
-        old_ast: 旧源 AST（顶层子节点需带 `_tok_span`，P3.1 span 绑定产物）。
+        old_ast: 旧源 AST（节点需带 `_tok_span`，P3.1 span 绑定产物）。
     """
     total = len(new_tokens)
     if old_ast is None or not old_tokens:
         return _fallback(parser, new_tokens, "full:no-previous")
-    # 解析期符号门控（C typedef 等）：跨单元解析需要作用域重放，P1 直接回退
+    # 解析期符号门控（C typedef 等）：跨单元解析需要作用域重放，本 P2 直接回退
     if getattr(parser, "symbol_namespaces", None):
         return _fallback(parser, new_tokens, "full:symbol-gate")
 
     pfx, old_end, new_end = _diff(old_tokens, new_tokens)
     if pfx == old_end and new_end == pfx:
-        return ReparseResult(old_ast, total, 0, "")  # 无变更：复用同一 AST
+        return ReparseResult(old_ast, total, 0, "", "none")  # 无变更：复用同一 AST
     if pfx == 0 or old_end >= len(old_tokens):
         return _fallback(parser, new_tokens, "full:edge-change")
 
-    located = _locate_unit(old_ast, pfx, old_end)
-    if located is None:
+    chain = _locate_chain(old_ast, pfx, old_end)
+    if not chain:
         return _fallback(parser, new_tokens, "full:unit-not-found")
-    index, start, end = located
-    new_end_abs = end + (len(new_tokens) - len(old_tokens))
-    if new_end_abs <= start or new_end_abs > total:
-        return _fallback(parser, new_tokens, "full:span-shift")
-
-    new_child = _reparse_unit(parser, new_tokens, start, new_end_abs)
-    if new_child is None:
-        return _fallback(parser, new_tokens, "full:subparse-failed")
-    # 顶层 child 的 span 平移回**新 token 绝对坐标**（嵌套子 span 仍相对子集，P1 不修正：
-    # 定位只用顶层 child；多编辑累积修正留 P3.2）
-    new_child._tok_span = (start, new_end_abs)
-    children = _children(old_ast)
-    children[index] = new_child
-    setattr(old_ast, CHILDREN_FIELD, children)
-    return ReparseResult(old_ast, total, new_end_abs - start, "")
+    delta = total - len(old_tokens)
+    for item, level in ((chain[-1], "fragment"), (chain[0], "unit")):
+        spliced = _splice_node(parser, item, new_tokens, level, delta)
+        if spliced is not None:
+            _, reparsed = spliced
+            return ReparseResult(old_ast, total, reparsed, "", level)
+    return _fallback(parser, new_tokens, "full:subparse-failed")

@@ -934,9 +934,8 @@ class Parser:
             e for e in self._line_comment_anchors if (e["text"], e["line"]) != key
         ]
 
-    def parse(self, tokens: list[Token]) -> Node | None:
-        """解析器的入口：token 流 → AST"""
-        # 每次 parse 重置状态
+    def _reset_parse_state(self) -> None:
+        """每次解析入口重置跨轮状态（`parse` / `parse_fragment` 共用）。"""
         self._comment_anchors = []
         self._line_comment_anchors = []
         self._anchor_seen_inline = set()
@@ -959,6 +958,10 @@ class Parser:
         # 读到过期符号。重建 + 绑定给 context ⇒ 快照/回滚连带覆盖符号（见
         # `ParseContext.bind_symbol_store` 与 `_ScopeStack.restore`）。
         self.scope_stack = _ScopeStack()
+
+    def parse(self, tokens: list[Token]) -> Node | None:
+        """解析器的入口：token 流 → AST"""
+        self._reset_parse_state()
         context = ParseContext(tokens)
         context.bind_symbol_store(self.scope_stack)
 
@@ -990,6 +993,42 @@ class Parser:
             self._log_info(f"解析异常: {exc} | token={context.token_pointer}")
             self._dump_failure_report(context, reason=f"exception: {exc}")
             raise
+
+    def parse_fragment(self, tokens: list[Token], rule_name: str) -> Node | None:
+        """片段解析：按**规则名**把 token 子集解析成一棵子树（块 7 P2 增量重解析入口）。
+
+        与 `parse()` 的差别：不扫根候选，直接匹配给定规则；要求 token 恰好吃完
+        （尾随 trivia 不计），否则 None（调用方回退更大范围/全量）。规则名来自
+        **AST 节点名**（语法配置派生），本方法不含语言知识——片段 = 语法岛本身。
+        """
+        self._reset_parse_state()
+        rule = self.grammar_rules.get(rule_name)
+        if rule is None:
+            return None
+        context = ParseContext(tokens)
+        context.bind_symbol_store(self.scope_stack)
+        root_name = self.rule_selector.get_block_rule() or ROOT_RULE_NAME
+        context.sibling_counter[root_name] = 1
+        context.path_stack.append(f"{root_name}[0]")
+        try:
+            node = self._try_rule_productions(context, rule)
+        finally:
+            context.path_stack.pop()
+        if node is None:
+            return None
+        self._skip_trailing_trivia(context)
+        if context.has_more_tokens():
+            return None  # 片段未恰好吃完 → 判不准（调用方回退）
+        return node
+
+    def _skip_trailing_trivia(self, context: ParseContext) -> None:
+        """跳过片段末尾的 trivia（空白/换行/注释），用于"恰好吃完"判据。"""
+        skip = set(self.skip_types) | set(TRIVIA_TOKEN_TYPES)
+        while context.has_more_tokens():
+            current = context.peek_token()
+            if current is None or current.type not in skip:
+                return
+            context.advance_token()
 
     def _record_fail_site(
         self,
