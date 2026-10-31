@@ -184,8 +184,9 @@
 > `pipeline/README.md`）。
 >
 > **P3.2 已交付（0.1.4 块 7，仅解析层最小面）**：同文件片段级增量重解析
-> （`parser/incremental.py` + `Parser.parse_fragment`；tv80 语句级 67x；
-> **边界/未做项见 `docs/gaps/gap-incremental-parse.md`**）。P3.4（增量 check）仍是 v0.2 核心。
+> （`parser/incremental.py` + `Parser.parse_fragment`；tv80 语句级 67x；修改片占比
+> >20–30%（随规模放开）自动回退全量；**边界/未做项见 `docs/gaps/gap-incremental-parse.md`**）。
+> P3.4（增量 check）仍是 v0.2 核心。
 
 ### P3.4 增量 check（语义失效传播）
 

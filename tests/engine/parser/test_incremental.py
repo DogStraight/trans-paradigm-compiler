@@ -1,7 +1,8 @@
-"""增量重解析（块 7 P1 解析层）——单文件、单顶层单元、保守回退。
+"""增量重解析（块 7 P2 片段级）——片段优先、大改动回退、符号门控回退。
 
-口径见 `docs/gaps/gap-incremental-parse.md`：判不准一律回退全量；"增量诊断 = 全量"
-由 **AST 逐节点相等** 承载（分析是 AST + 配置的纯函数），并给出真实语料 ≥5x 的实测。
+口径见 `docs/gaps/gap-incremental-parse.md`：判不准一律回退单元级/全量；"增量诊断 =
+全量"由 **AST 逐节点相等** 承载（分析是 AST + 配置的纯函数），并给真实语料 ≥5x 实测。
+小文件按设计直接全量（固定开销 + 并树风险），"大文件 + 小片段"才是增量适用区。
 
 Doc: docs/gaps/gap-incremental-parse.md
 """
@@ -68,6 +69,16 @@ def _expand(lexer, parser, src: str, rules=RULES):
     return clean, tokens, ast
 
 
+def _padded_module(body: str = "", decls: int = 300) -> str:
+    """大文件骨架（回到"文件大、片段小"的增量适用区；小文件按设计直接全量）。"""
+    lines = ["module m;"]
+    lines += [f"  wire w{i};" for i in range(decls)]
+    if body:
+        lines.append(body)
+    lines.append("endmodule")
+    return "\n".join(lines) + "\n"
+
+
 _TWO_MODULES = (
     "module a;\n  wire w;\nendmodule\n"
     "module b;\n  wire v;\nendmodule\n"
@@ -81,26 +92,28 @@ def test_no_change_reuses_same_ast():
     ast = parser.parse(tokens)
     res = incremental_reparse(parser, tokens, tokens, ast)
     assert res.fallback == ""
+    assert res.level == "none"
     assert res.tokens_reparsed == 0
     assert res.ast is ast
 
 
-def test_single_unit_edit_matches_full_parse():
-    """单单元编辑 → 增量 AST 与全量 parse 逐节点相等，且只重解析该单元。"""
+def test_small_edit_matches_full_parse():
+    """大文件小片段：增量 AST 与全量 parse 逐节点相等，且只重解析片段。"""
     lexer, parser = _load()
-    old_tokens = lexer.tokenize(_TWO_MODULES)
+    src = _padded_module("  wire target;")
+    old_tokens = lexer.tokenize(src)
     old_ast = parser.parse(old_tokens)
-    new_tokens = lexer.tokenize(_TWO_MODULES.replace("wire w;", "wire w2;"))
+    new_tokens = lexer.tokenize(src.replace("wire target;", "wire target2;"))
     res = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
 
     assert res.fallback == "", res.fallback
+    assert res.level == "fragment", res.level
     assert 0 < res.tokens_reparsed < res.tokens_total
-    full_ast = parser.parse(new_tokens)
-    assert _fingerprint(res.ast) == _fingerprint(full_ast)
+    assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))
 
 
-def test_multi_unit_change_falls_back_to_full():
-    """改动跨两个顶层单元 → 保守回退全量，结果仍等于全量。"""
+def test_multi_unit_change_falls_back():
+    """改动跨两个顶层单元 → 保守回退（全量或单元级），结果仍等于全量。"""
     lexer, parser = _load()
     old_tokens = lexer.tokenize(_TWO_MODULES)
     old_ast = parser.parse(old_tokens)
@@ -113,7 +126,7 @@ def test_multi_unit_change_falls_back_to_full():
 
 
 def test_symbol_gated_language_falls_back():
-    """C 包声明 parser.symbol_namespaces（typedef 消歧）→ P1 一律回退全量。"""
+    """C 包声明 parser.symbol_namespaces（typedef 消歧）→ 一律回退全量。"""
     lexer, parser = _load("grammar/c")
     assert getattr(parser, "symbol_namespaces", None), "C 包应声明符号命名空间"
     old_tokens = lexer.tokenize("int main(void){return 0;}\n")
@@ -149,37 +162,6 @@ def test_real_corpus_speedup_at_least_5x():
     assert _fingerprint(res.ast) == _fingerprint(full_ast)
     assert t_full / max(t_inc, 1e-9) >= 5.0, f"full={t_full:.3f}s inc={t_inc:.3f}s"
 
-def test_fragment_level_reparse_is_finer_than_unit():
-    """语句级编辑 → 片段级（level=fragment），重解析 token 数 < 整个顶层单元。"""
-    lexer, parser = _load()
-    src = (
-        "module m;\n"
-        "  always @(*) begin\n"
-        "    q = d;\n"
-        "  end\n"
-        "endmodule\n"
-    ).replace("\\n", "\n")
-    old_tokens = lexer.tokenize(src)
-    old_ast = parser.parse(old_tokens)
-    new_tokens = lexer.tokenize(src.replace("q = d;", "q = e;"))
-    res = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
-    assert res.fallback == "", res.fallback
-    assert res.level == "fragment", res.level
-    assert res.tokens_reparsed < res.tokens_total
-    assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))
-
-
-def test_comment_inside_region_fragment_equals_full():
-    """片段区间含注释 → 仍走片段级（实测等价；注释锚边界另靠等价测试盯住）。"""
-    lexer, parser = _load()
-    src = "module m;\n  wire w; // keep\nendmodule\n".replace("\\n", "\n")
-    old_tokens = lexer.tokenize(src)
-    old_ast = parser.parse(old_tokens)
-    new_tokens = lexer.tokenize(src.replace("wire w;", "wire w2;"))
-    res = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
-    assert res.fallback == "", res.fallback
-    assert res.level == "fragment", res.level
-    assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))
 
 @pytest.mark.timeout(300)
 def test_real_corpus_statement_level_fragment():
@@ -195,4 +177,44 @@ def test_real_corpus_statement_level_fragment():
     assert res.fallback == "", res.fallback
     assert res.level == "fragment", res.level
     assert res.tokens_reparsed < 400, res.tokens_reparsed
+    assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))
+
+
+def test_comment_inside_region_fragment_equals_full():
+    """片段区间含注释 → 仍走片段级（实测等价；注释锚边界另靠等价测试盯住）。"""
+    lexer, parser = _load()
+    src = _padded_module("  wire target /* keep */;")
+    old_tokens = lexer.tokenize(src)
+    old_ast = parser.parse(old_tokens)
+    new_tokens = lexer.tokenize(src.replace("target", "target2"))
+    res = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
+    assert res.fallback == "", res.fallback
+    assert res.level == "fragment", res.level
+    assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))
+
+
+def test_max_change_ratio_ramps():
+    """占比阈值随规模从 20% 放开到 30%（不是固定值）。"""
+    from parser.incremental import _max_change_ratio
+
+    assert _max_change_ratio(100) < 0.21
+    assert 0.24 < _max_change_ratio(10000) < 0.26
+    assert _max_change_ratio(20000) == 0.30
+    assert _max_change_ratio(100000) == 0.30
+
+
+def test_large_change_falls_back_to_full():
+    """修改片占比超过阈值（大 always 块整体落在片段内）→ 明确回退全量。"""
+    lexer, parser = _load()
+    assigns = "".join(f"    q{i} = d{i};\n" for i in range(120))
+    src = (
+        "module m;\n  wire d0;\n  wire q0;\n"
+        "  always @(*) begin\n" + assigns + "  end\nendmodule\n"
+    )
+    old_tokens = lexer.tokenize(src)
+    old_ast = parser.parse(old_tokens)
+    new_tokens = lexer.tokenize(src.replace("q0 = d0;", "q0 = d0 | 1'b1;"))
+    res = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
+    assert res.fallback == "full:too-large", (res.level, res.fallback)
+    assert res.level == "full"
     assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))

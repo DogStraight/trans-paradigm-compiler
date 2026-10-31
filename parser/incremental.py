@@ -73,6 +73,20 @@ def _span(node: Node) -> tuple[int, int] | None:
     return None
 
 
+#: 修改片占比闸门（经验次优，不是精确成本模型）：小文件更保守（固定开销占比大），
+#: 大文件放开到 30%——超过即回退全量（增量收益被摊薄，且并树/一致性风险上升）。
+#: 依据：作者估算 30%、模型保守 20%；按文件规模在两者间线性插值，封顶 30%。
+_RATIO_MIN = 0.20
+_RATIO_MAX = 0.30
+_RATIO_RAMP_TOKENS = 20000
+
+
+def _max_change_ratio(total_tokens: int) -> float:
+    """修改片占比阈值：`20% → 30%`（随 token 总量在 20k 处到顶）。"""
+    ramp = min(1.0, total_tokens / _RATIO_RAMP_TOKENS)
+    return _RATIO_MIN + (_RATIO_MAX - _RATIO_MIN) * ramp
+
+
 def _fallback(parser, tokens: list, reason: str) -> ReparseResult:
     """回退：重解析全量；`ast` 即全量结果，语义与直接 parse 等价。"""
     total = len(tokens)
@@ -144,6 +158,11 @@ def incremental_reparse(
     chain = _locate_chain(old_ast, pfx, old_end)
     if not chain:
         return _fallback(parser, new_tokens, "full:unit-not-found")
+    # 大改动闸门：最细候选（chain[-1]）的修改片占比超过阈值 → 回退全量
+    _, _, _, frag_start, frag_end = chain[-1]
+    frag_tokens = frag_end + (total - len(old_tokens)) - frag_start
+    if frag_tokens / max(total, 1) > _max_change_ratio(total):
+        return _fallback(parser, new_tokens, "full:too-large")
     delta = total - len(old_tokens)
     for item, level in ((chain[-1], "fragment"), (chain[0], "unit")):
         spliced = _splice_node(parser, item, new_tokens, level, delta)
