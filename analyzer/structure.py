@@ -103,6 +103,9 @@ class FileResult:
     # single_empty, params, line, column}；line 已回源到**原始源行**（1-based）、
     # column 为 0-based 宏名起列。供 postpass 检查消费（`CTX_MACRO_INVOCATIONS`）。
     macro_invocations: list = field(default_factory=list)
+    # 单元图包含边（块 5）：(指令关键字, 本文件, 被包含文件)；被包含文件已解析出
+    # 绝对路径（缺失的不产边）。供 `analyzer/unit_graph.py` 装配。
+    include_edges: list = field(default_factory=list)
 
 
 def raw_source_macro_diags(source: str, rules_dir: str) -> list:
@@ -156,6 +159,8 @@ class StructureCtx:
     struct: dict = field(default_factory=dict)
     fields: dict = field(default_factory=dict)
     dir_module_files: dict[str, dict[str, str]] = field(default_factory=dict)
+    # 单元依赖边（块 5）：(source 文件, 目标定义文件)；kind 由语言包实例化规则名提供。
+    unit_edges: list[tuple[str, str]] = field(default_factory=list)
 
     # ── 会话状态失效（每次 check 起始调用）──
 
@@ -164,6 +169,7 @@ class StructureCtx:
         self.memo.clear()
         self.module_index.clear()
         self.dir_module_files.clear()
+        self.unit_edges.clear()
 
     def refresh(self) -> None:
         """load_all 后刷新结构协议（_structure_cfg 模块变量被推入真实值）。
@@ -273,8 +279,7 @@ class FilePipeline:
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
         fr = FileResult(path=path, source=source)
-        shared = self._ctx.ensure_shared()
-        # 原始源（展开前）保留：宏**定义行**在扫指令时被消费、不进展开后文本，
+        shared = self._ctx.ensure_shared()        # 原始源（展开前）保留：宏**定义行**在扫指令时被消费、不进展开后文本，
         # 其形式化语法只能在原文上检查（见下方"原始源语法面"）。
         raw_source = source
 
@@ -288,7 +293,7 @@ class FilePipeline:
                 fr.line_map,
                 fr.macro_regions,
                 fr.macro_invocations,
-            ) = self._expand_source(source, path)
+            ) = self._expand_source(source, path, fr.include_edges)
 
         # 阶段 1：语法检查（token 级）。有**阻断类**诊断 → 语义阶段跳过
         # （用户决策——保留原语义“语法错则语义不可靠”）；卫生/风格类
@@ -337,7 +342,9 @@ class FilePipeline:
         fr.parse_ok = True
         return fr
 
-    def _expand_source(self, source: str, path: str) -> tuple[str, list, list, list]:
+    def _expand_source(
+        self, source: str, path: str, out_include_edges: list | None = None
+    ) -> tuple[str, list, list, list]:
         """宏展开（scan_directives 提取宏表 + expand_tokens 纯文本展开）。
 
         与 run_pipeline 的 _stage_macro_scan/_stage_expand 同语义；无宏
@@ -365,6 +372,7 @@ class FilePipeline:
                 predefined=None,
                 undefine=None,
                 out_macro_events=macro_events,
+                out_include_edges=out_include_edges,
             )
             if macro_table:
                 invocations: list = []
@@ -450,10 +458,18 @@ class ModuleIndexer:
                 self._ctx.module_index[name] = info
         for site in fr.inst_sites:
             mod_name = self._ctx.inst_module_name(site)
-            if not mod_name or mod_name in self._ctx.module_index:
+            if not mod_name:
+                continue
+            known = self._ctx.module_index.get(mod_name)
+            if known is not None:
+                # 已发现的单元也产边：同一入口可能依赖先前入口已解析的定义。
+                self._ctx.unit_edges.append((path, known.file))
                 continue
             def_path = self._find_module_file(mod_name, path)
             if def_path:
+                # 单元依赖边（块 5）：source=当前文件，target=定义文件；kind 由
+                # 语言包实例化规则名提供（`build_unit_graph` 装配时取）。
+                self._ctx.unit_edges.append((path, def_path))
                 self.discover(def_path, seen)
 
     # ── 模块定义文件查找 ──

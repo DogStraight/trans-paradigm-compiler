@@ -72,5 +72,5 @@
 | `gap-verification-engineering.md` | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
 | `gap-engine-abstraction-audit.md` | 引擎能力面抽象审查（能力×语言矩阵 + 第二语言复用判据；刻度 7→9 完成后执行，日常循环顺带补行） |
 | `gap-fragment-mode.md` | 片段模式 P0（记号模式 / island rewrite 原型：显式记号、bytes identity、死分支/假记号 fail-closed；P1 声明面/能力位待批准） |
-| `gap-unit-graph.md` | unit graph 内置化（块 5 调查轮：C include 与 V module 两套索引现状 + 方案 A/B/C + 判据草案与止损；CLI 多入参待作者拍板） |
+| `gap-unit-graph.md` | unit graph 内置化（块 5 已实现：多入口多根森林 + `check` 多入参 + `--json` 图出口；边 kind = 配置数据；P2 生产者注册表/自动推 roots 留档） |
 | `gap-feature-scatter.md` | 功能散点与上游契约耦合（一处功能 N 处登记；P-A/P-B/P-C + 步 2 收敛目标与接受边界） |

@@ -31,6 +31,7 @@ from analyzer.structure import (
 )
 from analyzer.shared_components import SharedComponents
 from analyzer.diag_serialize import semantic_diag, syntax_diag
+from analyzer.unit_graph import build_unit_graph
 from analyzer.elaboration import (
     Elaborator,
     ElaborationService,
@@ -137,11 +138,12 @@ class ProjectChecker:
         # 2) 每个文件跑语义分析（postpass 拿到完整 module_index 与精化产物容器）
         self._analyze_all()
 
-        # 3) 汇总两阶段诊断
+        # 3) 汇总两阶段诊断 + 单元图（块 5：多入口 ⇒ 多根森林，边由发现/预处理阶段产）
         files, any_error = self._collect_files()
         return {
             "files": files,
             "modules": {n: i.file for n, i in self._ctx.module_index.items()},
+            "graph": build_unit_graph(self._ctx, entries).to_dict(),
             "exit_code": 1 if any_error else 0,
         }
 

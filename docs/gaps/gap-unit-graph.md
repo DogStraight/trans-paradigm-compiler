@@ -1,6 +1,7 @@
 # Gap — unit graph 内置化（块 5）· 调查轮
 
-- 状态：**调查完成（2026-10-31）**；实现未开工；方案 A 待实现轮
+- 状态：**P1 已实现（2026-10-31，ADR-0027）**——多入口多根森林 + `check` 多入参 + `--json` graph 出口；
+  P2/P3 见「不做 / 否掉」表
 - 关联：`docs/gaps/gap-engine-abstraction-audit.md` 矩阵 #4（文件链接/入口点）；`ROADMAP.md`「用户侧 CLI 形态」；`PROGRESS.md` 块 5
 - 参照：Veryl `sort_filelist`（符号依赖图拓扑序，`docs/references.md:236`）、hdl_checker design-unit + 依赖图/编译序（`docs/references.md:1514`）；**工作链图化调研（2026-10-31）**：`docs/references.md`「依赖/单元图工作链调研」（Verilator V3LinkCells / slang Compilation / GCC -M depfile / hdl_checker 六条共性）
   Doc: docs/gaps/README.md
@@ -91,7 +92,28 @@ Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分�
 - **同名首定义胜**：图化保持 `module_index` 语义，否则诊断/exit code 变化。
 - **多入口跨目录**：`check()` 现有语义（L110-114 注释：跨目录工程必须一次 check）不得回退。
 - **CLI 契约**：`tpc check <file>` → 多值 `nargs="+"` 属 CLI 契约/退出码面 ⇒ **升级作者拍板**；
-  P1 可先只做库 API + `--json` 增字段（不动 CLI 入参）。
+  P1 可先只做库 API + `--json` 增字段（不动 CLI 入参）。**已拍板（2026-10-31）：允许多参数**，
+  与多入口/多图同轮落地。
+
+## 实现记录（P1，2026-10-31）
+
+- **契约**（ADR-0027）：`check([...])` ⇒ `report["graph"] = {roots, nodes, edges}`；多入口 = 多根
+  森林（共享节点去重、`inverse` 可多根）；`UnitGraph.dependencies(root)` / `reachable` / `inverse`；
+  CLI `tpc check <file> [<file> ...]`，`--json` 带 `graph`。
+- **边来源**（零新配置面）：结构发现边 kind = `[structure] module_inst_rule`（配置数据）；
+  包含边 kind = 指令关键字（`[directive_handlers]` 声明）；`preprocessor` 新增
+  `out_include_edges` 出参，嵌套子扫描的边并入宿主；`StructureCtx.unit_edges` /
+  `FileResult.include_edges` 承载。引擎无语言字面量。
+- **节点身份**：`normcase(abspath())` 一次定型；自环与重复边在装配时去掉。
+- **判据结果**：`tests/engine/analyzer/test_unit_graph.py` 4 passed（C 双根 include 边 / V 实例化边 /
+  节点集与去重 / CLI 多参数）；`tests/engine/analyzer` + `tests/engine/preprocessor` **738 passed**；
+  A/B **0/144**；benchmark 共识 **53** 不变（53/18/343、parse_fail 0）；`lang_penetration
+  --dirs analyzer` 结构名 **0**、Tier A 回基线 6。
+- **与预声明的偏差**：① CLI 多入参按作者拍板一并做了（原计划可只做库层）；② `[unit_graph]`
+  生产者注册表未做——P1 直接用既有配置数据当 kind，零新增声明面（P2 若要稳定 kind 名再补映射）；
+  ③ 止损点未触发（`include.py` 只加了出参，未重构 `scan_directives` ctx 契约）。
+- **性能**：benchmark 7 工程 32.6s（此前 45.8s，口径内波动）；C 单文件 check 未见可测增量。
+
 
 ## 预算与止损
 
@@ -109,3 +131,6 @@ Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分�
 | B 方案（analyzer 内泛化 module 模型给 C） | C 无单元声明规则；include 边不在 analyzer | 永久否掉 |
 | C 方案（CLI 逐个 check） | 图不存在 ⇒ 判据 1/6 不可达 | 永久否掉 |
 | 图存语言语义（端口/方向） | 违反「语言知识不进代码」；语义归 postpass | 报告需要语义视图时由插件在 postprocess 产出，不进 graph |
+| `[unit_graph]` 生产者注册表（每 kind 的匹配文件类/搜索路径/递归策略） | P1 直接用既有配置数据当 kind，已满足消费面 | 出现"kind 名需要跨语言统一 / 消费者按固定名筛选"时补映射 |
+| 自动推 roots（slang 式 unreferenced） | P1 只做显式 roots（调查结论 + 作者定"入口先行"） | LSP/无参 `tpc check` 需求出现时 |
+| 图之上做增量失效（Skyframe/DICE 式） | 属块 7（增量解析/check） | 块 7 开工 |

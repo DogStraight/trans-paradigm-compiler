@@ -5,7 +5,7 @@ main.py — TransParadigm Compiler CLI entry point
 Usage (installed as `tpc`):
     tpc format <file>                  Format a source file
     tpc lint <file> [--json]           Lint a source file (syntax only)
-    tpc check <file> [--include DIR]   Cross-file semantic check (syntax then semantic)
+    tpc check <file> [<file> ...] [--include DIR]   Cross-file semantic check (syntax then semantic)
     tpc pipeline [test_name]           Run a single test
     tpc config dump                    Show config key sources
     tpc --version                      Show version
@@ -283,10 +283,13 @@ def _cmd_lint(args: argparse.Namespace) -> None:
 def _cmd_check(args: argparse.Namespace) -> None:
     """tpc check — 跨文件语义检查（分阶段：语法错误 → 语义错误）。
 
-    单文件入口 + 递归发现被实例化模块的定义文件（同目录/--include），
+    单/多文件入口 + 递归发现被实例化模块的定义文件（同目录/--include），
     对每个文件跑 analyzer 插件（语义检查 + 跨文件联动），统一报告。
+    **多入口**共享同一次运行（模块索引 / 精化容器 / 单元图 ⇒ 多根森林）。
     """
-    _require_source_file(args.file)
+    entries = list(args.file) if isinstance(args.file, (list, tuple)) else [args.file]
+    for path in entries:
+        _require_source_file(path)
 
     from analyzer.checker import ProjectChecker
 
@@ -299,14 +302,15 @@ def _cmd_check(args: argparse.Namespace) -> None:
     # 两路径统一：lint/check 共用同一预处理门（同一输入同类诊断、都不抛异常）。
     # 放在 `checker.check()` **之后**——语言配置（含 include 的 on_missing 策略）由
     # 检查过程按语言包装载，提前跑会读到引擎默认（warn）并与 lint 路径分叉。
-    report = checker.check(args.file)
-    with open(args.file, encoding="utf-8") as _f:
-        _preprocessor_gate(
-            _f.read(),
-            rules_dir,
-            source_path=args.file,
-            include_dirs=list(args.include) or None,
-        )
+    report = checker.check(entries)
+    for path in entries:
+        with open(path, encoding="utf-8") as _f:
+            _preprocessor_gate(
+                _f.read(),
+                rules_dir,
+                source_path=path,
+                include_dirs=list(args.include) or None,
+            )
 
     # 源码内 tpc-check 豁免注释（区间形式 / disable-line 单行）
     _apply_check_suppressions(report, rules_dir)
@@ -535,7 +539,7 @@ def _add_check_parser(sub) -> None:
     p_check = sub.add_parser(
         "check", help="Cross-file semantic check (syntax then semantic stages)"
     )
-    p_check.add_argument("file", help="Path to source file")
+    p_check.add_argument("file", nargs="+", help="Path(s) to source file(s)")
     p_check.add_argument(
         "--include",
         action="append",

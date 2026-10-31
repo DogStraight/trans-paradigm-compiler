@@ -370,6 +370,7 @@ def scan_directives(
     seq_box: list[int] | None = None,
     out_diags: list[dict] | None = None,
     out_macro_events: list[dict] | None = None,
+    out_include_edges: list[tuple[str, str, str]] | None = None,
     preexpand_includes: bool = True,
 ) -> tuple[
     dict[str, str],
@@ -426,6 +427,10 @@ def scan_directives(
         out_diags.extend(ctx.get("_cond_diags", []))
     if out_macro_events is not None:
         out_macro_events.extend(ctx.get("_macro_events", []))
+    if out_include_edges is not None:
+        # 单元图包含边（块 5）：`(kind, source, target)`——kind = 指令关键字
+        # （语言包声明），source = 本文件，target = 解析后的被包含文件。
+        out_include_edges.extend(ctx.get("_include_edges", []))
     # 宏体**不再预展开**（③）：`macro_defs` 保持原始体，替换文本由调用点用
     # `macro_expand.expand_text(..., hideset={name})` 现算 ⇒ 消除"扫描期预展开 +
     # 调用点正则插入"的双算法路径（P0-8/P0-10/P2-1 同一根因）。
@@ -490,6 +495,10 @@ def _build_scan_ctx(
         "_directive_placeholders": {},
         # include 问题诊断（按语言包 `on_missing` 策略：error 时记此，warn 时打印）
         "_include_diags": [],
+        # 单元图包含边（块 5）：(指令关键字, 本文件, 被包含文件)
+        "_include_edges": [],
+        # 当前扫描文件（包含边的 source；嵌套子扫描传子文件路径）
+        "source_path": source_path,
         # 宏定义/取消事件（原始源行号 + 形参表 + 宏体/op）：两用面——
         # `macro_timeline` 取调用点可见形参表；展开器（`expand_tokens(events=)`）
         # 按定义时间线维护可见宏集。

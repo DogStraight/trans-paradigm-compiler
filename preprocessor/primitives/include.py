@@ -119,14 +119,51 @@ def _report_problem(ctx: dict, kind: str, message: str) -> None:
     print(f"⚠️ [preprocessor] {message}")
 
 
+def _scan_include(inc_source: str, inc_path: str, ctx: dict) -> tuple:
+    """被包含文件的子扫描（拆自 `handle_include`：控制函数行数 + 关注点分离）。
+
+    子扫描的 ctx 不向上传播，故**诊断与包含边在内部并入宿主**；返回
+    `(scan_directives 七元组, 子宏定义事件表)`——事件表由调用方用于包含点预展开。
+    """
+    from .._expand import scan_directives
+
+    child_diags: list[dict] = []
+    child_events: list[dict] = []
+    child_edges: list = []
+    result = scan_directives(
+        inc_source,
+        ctx["rules_dir"],
+        source_path=inc_path,
+        _include_stack=ctx["_include_stack"],
+        search_dirs=ctx["inc_dirs"],
+        # marker 序号与宿主**共用**（嵌套各从 0 起会撞号 ⇒ restore 错位）
+        seq_box=ctx["_seq_box"],
+        out_diags=child_diags,
+        out_macro_events=child_events,
+        # 嵌套包含的边也要汇进宿主（子扫描的 ctx 不向上传播）
+        out_include_edges=child_edges,
+        preexpand_includes=ctx.get("_preexpand_includes", True),
+        # 头内条件编译/包含守卫要看到**包含点当时**的可见宏（C 语义）。
+        # 此前子扫描从空表起 ⇒ include guard 失效、同一头被重复展开（真实
+        # 语料 zlib `z_stream_s`/`gz_header_s` TAG001 二次定义命中）。
+        predefined=dict(ctx.get("_active_defs") or {}),
+    )
+    if child_diags:
+        # 子扫描的诊断并入宿主（否则嵌套里的循环/深度诊断随子 ctx 丢失）
+        ctx.setdefault("_include_diags", []).extend(child_diags)
+    if child_edges:
+        ctx.setdefault("_include_edges", []).extend(child_edges)
+    return result, child_events
+
+
 @register("include")
 def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理包含指令（路径形态由声明给出，关键字拼写不写死）。
 
     关键字拼写由调用方按语言包声明传入（见模块头）；参数从 `stripped` 按同一份
-    切分规则取（与 `undef` / `define` 同源）。
+    切分规则取（与 `undef` / `define` 同源）。`_name` 不消费但**保留**：单元图
+    的包含边把"指令关键字"当边 kind（配置数据，见 `analyzer/unit_graph.py`）。
     """
-    del _name  # DirectiveHandler 协议签名参数（分派已用同一拼写判定过关键字）
     cfg = ctx.get("_include_config", {})
     parsed = _parse_target(split_directive(stripped, prefix)[1], _path_forms(cfg))
     if parsed is None:
@@ -143,6 +180,12 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         return
 
     norm = os.path.normcase(inc_path)
+    # 单元图包含边（块 5）：路径解析成功即记账——边 kind = 本指令的关键字（语言包
+    # `[directive_handlers]` 声明，引擎不写死 `include`）；source = 当前扫描文件
+    # （include 内嵌套时子扫描自带 source_path）。缺失文件不产边（诊断另有策略面）。
+    ctx.setdefault("_include_edges", []).append(
+        (str(_name), str(ctx.get("source_path") or ""), inc_path)
+    )
     if norm in ctx["_include_stack"]:
         _report_problem(ctx, "cycle", f"循环 include 检测: {inc_path}，跳过")
         return
@@ -160,10 +203,6 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     try:
         with open(inc_path, encoding="utf-8") as f:
             inc_source = f.read()
-        from .._expand import scan_directives
-
-        child_diags: list[dict] = []
-        child_events: list[dict] = []
         (
             inc_macros,
             inc_funcs,
@@ -172,25 +211,7 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
             inc_dirs_raw,
             inc_clean,
             inc_clean_to_raw,  # 子文件内部行映射（预展开取事件时点用；不并入宿主）
-        ) = scan_directives(
-            inc_source,
-            ctx["rules_dir"],
-            source_path=inc_path,
-            _include_stack=ctx["_include_stack"],
-            search_dirs=ctx["inc_dirs"],
-            # marker 序号与宿主**共用**（嵌套各从 0 起会撞号 ⇒ restore 错位）
-            seq_box=ctx["_seq_box"],
-            out_diags=child_diags,
-            out_macro_events=child_events,
-            preexpand_includes=ctx.get("_preexpand_includes", True),
-            # 头内条件编译/包含守卫要看到**包含点当时**的可见宏（C 语义）。
-            # 此前子扫描从空表起 ⇒ include guard 失效、同一头被重复展开（真实
-            # 语料 zlib `z_stream_s`/`gz_header_s` TAG001 二次定义命中）。
-            predefined=dict(ctx.get("_active_defs") or {}),
-        )
-        if child_diags:
-            # 子扫描的诊断并入宿主（否则嵌套里的循环/深度诊断随子 ctx 丢失）
-            ctx.setdefault("_include_diags", []).extend(child_diags)
+        ), child_events = _scan_include(inc_source, inc_path, ctx)
         ctx["macro_defs"].update(inc_macros)
         ctx.setdefault("_func_params", {}).update(inc_funcs)
         include_line = int(ctx.get("_cur_raw_line") or ctx.get("_cur_line_no") or 0)

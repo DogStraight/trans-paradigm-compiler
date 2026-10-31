@@ -6,6 +6,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **unit graph：多入口多根森林（块 5 ✅，2026-10-31）**：`ProjectChecker.check([...])` 返回
+  `report["graph"] = {roots, nodes, edges}`——多入口 ⇒ 多根森林（共享节点去重，`inverse` 可
+  多根）；边 kind 来自**配置数据**：C 的包含边取指令关键字、V 的实例化边取
+  `[structure] module_inst_rule`（引擎零语言字面量）；`UnitGraph` 提供
+  `dependencies/reachable/inverse/to_dict`。CLI `tpc check <file> [<file> ...]`（`nargs="+"`，
+  作者拍板），`--json` 出口带 `graph`。
+  · 边由阶段产：结构发现边在 `ModuleIndexer.discover` 同遍历产出；preprocessor 新增
+  `out_include_edges` 出参（嵌套 include 的边并入宿主），不做第二遍解析；节点
+  `normcase(abspath())` 一次定型。ADR-0027；P2 留 `[unit_graph]` 生产者注册表与自动推 roots，
+  增量属块 7。
+  · 证据：`test_unit_graph.py` 4 passed（C 双根 include / V 实例化 / 节点集去重 / CLI 多参数）；
+  `tests/engine/analyzer`+`preprocessor` **738 passed**；A/B **0/144**；benchmark 共识 **53**
+  不变（53/18/343、parse_fail 0）；`lang_penetration --dirs analyzer` 结构名 0、Tier A 回基线 6。
 - **块 5 调查轮：unit graph 现状测绘（2026-10-31，仅文档）**：`docs/gaps/gap-unit-graph.md`——
   两套索引现状（V `ModuleIndexer` name→file 无导出；C `include.py` 解析出路径但不输出边）、
   方案 A（analyzer 内 `unit_graph` 组件 + 语言包 `[unit_graph]` 声明；C 边由 preprocessor

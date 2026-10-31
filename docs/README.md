@@ -87,6 +87,9 @@
   设计型（**已落地**）：`decisions/0026-fragment-mode-islands.md`
   （片段模式 = 语法配置驱动的岛式分片：全域岛 / 零声明面 / 后验默认开；
   落地 `islands/`，P0 记号原型与手写规则已删）。
+  设计型（**已落地**）：`decisions/0027-unit-graph-multi-root.md`
+  （unit graph = 多入口多根森林：边由发现/预处理阶段产、kind 是配置数据；
+  `tpc check` 多入参、`--json` 出 `graph`）。
 - **长期暂缓项/触发条件（策略）** → `decisions/` 的**策略型 ADR**（"长期项不列待办" +
   「结论/为什么不做/触发条件」表，现存 `decisions/0021-long-term-deferral-strategy.md`）；
   **不进 TODO**——触发出现时按体量取回 TODO/ROADMAP，
