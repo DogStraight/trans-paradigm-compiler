@@ -37,26 +37,31 @@ Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分�
 5. **删除测试视角**：图若无消费者就是摆设——必须至少一个消费点（`tpc check --json` 输出
    `graph`/`edges`，或 `tpc trace`），且删掉消费者后对应测试红。
 
-## 先例调研结论（2026-10-31，详见 `docs/references.md`「依赖/单元图工作链调研」）
+## 先例调研结论（2026-10-31，详见 `docs/references.md`）
 
-三条对方案 A 的加固：
+语言专用（Verilator/slang/GCC/hdl_checker）+ **通用工具链**（Bazel/Ninja/SCons/Meson/BSP/Glean）
+两轮调研后，对方案 A 的加固：
 
-1. **边由阶段产、图只装配**：Verilator 在 link pass 边遍历边产边；GCC 在预处理器产 `.d` 交给
-   make。⇒ C 的边由 `include.py` 现算现出、V 的边在 `discover()` 同遍历产出，图组件不做第二遍
-   解析（与「反例与风险·双算法」一致）。
-2. **roots 显式化**：slang `topModules` / Verilator `--top-module` 都把根当配置，"自动推 top"
-   只作兜底（slang 取"未被引用定义"）。⇒ P1 只做显式 roots（`check([...])`），自动推断后置。
-3. **策略位复用既有声明**：搜索路径（C `path_forms`/`search_dirs`）、失败策略（C `on_missing`）、
-   重定义策略（slang flag / Verilator MODDUP）都是声明/参数，不是引擎判断。⇒ `[unit_graph]`
-   只加 `edge_kinds`，其余策略复用既有声明面。
+1. **边生产者注册，不枚举边种类**（SCons Scanner 模型）：`[unit_graph]` 每 kind 只声明
+   `source`（preprocessor / structure）、匹配的文件类、搜索路径、递归策略；引擎按注册表调度，
+   新增语言 = 加声明，不是加代码分支。
+2. **动态边是常态**（Ninja depfile/dyndep）：C include 边在预处理期才完整 ⇒ 必须现算现出；
+   缺文件走既有 `on_missing` 策略，不 hard fail。
+3. **图 API 三问**（BSP/Meson）：roots / 每 root 的源 / **反查**（某文件被哪些 root 依赖）；
+   公共骨架 + 语言 payload（BSP `dataKind`）——与 tpc 配置驱动同构。
+4. **roots 显式化**（slang/Verilator/BSP）：P1 只做显式 roots，自动推断后置。
+5. **节点身份唯一化**（Ninja 教训）：图内 path 统一 normcase/abspath，且必须与 `include.py`
+   现算值一致（判据 3）。
+6. **增量层不混进来**（Skyframe/DICE）：块 5 只做静态图，增量属块 7。
 
 ## 方案候选
 
 - **A（推荐）**：`analyzer/` 内新增 `unit_graph` 组件（**不设顶层包**，与"推导层留在 linter 内部"
-  同一决策）：`UnitGraph(roots, nodes, edges)` + `build(ctx)`。边来源由语言包声明
-  `[unit_graph]`（`edge_kinds`，每 kind 的 `source = "preprocessor" | "structure"`）；V 复用
+  同一决策）：`UnitGraph(roots, nodes, edges)` + `build(ctx)`，API 对齐「三问」——`roots` /
+  `sources(root)` / `inverse(file)`；`[unit_graph]` 是**边生产者注册表**（每 kind：`source =
+  "preprocessor" | "structure"`、匹配的文件类、搜索路径、递归策略），V 复用
   `ModuleIndexer.discover` 产 definition/instance 边，C 由 preprocessor 产 include 边；
-  `check()` 返回值加 `graph`；P1 消费点 = `tpc check --json` + 报告依赖字段。
+  `check()` 返回值加 `graph`；P1 消费点 = `tpc check --json`（机器可读出口）+ 报告依赖字段。
 - **B（否掉）**：在 analyzer 内把 `ModuleIndexer` 泛化成"通用单元索引"，让 C 也声明 `[structure]`。
   C 没有"单元声明规则"，硬塞 = 把 C 塞进 V 的 module 模型（方言复制/逃生门）；且 include 边在
   preprocessor 里，不在 analyzer。
@@ -65,9 +70,9 @@ Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分�
 
 ## 实现轮判据草案（可执行形态）
 
-1. **图产物（改前红）**：`ProjectChecker.check([...]).graph` 含 `roots/nodes/edges`；C（`cJSON.c`）
-   出现 `include → cJSON.h` 边、V（`real_uart*.v`）出现 instance/definition 边。改前红 = 现在返回
-   dict 无 `graph` 键。
+1. **图产物（改前红）**：`ProjectChecker.check([...]).graph` 含 `roots/nodes/edges`，且
+   `inverse(file)` 能反查到 roots；C（`cJSON.c`）出现 `include → cJSON.h` 边、V（`real_uart*.v`）
+   出现 instance/definition 边。改前红 = 现在返回 dict 无 `graph` 键。
 2. **无语言分支**：`python tools/lang_penetration.py --dirs analyzer` 与基线比不新增结构名；新声明键
    过 `python tools/config_sites.py check`。
 3. **解析口径单一**：C 边路径 == `handle_include` 现算值（探针比对，不得二次解析）；V 边来自

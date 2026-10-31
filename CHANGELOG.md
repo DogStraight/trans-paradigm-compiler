@@ -20,6 +20,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `getDefinition(name, scope)` 带作用域查找、`getUnreferencedDefinitions` 反推 top）、
   GCC/make `-M` depfile（预处理器产边、构建工具消费）、hdl_checker（项目级 LSP 依赖/编译序）。
   提炼 6 条共性 + 4 条明确不适用，落 gap 档「先例调研结论」三条加固。
+  · **第二轮：语言无关抽象**（`docs/references.md`「通用工具链的图化抽象」）：Bazel
+  （declared vs actual 两层图、actual ⊆ declared）、Ninja（depfile/deps/dyndep 运行期动态边、
+  隐式边容错、路径须精确匹配）、SCons `Scanner`（**边生产者注册**：按文件类绑定、搜索路径注入、
+  递归/检查策略、结果缓存）、Meson introspection（targets/depends/target_sources 的 JSON 出口）、
+  BSP（`BuildTarget.uri/dependencies/dataKind`，语言无关骨架 + 语言 payload，`sources`/
+  `inverseSources`）、Glean/Angle（node/edge 是 schema 声明的谓词）。提 **通用 7 条**，据此
+  把 `[unit_graph]` 定为边生产者注册表、图 API 定为「三问」（roots / sources / inverse）、
+  出口定为 `check --json`；增量层（Skyframe/DICE）明确留给块 7。
 - **benchmark 共识下限门禁（块 11 ✅，2026-10-30）**：`tests/e2e/samples/real/benchmark_baseline.json`
   + `tests/policy/test_benchmark_baseline.py`——把 verilator 对拍能力卡成 CI 判据：
   **共识 53 下限**（只许增不许降；单次约 46s）与 **tpc 解析失败 = 0**；「仅 tpc 18 /

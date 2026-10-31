@@ -2622,5 +2622,34 @@ HN：[C semantics 48 分](https://news.ycombinator.com/item?id=25395934) /
   跨进程问题）。
 - 📌 不做跨语言混合编译序：块 5 是"同 API 服务不同语言包"，不是"同一工程混编多语言"。
 
+### 通用工具链的图化抽象（2026-10-31，第二轮：不绑语言）
+
+上一节是**语言专用**实现（Verilator/slang/GCC/hdl_checker），只能看形态；本轮看**语言无关**
+的图化能力，提炼 tpc（配置驱动管线）该用的抽象层级：节点/边**种类是数据**、边**生产者可注册**、
+图**出口可查询**。
+
+| 系统 | 图的抽象 | 边怎么来 | 对 tpc 的启示 |
+|---|---|---|---|
+| **Bazel**（[dependencies](https://bazel.build/concepts/dependencies)） | **declared graph vs actual graph** 两层，要求 actual ⊆ declared（声明是过近似）；偏差可查 | 声明：BUILD 的 `deps`；实际：谁真用到 | tpc 只有实产边；"从 roots 可达 vs 全部定义"差集 = unreferenced（slang 同构），可做诊断，不必引入声明层 |
+| **Ninja**（[manual](https://ninja-build.org/manual.html)） | 纯 file 图：explicit / implicit（`|`、depfile）/ order-only（`||`）/ validations；边 = 输出→输入 | **动态发现**：`depfile`（编译器产物）、`deps=gcc/msvc`、`dyndep`（首次构建就要的 Fortran module）；缺隐式依赖不 abort | ① "边在运行期发现"是常态 ⇒ C include 边由预处理器现算现出正当；② 缺边按策略容错（tpc 已有 `on_missing`）；③ 路径必须精确匹配（绝对/相对混用即错）⇒ 节点身份先 normcase/abspath 一次定型 |
+| **SCons Scanner**（[源码](https://raw.githubusercontent.com/SCons/scons/master/SCons/Scanner/__init__.py)） | 最贴 tpc：**Scanner = 边生产者**，按 `skeys`（文件类后缀）绑定；`path_function` 注入搜索目录；`recursive` 控制传递；`scan_check` 决定是否扫；结果缓存到 node | 注册式：`Scanner(fn, skeys, path_function, ...)`；`Selector` 按 key 分派 | `[unit_graph]` 应是**边生产者注册表**（每 kind：匹配的文件类 + 阶段 + 搜索路径 + 递归策略），不是枚举 include/module 两种边 |
+| **Meson introspection**（[IDE integration](https://mesonbuild.com/IDE-integration.html)） | 目标图导出 JSON：`intro-targets`（id、type、`target_sources` 按语言、`dependencies` 外部、`depends` 目标 id）；`--scan-dependencies` 无 builddir 也能给 | 配置期算好、静态导出，IDE 订阅变化 | 图要**机器可读出口**：roots / 每 root 的源 / 边；报告与后续 LSP 都从此取 |
+| **BSP**（[spec](https://build-server-protocol.github.io/docs/specification)） | 语言无关协议：`BuildTarget`（`uri` 身份、`languageIds`、`tags`、`dependencies` 直接上游、`dataKind`+`data` **语言专属扩展**）；`buildTarget/sources`、`buildTarget/inverseSources` | 各 build tool 自实现，协议只定形状 | **公共骨架 + 语言 payload** 正是 tpc 形态：图字段通用，`[unit_graph.<lang>]` 放语言专属；且必须支持**反查**（file → 哪些 root 依赖它） |
+| **Glean / Angle**（[intro](https://glean.software/docs/angle/intro/)） | 代码事实库：node/edge 是 **schema 声明的谓词**，用 Datalog 式查询 | 各语言 indexer 写数据，schema 共享 | 节点/边**种类应由配置/schema 声明**（与「语言知识不进代码」同构），不写死 enum；查询面在数据之上 |
+
+**通用 7 条**（块 5 的主抽象；上一节 6 条是语言专用实现的形态补充）：
+
+1. **两层图**：declared vs actual，健全性 = actual ⊆ declared。tpc 只有实产边，但可用"可达集 vs
+   定义集"差集做诊断（unreferenced / 死文件）。
+2. **边生产者可注册**（SCons）：按"文件类 / 阶段 / 搜索路径 / 递归策略"注册，不写死边种类。
+3. **动态边是常态**（Ninja）：依赖在运行期才完整 ⇒ 产边者现算现出；缺边按策略容错。
+4. **节点身份唯一化**（Ninja）：绝对/相对路径不可混用 ⇒ 先 normcase/abspath 一次定型。
+5. **图 API 三问**（BSP/Meson）：目标集是什么 / 每目标的源是什么 / **谁依赖这个文件**（反查）。
+6. **公共骨架 + 语言 payload**（BSP `dataKind`）：通用字段 + 语言包扩展字段，与 tpc 配置驱动同构。
+7. **图之上还有增量层**（Skyframe/DICE/Ninja deps log）：块 5 不碰；块 7 再谈"键 → 值 + 失效"。
+
+**明确不适用**：不引入声明图/BUILD 语（Bazel 的），不做 Datalog 查询层与多语言 indexer
+（Glean 的），不做增量失效（Skyframe 的）——tpc 只需 file→file 实产边 + 一个可查询出口。
+
 
 
