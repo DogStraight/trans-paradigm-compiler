@@ -73,4 +73,5 @@
 | `gap-engine-abstraction-audit.md` | 引擎能力面抽象审查（能力×语言矩阵 + 第二语言复用判据；刻度 7→9 完成后执行，日常循环顺带补行） |
 | `gap-fragment-mode.md` | 片段模式 P0（记号模式 / island rewrite 原型：显式记号、bytes identity、死分支/假记号 fail-closed；P1 声明面/能力位待批准） |
 | `gap-unit-graph.md` | unit graph 内置化（块 5 已实现：多入口多根森林 + `check` 多入参 + `--json` 图出口；边 kind = 注册能力面（`unit_graph.edges.v1`）；P2 自动推 roots 留档） |
+| `gap-incremental-parse.md` | 增量解析（块 7 P1 最小前置：同文件**单顶层单元**重解析 + 保守回退 + 编辑器接口；跨文件语义传播/常驻 watch 归 v0.2 P3.4） |
 | `gap-feature-scatter.md` | 功能散点与上游契约耦合（一处功能 N 处登记；P-A/P-B/P-C + 步 2 收敛目标与接受边界） |

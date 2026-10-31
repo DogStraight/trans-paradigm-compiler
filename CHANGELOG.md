@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **同文件增量重解析（块 7 P1，2026-10-31）**：`parser/incremental.py::incremental_reparse`
+  ——token diff（公共前后缀）→ 用 `_tok_span` 定位被改顶层单元 → 只 parse 该单元 token 子集
+  → 替换 AST 子节点；多单元/首尾/符号门控语言（C typedef）一律保守回退全量。
+  · tv80 改一个标识符：全量 parse 1.508s → 增量 0.062s（**24.3x**），AST 逐节点 = 全量；
+  5 测试（含无变更复用/多单元回退/C 回退/真实语料 ≥5x）。
+  · 边界：增量 **check** 层（语义失效传播/常驻 watch）= v0.2 P3.4，块 7 记 partial。
 - **图化边种类提为注册能力面（块 5 补充，2026-10-31）**：边 `kind` 从"配置原始词"
   （规则名 `ModuleInst` / 指令关键字）改为**引擎注册的能力面词汇**——新增能力
   `unit_graph.edges.v1`（`core/engine_capabilities.py`），语言包只在 `[unit_graph]

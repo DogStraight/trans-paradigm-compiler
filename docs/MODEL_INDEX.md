@@ -32,6 +32,7 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | Parser 主引擎（递归下降 + 回溯，块/普通链调度） | `language_walkthrough.md`（Parser 主引擎：递归下降+回溯） | `parser/parser_core.py::Parser.parse`<br>`parser/_production.py`（生产式匹配主循环） | `tests/engine/parser/test_production_engine.py`<br>`tests/engine/parser/test_failure_report.py` |
+| 增量重解析（同文件 P1） | `docs/gaps/gap-incremental-parse.md` | `parser/incremental.py::incremental_reparse` | `tests/engine/parser/test_incremental.py` |
 | 块 & 语句级解析 | `language_walkthrough.md`（块规则解析） | `parser/block_parser.py` | `tests/engine/parser/test_production_engine.py` |
 | 表达式解析（Pratt + 运算符优先级 + 注释挂载） | `language_walkthrough.md`（Pratt 表达式解析） | `parser/pratt_parser.py` | `tests/engine/parser/test_pratt_parser.py` |
 | 规则选择（候选过滤 / 语句发现） | `language_walkthrough.md`（规则选择/语句发现） | `parser/rule_selector.py` | `tests/engine/parser/`（`test_production_engine.py` 等） |

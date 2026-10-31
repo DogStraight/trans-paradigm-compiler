@@ -21,7 +21,7 @@
 | 4 | **片段模式 P1** | ✅ 全域岛 / 零声明面 / 无记号（`islands/` 五模块 + `tpc fragment`；ADR-0026）；单测 10、真实语料 12 文件 0 crash/0 non-idem、lint 33/0/0 |
 | 5 | **unit graph 内置能力** | ✅ `report.graph`（多入口 ⇒ 多根森林；C include 边 / V 实例化边，kind = 配置数据；`inverse` 反查）+ CLI `tpc check <file>...` 多入参（ADR-0027）；新测试 4、analyzer+preprocessor 738 passed、A/B 0/144、benchmark 53 不变；P2 生产者注册表/自动推 roots 留档 |
 | 6 | **精化基座 graph 化** | ✅ 精化只消费 `UnitGraph`（文件原子=图节点 / 单元原子=图定义索引 / `files()` 按图过滤 / `instantiation_sites()` 供实例点；插件删自建 `collect_nodes`）；T3 接受项 `inst_sites` 收口为 `CTX_INSTANTIATION_SITES`（ADR-0028）；analyzer 364、verilog+check_accuracy 406 passed、A/B 0/144、benchmark 53、lint 33/0/0 |
-| 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |
+| 7 | **增量解析/check** | ◐ **P1 解析层已实现**：同文件单顶层单元增量重解析（token diff → 单元子集 parse → 替换子节点；多单元/首尾/符号门控保守回退全量）；tv80 改标识符 **24.3x**（1.508s→0.062s），增量 AST 逐节点 = 全量，5 测试。**增量 check 层（语义失效传播/常驻 watch）= v0.2 P3.4 ⇒ 本块记 partial，不标 ✅** |
 | 8 | **诊断粒度** | ✅ 块内 2 坏语句 → 2 条位置正确 `phase-statement`（#71；父容器粗诊断让位）；`test_c_block_diagnostics.py` |
 | 9 | **渲染/注释遗留** | ⏳ #72 调查：LineSuffix 吞 token 根因=flatten；强制 group broken 修 C 但 yaml 往返回归，已回退；需源行感知方案 |
 | 10 | **工程化缺口** | ✅ A/B inproc #73；C→V→C #74；yaml 幂等 #76；cp1252 排练 #77；benchmark 口径 #79（parse 失败事实码保留 + 语法 lint 不再误排除；verilator 共识 0→53） |
@@ -34,11 +34,11 @@
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 7 增量解析/check——单函数编辑重解析 ≥5x、增量诊断 = 全量结果、编辑器接口；
-  块 9（#72 源行感知）按触发条件插入；块 2 性能后续（失败记忆化/Node 协议）按常驻测试面排期。
+- **意图**：块 9 渲染/注释遗留（#72 源行感知）——先查 LineSuffix 吞 token 的 flatten 根因与
+  源行感知方案，判据 = C/yaml 往返 + render 124/124 不变；块 12 收口前置按块 9 后评估。
 - **待验证假设**：`UnitGraph` + 图化后的发现/精化面足以承载"重解析受影响子集"（不需要把
   文件层索引再拆一遍）；失败记忆化需先重构 `sibling_counter` 计数语义（ROADMAP P2.3 记）。
-- **台账**：块 1/2/3/4/5/6/8/10/11 ✅；块 9 ⏳（#72）、7 未开工；主线 2 当前 9/12。
+- **台账**：块 1/2/3/4/5/6/8/10/11 ✅；块 7 ◐（P1 解析层已落，check 层归 v0.2）、块 9 ⏳（#72）、块 12 收口待办；主线 2 当前 9/12。
 
 
 ## 估算依据（对照锚，可复核）
