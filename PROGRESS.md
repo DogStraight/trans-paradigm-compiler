@@ -21,7 +21,7 @@
 | 4 | **片段模式 P1** | ✅ 全域岛 / 零声明面 / 无记号（`islands/` 五模块 + `tpc fragment`；ADR-0026）；单测 10、真实语料 12 文件 0 crash/0 non-idem、lint 33/0/0 |
 | 5 | **unit graph 内置能力** | ✅ `report.graph`（多入口 ⇒ 多根森林；C include 边 / V 实例化边，kind = 配置数据；`inverse` 反查）+ CLI `tpc check <file>...` 多入参（ADR-0027）；新测试 4、analyzer+preprocessor 738 passed、A/B 0/144、benchmark 53 不变；P2 生产者注册表/自动推 roots 留档 |
 | 6 | **精化基座 graph 化** | ✅ 精化只消费 `UnitGraph`（文件原子=图节点 / 单元原子=图定义索引 / `files()` 按图过滤 / `instantiation_sites()` 供实例点；插件删自建 `collect_nodes`）；T3 接受项 `inst_sites` 收口为 `CTX_INSTANTIATION_SITES`（ADR-0028）；analyzer 364、verilog+check_accuracy 406 passed、A/B 0/144、benchmark 53、lint 33/0/0 |
-| 7 | **增量解析/check** | ✅ **解析层（P2 片段级）**：token diff → 最深 span 节点按**规则名片段解析**（`Parser.parse_fragment`，与片段模式同源）→ 并树；逐级回退单元级/全量。tv80 语句级 **67x**（329/22,604 tokens，22.9ms vs 1540ms）、模块级 23x；增量 AST 逐节点 = 全量；8 测试。**增量 check 语义层（跨文件失效传播/常驻 watch）= v0.2 P3.4 单列，不计入本块** |
+| 7 | **增量解析/check** | ✅ **解析层（P2 片段级）**：token diff → 最深 span 节点按**规则名片段解析**（`Parser.parse_fragment`，与片段模式同源）→ 并树；逐级回退单元级/全量。tv80 语句级 **67x**（329/22,604 tokens，22.9ms vs 1540ms）、模块级 23x；增量 AST 逐节点 = 全量；8 测试。**边界（长期目标，本块只交付解析层最小面）**：单文件单次编辑、符号门控语言回退、叶子 span 粒度/注释锚/持久化未做，详见 `gap-incremental-parse.md`「诚实边界」；增量 check 语义层 = v0.2 P3.4 单列 |
 | 8 | **诊断粒度** | ✅ 块内 2 坏语句 → 2 条位置正确 `phase-statement`（#71；父容器粗诊断让位）；`test_c_block_diagnostics.py` |
 | 9 | **渲染/注释遗留** | ⏳ #72 调查：LineSuffix 吞 token 根因=flatten；强制 group broken 修 C 但 yaml 往返回归，已回退；需源行感知方案 |
 | 10 | **工程化缺口** | ✅ A/B inproc #73；C→V→C #74；yaml 幂等 #76；cp1252 排练 #77；benchmark 口径 #79（parse 失败事实码保留 + 语法 lint 不再误排除；verilator 共识 0→53） |

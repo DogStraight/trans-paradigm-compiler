@@ -178,20 +178,14 @@
 - [ ] **毒配置清单化（变异维度化）**：`tools/check_gate_efficacy.py` 现有 **116** 条真实事故变异；可扩成
       维度化清单（语言 × 执行顺序 × PYTHONHASHSEED × 缓存状态）并定期接入 CI。判据：每条变异**可复现变红**
 
-## P3 — 增量解析（v0.2 核心，非收尾）
+## P3 — 增量解析（长期优化目标；v0.2 核心，非收尾）
 
 > P3.1（span 绑定）+ P3.6（宏体入树）已实施（机制见 `preprocessor/README.md` +
 > `pipeline/README.md`）。
-
-### P3.2 失效判定 + 增量重解析
-
-> 设计思考落档（原 ADR-0009 draft 收敛删除）——双向映射 / 结构锚定 / 补头补尾 /
-> merge 校验 + 全量回退 / 缓存选址（.code_cache 内容寻址 vs temp，key 含语法版本签名）。
-
-- [ ] token 级 diff：新旧 token 流对比，标记变更 token（复用 lexer）
-- [ ] 变更 token → 延展到语法边界（沿 `is_statement`/`is_block` 规则向外，到完整可重解析单元）
-- [ ] 仅重解析受影响单元（`ParseContext` 从边界起始 token 驱动）
-- [ ] 并树：替换 AST 中对应子树（类似 `merge_segments`，下沉到语句级）
+>
+> **P3.2 已交付（0.1.4 块 7，仅解析层最小面）**：同文件片段级增量重解析
+> （`parser/incremental.py` + `Parser.parse_fragment`；tv80 语句级 67x；
+> **边界/未做项见 `docs/gaps/gap-incremental-parse.md`**）。P3.4（增量 check）仍是 v0.2 核心。
 
 ### P3.4 增量 check（语义失效传播）
 
