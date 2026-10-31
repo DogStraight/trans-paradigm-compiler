@@ -112,6 +112,56 @@ class UnitGraph:
             "definitions": dict(self.definitions),
         }
 
+    # ── 文本树出口（`tpc check --tree`） ──
+
+    def render_tree(self) -> str:
+        """多根森林 → 文本树（不依赖图形库；适合终端/日志/评审贴图）。
+
+        形状：每个根一棵树，子节点带边 kind；重复节点第二次出现时标 `(seen)` 且不再展开
+        （处理 diamond / 环；根本身不会重复展开）；单元定义以括号后缀标出。
+        """
+        lines: list[str] = []
+        seen: set[str] = set()
+
+        def label(path: str) -> str:
+            units = [u for u, f in self.definitions.items() if f == norm_node(path)]
+            suffix = f"  ({', '.join(units)})" if units else ""
+            return f"{os.path.basename(path)}{suffix}"
+
+        def walk(path: str, prefix: str, connector: str) -> None:
+            seen_before = path in seen
+            lines.append(f"{prefix}{connector}{label(path)}" + ("  (seen)" if seen_before else ""))
+            if seen_before:
+                return
+            seen.add(path)
+            children = [(e.kind, e.target) for e in self.edges if e.source == path]
+            for i, (kind, target) in enumerate(children):
+                last = i == len(children) - 1
+                branch = "└─ " if last else "├─ "
+                walk(target, prefix + ("    " if last else "│   "), f"{branch}[{kind}] ")
+
+        for root in self.roots:
+            lines.append(f"● {label(root)}  [root]")
+            seen.add(root)
+            children = [(e.kind, e.target) for e in self.edges if e.source == root]
+            for i, (kind, target) in enumerate(children):
+                last = i == len(children) - 1
+                branch = "└─ " if last else "├─ "
+                walk(target, "", f"{branch}[{kind}] ")
+        if not lines:
+            return "(empty graph)"
+        return "\n".join(lines)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "UnitGraph":
+        """`report["graph"]`（`to_dict()` 的逆）→ 图对象（CLI/测试消费用）。"""
+        edges = [(e["kind"], e["source"], e["target"]) for e in data.get("edges") or []]
+        return cls(
+            list(data.get("roots") or []),
+            edges,
+            dict(data.get("definitions") or {}),
+        )
+
 
 def build_unit_graph(ctx, roots: list[str]) -> UnitGraph:
     """从会话事实装配图——**边由各阶段产，本函数只装配**（不做第二遍解析）。

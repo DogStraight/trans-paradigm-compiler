@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **单元图文本树出口（块 5 补充，2026-10-31）**：`UnitGraph.render_tree()` + `tpc check --tree`——
+  多根森林逐根展开（`● 根` → `├─/└─ [kind] 文件 (单元)`），重复节点标 `(seen)` 且不再展开
+  （diamond/环安全）；`UnitGraph.from_dict()` 供 CLI/测试消费。不依赖图形库（PNG/SVG 方案弃用）。
+  新测试 3：单/多根形状、diamond 去重、CLI `--tree` 不打印诊断。
 - **精化消费单元图 + `inst_sites` 命名收口（块 6 ✅，2026-10-31）**：`ProjectChecker.check()`
   先建 `UnitGraph` 再跑精化——`StructureAtomSource(ctx, graph)`（文件原子=图节点、单元原子=
   图定义索引 `definitions`）、`ElaborationService(ctx, graph)`（`files()` 按图过滤、

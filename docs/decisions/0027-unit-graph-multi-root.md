@@ -22,7 +22,9 @@ SCons Scanner 的边生产者、Ninja 的动态依赖与路径精确匹配）—
    产包含边（新增 `out_include_edges` 出参，嵌套子扫描的边并入宿主）；`unit_graph` 只做
    规范化/去重/反查。**不做第二遍解析**（Ninja 教训：两套路径口径会静默错）。
 4. **节点身份唯一化**：`normcase(abspath())` 一次定型（相对/绝对混用会被当成两个文件）。
-5. **CLI 多入参**：`tpc check <file> [<file> ...]`（`nargs="+"`）；`--json` 出口含 `graph`。
+5. **CLI 多入参**：`tpc check <file> [<file> ...]`（`nargs="+"`）；`--json` 出口含 `graph`；
+   `--tree` 出口为**文本树**（`UnitGraph.render_tree()`，多根森林逐根展开、重复节点标
+   `(seen)`，不依赖图形库）。
 6. **边界**：图只放 file→file 事实，不放语言语义（端口/方向/精化产物仍归插件 postpass）；
    不引入声明图/BUILD 语；不做增量失效（块 7）。
 

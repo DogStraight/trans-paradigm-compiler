@@ -82,6 +82,54 @@ def test_graph_nodes_cover_roots_and_targets():
     )
 
 
+def test_render_tree_single_and_multi_root():
+    """文本树出口：单根/多根、单元定义后缀、kind 标注。"""
+    a, b, c = map(norm_node, (str(_ROOT / "a.v"), str(_ROOT / "b.v"), str(_ROOT / "c.v")))
+    g = UnitGraph([a], [("ModuleInst", a, b), ("ModuleInst", a, c)],
+                  {"a": a, "b": b, "c": c})
+    assert g.render_tree().splitlines() == [
+        f"● a.v  (a)  [root]",
+        f"├─ [ModuleInst] b.v  (b)",
+        f"└─ [ModuleInst] c.v  (c)",
+    ]
+
+    forest = UnitGraph([a, b], [("ModuleInst", a, c)], {"a": a, "b": b, "c": c})
+    assert forest.render_tree().splitlines() == [
+        f"● a.v  (a)  [root]",
+        f"└─ [ModuleInst] c.v  (c)",
+        f"● b.v  (b)  [root]",
+    ]
+
+
+def test_render_tree_marks_seen_on_diamond():
+    """共享节点第二次出现标 (seen) 且不再展开（防重复展开/环）。"""
+    a, b, c, d = map(
+        norm_node, (str(_ROOT / f"{n}.v") for n in "abcd")
+    )
+    g = UnitGraph(
+        [a],
+        [("K", a, b), ("K", a, c), ("K", b, d), ("K", c, d)],
+        {"a": a, "b": b, "c": c, "d": d},
+    )
+    lines = g.render_tree().splitlines()
+    assert any(line.endswith("[K] b.v  (b)") for line in lines)
+    assert sum(1 for ln in lines if ln.endswith("[K] d.v  (d)")) == 1
+    assert sum(1 for ln in lines if ln.endswith("[K] d.v  (d)  (seen)")) == 1
+
+
+def test_cli_tree_flag():
+    """CLI `--tree` 输出文本树（不打印诊断）。"""
+    entry = str(_REF / "ref_uart.v")
+    proc = subprocess.run(
+        [sys.executable, "main.py", "check", entry, "--tree"],
+        cwd=str(_ROOT), capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert "● ref_uart.v" in proc.stdout
+    assert "├─ [ModuleInst] ref_uart_rx.v" in proc.stdout
+    assert "No issues found" not in proc.stdout
+
+
 def test_cli_check_accepts_multiple_entries():
     """CLI：`tpc check a b --json` 接受多参数，图里 roots=2。"""
     entries = [str(_REF / "ref_uart.v"), str(_REF / "ref_uart_rx.v")]

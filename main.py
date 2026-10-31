@@ -315,6 +315,13 @@ def _cmd_check(args: argparse.Namespace) -> None:
     # 源码内 tpc-check 豁免注释（区间形式 / disable-line 单行）
     _apply_check_suppressions(report, rules_dir)
 
+    if args.tree:
+        # 文本树出口（块 5：多入口 ⇒ 多根森林；不依赖图形库）
+        from analyzer.unit_graph import UnitGraph
+
+        print(UnitGraph.from_dict(report["graph"]).render_tree())
+        sys.exit(report["exit_code"])
+
     if args.html:
         from analyzer.report_html import render_html_report
 
@@ -552,6 +559,11 @@ def _add_check_parser(sub) -> None:
     p_check.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
     p_check.add_argument(
         "--html", metavar="FILE", help="Write an HTML report to FILE"
+    )
+    p_check.add_argument(
+        "--tree",
+        action="store_true",
+        help="Print the unit graph as a text tree (multi-entry => multi-root forest)",
     )
 
 
