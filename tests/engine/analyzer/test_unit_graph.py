@@ -2,8 +2,8 @@
 
 判据（`docs/gaps/gap-unit-graph.md`）：
 - `check([...])` 返回 `graph`（roots / nodes / edges）；多入口 ⇒ 多个 root；
-- C：`include` 边（kind = 语言包声明的指令关键字）；
-- V：实例化边（kind = 语言包 `[structure] module_inst_rule`）；
+- C：`include` 边（kind = 注册能力名 `include`）；
+- V：实例化边（kind = 注册能力名 `instantiation`，语言包 `[unit_graph] edge_kinds` 声明）；
 - 反查 `inverse(file)` = 能到达该文件的 roots（共享文件返回多个 root）；
 - CLI `tpc check a b --json` 同口径（多参数）。
 
@@ -15,6 +15,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
@@ -59,13 +61,13 @@ def test_c_include_edges_multi_root(tmp_path):
 
 
 def test_verilog_instantiation_edges_single_root():
-    """V：实例化边 kind = 语言包 `module_inst_rule`（不是引擎字面量）。"""
+    """V：实例化边 kind = 注册能力名 `instantiation`（不是规则名字面量）。"""
     entry = str(_REF / "ref_uart.v")
     graph = _graph([entry], "grammar/verilog")
 
     assert graph["roots"] == [norm_node(entry)]
     kinds = {e["kind"] for e in graph["edges"]}
-    assert kinds == {"ModuleInst"}, kinds
+    assert kinds == {"instantiation"}, kinds
     targets = {os.path.basename(e["target"]) for e in graph["edges"]}
     assert {"ref_uart_rx.v", "ref_uart_tx.v"} <= targets
 
@@ -85,18 +87,18 @@ def test_graph_nodes_cover_roots_and_targets():
 def test_render_tree_single_and_multi_root():
     """文本树出口：单根/多根、单元定义后缀、kind 标注。"""
     a, b, c = map(norm_node, (str(_ROOT / "a.v"), str(_ROOT / "b.v"), str(_ROOT / "c.v")))
-    g = UnitGraph([a], [("ModuleInst", a, b), ("ModuleInst", a, c)],
+    g = UnitGraph([a], [("instantiation", a, b), ("instantiation", a, c)],
                   {"a": a, "b": b, "c": c})
     assert g.render_tree().splitlines() == [
         f"● a.v  (a)  [root]",
-        f"├─ [ModuleInst] b.v  (b)",
-        f"└─ [ModuleInst] c.v  (c)",
+        f"├─ [instantiation] b.v  (b)",
+        f"└─ [instantiation] c.v  (c)",
     ]
 
-    forest = UnitGraph([a, b], [("ModuleInst", a, c)], {"a": a, "b": b, "c": c})
+    forest = UnitGraph([a, b], [("instantiation", a, c)], {"a": a, "b": b, "c": c})
     assert forest.render_tree().splitlines() == [
         f"● a.v  (a)  [root]",
-        f"└─ [ModuleInst] c.v  (c)",
+        f"└─ [instantiation] c.v  (c)",
         f"● b.v  (b)  [root]",
     ]
 
@@ -117,6 +119,22 @@ def test_render_tree_marks_seen_on_diamond():
     assert sum(1 for ln in lines if ln.endswith("[K] d.v  (d)  (seen)")) == 1
 
 
+def test_unknown_edge_kind_fails_fast(monkeypatch):
+    """未注册的边种类 fail-fast（防语言包自造图词汇、消费者失配）。"""
+    from core.errors import ConfigError
+    from analyzer import unit_graph as ug
+
+    monkeypatch.setattr(ug, "_unit_graph_kinds", ["bogus"])
+
+    class _Ctx:
+        memo: dict = {}
+        module_index: dict = {}
+        unit_edges: list = []
+
+    with pytest.raises(ConfigError):
+        ug.build_unit_graph(_Ctx(), [])
+
+
 def test_cli_tree_flag():
     """CLI `--tree` 输出文本树（不打印诊断）。"""
     entry = str(_REF / "ref_uart.v")
@@ -126,7 +144,7 @@ def test_cli_tree_flag():
     )
     assert proc.returncode == 0, proc.stderr[-2000:]
     assert "● ref_uart.v" in proc.stdout
-    assert "├─ [ModuleInst] ref_uart_rx.v" in proc.stdout
+    assert "├─ [instantiation] ref_uart_rx.v" in proc.stdout
     assert "No issues found" not in proc.stdout
 
 

@@ -2,9 +2,12 @@
 
 定位：把"谁依赖谁"从各阶段事实收成一张图，供报告 / 后续 LSP 消费。图里**不放
 语言语义**（端口/方向/精化产物仍在语言包 postpass）；节点 = 规范化绝对路径；
-边 = `(kind, source, target)`，`kind` 是**配置数据**不是引擎字面量：
-- 单元依赖边（`structure` 阶段）：kind = 语言包 `[structure] module_inst_rule`；
-- 包含边（`preprocessor` 阶段）：kind = 该指令在语言包里的关键字（如 `include`）。
+边 = `(kind, source, target)`，`kind` 是**引擎注册的能力面词汇**（能力 `unit_graph.edges.v1`），
+不是语言包配置里的原始词：
+- `instantiation`：单元实例化边（`structure` 阶段产）；
+- `include`：文件包含边（`preprocessor` 阶段产）。
+语言包只在 `[unit_graph] edge_kinds` 声明"产出哪些种类"；规则名/指令关键字属发现期数据，
+不进图词汇（换语言不改变消费者契约）。
 
 API 对齐通用工具链的「三问」（BSP `sources`/`inverseSources`、Meson
 `target_sources`/`depends` 同构；见 `docs/references.md`「通用工具链的图化抽象」）：
@@ -21,7 +24,24 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from core.config_registry import declare_cfg
+from core.errors import ConfigError
+
 UnitEdgeTuple = tuple[str, str, str]
+
+#: 图化**边种类注册表**（引擎能力面 `unit_graph.edges.v1`）。
+#: 语言包只在 `[unit_graph] edge_kinds` 里声明"本包产出哪些种类"；引擎把各阶段的
+#: 原始标签（`[structure] module_inst_rule` 的规则名、`[directive_handlers]` 的指令
+#: 关键字）映射成这些**稳定 kind**——换语言时游戏规则不变，消费者只认这里。
+EDGE_KINDS: dict[str, str] = {
+    "instantiation": "structure",   # 单元实例化边（结构发现阶段产）
+    "include": "preprocessor",      # 文件包含边（预处理器产）
+}
+
+_unit_graph_kinds: list = declare_cfg(
+    "unit_graph.edge_kinds", [], __name__, "_unit_graph_kinds"
+)
+"""语言包声明的边种类集合（`[unit_graph] edge_kinds`）；未声明 = 不产边。"""
 
 
 def norm_node(path: str) -> str:
@@ -122,35 +142,31 @@ class UnitGraph:
         """
         lines: list[str] = []
         seen: set[str] = set()
-
-        def label(path: str) -> str:
-            units = [u for u, f in self.definitions.items() if f == norm_node(path)]
-            suffix = f"  ({', '.join(units)})" if units else ""
-            return f"{os.path.basename(path)}{suffix}"
-
-        def walk(path: str, prefix: str, connector: str) -> None:
-            seen_before = path in seen
-            lines.append(f"{prefix}{connector}{label(path)}" + ("  (seen)" if seen_before else ""))
-            if seen_before:
-                return
-            seen.add(path)
-            children = [(e.kind, e.target) for e in self.edges if e.source == path]
-            for i, (kind, target) in enumerate(children):
-                last = i == len(children) - 1
-                branch = "└─ " if last else "├─ "
-                walk(target, prefix + ("    " if last else "│   "), f"{branch}[{kind}] ")
-
         for root in self.roots:
-            lines.append(f"● {label(root)}  [root]")
+            lines.append(f"● {self._caption(root)}  [root]")
             seen.add(root)
-            children = [(e.kind, e.target) for e in self.edges if e.source == root]
-            for i, (kind, target) in enumerate(children):
-                last = i == len(children) - 1
-                branch = "└─ " if last else "├─ "
-                walk(target, "", f"{branch}[{kind}] ")
-        if not lines:
-            return "(empty graph)"
-        return "\n".join(lines)
+            self._render_children(root, "", seen, lines)
+        return "\n".join(lines) if lines else "(empty graph)"
+
+    def _render_children(self, path: str, prefix: str, seen: set[str], lines: list[str]) -> None:
+        """递归展开一层子节点（连线/缩进；seen 去重后不再展开）。"""
+        children = [(e.kind, e.target) for e in self.edges if e.source == path]
+        for i, (kind, target) in enumerate(children):
+            last = i == len(children) - 1
+            branch = "└─ " if last else "├─ "
+            line = f"{prefix}{branch}[{kind}] {self._caption(target)}"
+            if target in seen:
+                lines.append(line + "  (seen)")
+                continue
+            lines.append(line)
+            seen.add(target)
+            self._render_children(target, prefix + ("    " if last else "│   "), seen, lines)
+
+    def _caption(self, path: str) -> str:
+        """节点短名 + 单元定义后缀（无定义 → 仅文件名）。"""
+        units = [u for u, f in self.definitions.items() if f == norm_node(path)]
+        suffix = f"  ({', '.join(units)})" if units else ""
+        return f"{os.path.basename(path)}{suffix}"
 
     @classmethod
     def from_dict(cls, data: dict) -> "UnitGraph":
@@ -164,22 +180,35 @@ class UnitGraph:
 
 
 def build_unit_graph(ctx, roots: list[str]) -> UnitGraph:
-    """从会话事实装配图——**边由各阶段产，本函数只装配**（不做第二遍解析）。
+    """从会话事实装配图——**边由各阶段产，本函数只映射成注册 kind 并装配**。
+
+    边种类由语言包 `[unit_graph] edge_kinds` 声明（能力面 `unit_graph.edges.v1`），
+    引擎按 `EDGE_KINDS` 把"哪些阶段产哪种边"映射成稳定 kind；未注册的 kind 直接
+    fail-fast（防语言包自造词汇、消费者失配）。
 
     Args:
         ctx: `StructureCtx`（含 `unit_edges` 单元依赖边、`memo` 里各文件的
-            `include_edges` 包含边、`rule()` 读结构协议）。
+            `include_edges` 包含边）。
         roots: 入口文件绝对路径列表。
     """
+    declared = {str(k) for k in (_unit_graph_kinds or [])}
+    unknown = declared - set(EDGE_KINDS)
+    if unknown:
+        raise ConfigError(
+            f"[unit_graph] edge_kinds 含未注册的边种类 {sorted(unknown)}；"
+            f"已注册: {', '.join(sorted(EDGE_KINDS))}（能力面 unit_graph.edges.v1）"
+        )
     tuples: list[UnitEdgeTuple] = []
-    # 单元依赖边：kind = 语言包声明的实例化规则名（未声明结构协议 ⇒ 无此类边）
-    edge_kind = ctx.rule("module_inst_rule") or ""
-    if edge_kind:
-        for source, target in ctx.unit_edges:
-            tuples.append((edge_kind, source, target))
-    # 包含边：kind = 指令在语言包里的关键字（preprocessor 扫描时记录）
-    for fr in ctx.memo.values():
-        tuples.extend(fr.include_edges)
+    for kind in sorted(declared):
+        producer = EDGE_KINDS[kind]
+        if producer == "structure":
+            tuples.extend((kind, source, target) for source, target in ctx.unit_edges)
+        elif producer == "preprocessor":
+            tuples.extend(
+                (kind, source, target)
+                for fr in ctx.memo.values()
+                for source, target in fr.include_edges
+            )
     # 单元定义索引（name → 定义文件）：精化基座据此枚举单元原子（与 `module_index` 同键）
     definitions = {name: info.file for name, info in ctx.module_index.items()}
     return UnitGraph(roots, tuples, definitions)

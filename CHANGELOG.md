@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **图化边种类提为注册能力面（块 5 补充，2026-10-31）**：边 `kind` 从"配置原始词"
+  （规则名 `ModuleInst` / 指令关键字）改为**引擎注册的能力面词汇**——新增能力
+  `unit_graph.edges.v1`（`core/engine_capabilities.py`），语言包只在 `[unit_graph]
+  edge_kinds` 声明产出哪些（V：`instantiation`+`include`；C：`include`），引擎按
+  `EDGE_KINDS` 映射成稳定 kind；未注册 kind → `ConfigError` fail-fast。消费者/报告/
+  `--tree` 不再随语言换词。preprocessor 的边记录改存 `(source, target)` 二元组（kind 由
+  引擎映射）。
 - **单元图文本树出口（块 5 补充，2026-10-31）**：`UnitGraph.render_tree()` + `tpc check --tree`——
   多根森林逐根展开（`● 根` → `├─/└─ [kind] 文件 (单元)`），重复节点标 `(seen)` 且不再展开
   （diamond/环安全）；`UnitGraph.from_dict()` 供 CLI/测试消费。不依赖图形库（PNG/SVG 方案弃用）。

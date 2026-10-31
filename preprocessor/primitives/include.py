@@ -161,9 +161,9 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理包含指令（路径形态由声明给出，关键字拼写不写死）。
 
     关键字拼写由调用方按语言包声明传入（见模块头）；参数从 `stripped` 按同一份
-    切分规则取（与 `undef` / `define` 同源）。`_name` 不消费但**保留**：单元图
-    的包含边把"指令关键字"当边 kind（配置数据，见 `analyzer/unit_graph.py`）。
+    切分规则取（与 `undef` / `define` 同源）。
     """
+    del _name  # 协议签名参数（分派已用同一拼写判定过关键字；图化 kind 由能力面映射）
     cfg = ctx.get("_include_config", {})
     parsed = _parse_target(split_directive(stripped, prefix)[1], _path_forms(cfg))
     if parsed is None:
@@ -180,11 +180,11 @@ def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         return
 
     norm = os.path.normcase(inc_path)
-    # 单元图包含边（块 5）：路径解析成功即记账——边 kind = 本指令的关键字（语言包
-    # `[directive_handlers]` 声明，引擎不写死 `include`）；source = 当前扫描文件
-    # （include 内嵌套时子扫描自带 source_path）。缺失文件不产边（诊断另有策略面）。
+    # 单元图包含边（块 5）：路径解析成功即记账——`(source=当前扫描文件, target=被包含文件)`。
+    # 边**不带 kind**：kind 由引擎按能力面 `unit_graph.edges` 映射（语言包声明产出哪些
+    # 边种类），指令关键字只作发现期数据。缺失文件不产边（诊断另有策略面）。
     ctx.setdefault("_include_edges", []).append(
-        (str(_name), str(ctx.get("source_path") or ""), inc_path)
+        (str(ctx.get("source_path") or ""), inc_path)
     )
     if norm in ctx["_include_stack"]:
         _report_problem(ctx, "cycle", f"循环 include 检测: {inc_path}，跳过")

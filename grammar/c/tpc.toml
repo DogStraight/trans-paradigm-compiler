@@ -20,6 +20,8 @@ uses = [
     "preprocessor.pipeline.v1",
     # 语句发现形态声明（`base/_discovery.toml`，ADR-0025）：括号定界语句容器 + 容器延续关键字
     "discovery.shape.v1",
+    # 图化边种类注册面（`[unit_graph] edge_kinds`）：C 产包含边（无结构协议 ⇒ 无实例化边）
+    "unit_graph.edges.v1",
 ]
 
 [renderer]
@@ -47,6 +49,10 @@ rules = { file = ["0*.toml"], required = true }
 macro_config = { file = "base/_macro.toml", required = false }
 directives = { file = "base/_macro.toml", section = "directive_handlers", required = false }
 expand = { file = "base/_macro.toml", section = "expand", required = false }
+
+# 图化边种类（能力面 `unit_graph.edges.v1`）：C 只有包含边（无 `[structure]` ⇒ 无实例化边）
+[unit_graph]
+edge_kinds = ["include"]
 
 # ── 插件清单（核心基线之外的增量） ──
 # ⚠ 这份清单**不是**打包面的装饰：实测 `load_language(pack, plugins_dir=…)` 只在该清单

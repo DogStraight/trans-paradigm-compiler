@@ -17,6 +17,9 @@ uses = [
     "preprocessor.pipeline.v1",
     "renderer.doc_ir.v1",
     "structure.protocol.v1",
+    # 图化边种类注册面（`[unit_graph] edge_kinds`）：语言包声明产出哪些边种类，
+    # 引擎把原始规则名/指令关键字映射成稳定 kind
+    "unit_graph.edges.v1",
     # 语句发现形态声明（`base/_discovery.toml`，ADR-0025）：属性对/容器延续/子句分隔符
     "discovery.shape.v1",
     "transform.slots.v1",
@@ -38,6 +41,11 @@ rules = { file = ["0*/*.toml"], required = true }
 
 [structure]
 protocol = { file = "base/_structure.toml", section = "structure", required = false }
+
+[unit_graph]
+# 图化边种类（能力面 `unit_graph.edges.v1`）：本包声明"产出哪些种类"；具体规则名
+# （`[structure] module_inst_rule`）与指令关键字只作发现期数据，不进图词汇。
+edge_kinds = ["instantiation", "include"]
 
 [discovery]
 shape = { file = "base/_discovery.toml", section = "discovery", required = false }

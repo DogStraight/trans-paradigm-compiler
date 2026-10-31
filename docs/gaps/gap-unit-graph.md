@@ -100,8 +100,9 @@ Verilog module 同图；`ProjectChecker.check([roots])` 同 API；无语言分�
 - **契约**（ADR-0027）：`check([...])` ⇒ `report["graph"] = {roots, nodes, edges}`；多入口 = 多根
   森林（共享节点去重、`inverse` 可多根）；`UnitGraph.dependencies(root)` / `reachable` / `inverse`；
   CLI `tpc check <file> [<file> ...]`，`--json` 带 `graph`。
-- **边来源**（零新配置面）：结构发现边 kind = `[structure] module_inst_rule`（配置数据）；
-  包含边 kind = 指令关键字（`[directive_handlers]` 声明）；`preprocessor` 新增
+- **边来源**（注册能力面）：kind = 引擎 `EDGE_KINDS` 的稳定词（`instantiation` / `include`，
+  能力 `unit_graph.edges.v1`）；语言包只在 `[unit_graph] edge_kinds` 声明产出哪些；
+  `preprocessor` 新增
   `out_include_edges` 出参，嵌套子扫描的边并入宿主；`StructureCtx.unit_edges` /
   `FileResult.include_edges` 承载。引擎无语言字面量。
 - **节点身份**：`normcase(abspath())` 一次定型；自环与重复边在装配时去掉。

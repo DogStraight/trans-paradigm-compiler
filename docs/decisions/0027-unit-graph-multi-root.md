@@ -16,8 +16,10 @@ SCons Scanner 的边生产者、Ninja 的动态依赖与路径精确匹配）—
 1. **入口先行**：`ProjectChecker.check(paths)` 把每个 entry 当一个 root；多入口 ⇒ **多根森林**
    （共享节点去重；`inverse` 返回多个 root 是合法结果）。
 2. **图产物随 check 返回**：`report["graph"] = {roots, nodes, edges}`；边 = `{kind, source,
-   target}`。`kind` 是**配置数据**不是引擎字面量：单元依赖边取语言包 `[structure]
-   module_inst_rule`；包含边取指令关键字（`[directive_handlers]` 声明）。
+   target}`。`kind` 是**引擎注册的能力面词汇**（能力 `unit_graph.edges.v1`）：
+   `instantiation`（结构发现阶段）/ `include`（预处理器阶段）；语言包只在
+   `[unit_graph] edge_kinds` 声明产出哪些种类，规则名/指令关键字不进图词汇；
+   未注册 kind 加载/建图时 fail-fast。
 3. **边由阶段产，图只装配**：`ModuleIndexer.discover` 产单元依赖边；preprocessor 的 include
    产包含边（新增 `out_include_edges` 出参，嵌套子扫描的边并入宿主）；`unit_graph` 只做
    规范化/去重/反查。**不做第二遍解析**（Ninja 教训：两套路径口径会静默错）。
@@ -31,8 +33,8 @@ SCons Scanner 的边生产者、Ninja 的动态依赖与路径精确匹配）—
 ## 后果
 
 - 正：报告与后续 LSP 有统一依赖出口；新增语言只需在既有阶段产边，引擎零分支。
-- 负：C 的边依赖预处理器实际展开（`expand_macros` 关时不产 include 边）；`kind` 目前直接
-  用配置词（`ModuleInst` / `include`），消费者按白名单取，P2 再做规范化映射。
+- 负：C 的边依赖预处理器实际展开（`expand_macros` 关时不产 include 边）；新增边种类须在
+  引擎注册表（`EDGE_KINDS`）与能力版本上显式扩展——这是刻意的（消费者契约稳定优先）。
 - 遗留：`[unit_graph]` 生产者注册表（每 kind 的匹配文件类/搜索路径/递归策略）与"自动推
   roots"（slang 式 unreferenced）留 P2；增量（块 7）不碰本图。
 
