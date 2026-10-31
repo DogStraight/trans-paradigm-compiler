@@ -1,7 +1,7 @@
 """structure.py — 结构提取的**文件层**：单元索引 + 依赖发现（引擎侧最小面）。
 
 定位：**通用设施**，不是检查专用——消费方包括各 postpass/插件（它们读引擎注入的
-`context.extra`：`module_index` / `inst_sites`，以及 `CTX_ELABORATION` 里的精化产物）。
+`context.extra`：`module_index` / `instantiation_sites`（`CTX_INSTANTIATION_SITES`），以及 `CTX_ELABORATION` 里的精化产物）。
 
 语言无关边界：本模块**零语言知识**。单元/实例化的规则名、节点字段、文件
 扩展名、关键字全部来自语言包声明的 `[structure] protocol`

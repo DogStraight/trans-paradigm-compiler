@@ -3,6 +3,10 @@
 "单元"的判定走**声明**（`[structure]` 的单元规则名 + 单元名字段），引擎不认
 "模块"；未声明单元规则 → 不产生单元原子（该语言包不做单元级精化）。
 
+**块 6（图化）**：传入 `UnitGraph` 时，文件原子 = 图节点、单元原子 = 图定义索引
+（`graph.definitions`）——精化基座只消费图，不再自行扫 `memo` / `collect_nodes`；
+未传图 = 旧的会话直读（兼容测试/降级路径）。
+
 原子键的选定：
 - `unit` → **单元名**（与既有 `module_index` 同键，行为对齐，便于过渡期对拍）；
 - `file` → 文件路径；
@@ -39,20 +43,52 @@ class _SessionLike(Protocol):
 
 
 class StructureAtomSource:
-    """按会话状态枚举原子（消费 `StructureCtx` 的会话状态与声明面）。"""
+    """按会话状态（可选：按单元图）枚举原子。
 
-    def __init__(self, ctx: _SessionLike) -> None:
+    Args:
+        ctx: 会话状态（`memo` / `module_index` / 声明面）。
+        graph: 单元图（块 6 起由 `ProjectChecker` 传入）——文件原子取图节点、
+            单元原子取图定义索引；`None` = 直读会话（兼容/降级）。
+    """
+
+    def __init__(self, ctx: _SessionLike, graph: Any = None) -> None:
         self._ctx = ctx
+        self._graph = graph
 
     def atoms(self, scope: str) -> list[Atom]:
         if scope == SCOPE_PROJECT:
             return [Atom(key="", node=None)]
         out: list[Atom] = []
+        if self._graph is not None:
+            if scope == SCOPE_UNIT:
+                return self._units_from_graph()
+            # 图节点是规范化的（normcase/abspath），memo 键保留原始大小写/相对形态；
+            # 原子键仍用 memo 原路径（行为对齐），只按规范化身份做匹配。
+            from analyzer.unit_graph import norm_node
+
+            memo_by_norm = {norm_node(p): p for p in self._ctx.memo}
+            for node in self._graph.nodes:
+                real = memo_by_norm.get(node)
+                if real is None:
+                    continue
+                fr = self._ctx.memo[real]
+                out.append(Atom(key=real, path=real, node=fr.ast))
+            return out
         for path, fr in self._ctx.memo.items():
             if scope == SCOPE_FILE:
                 out.append(Atom(key=path, path=path, node=fr.ast))
             elif scope == SCOPE_UNIT:
                 out.extend(self._units_of(path, fr.ast))
+        return out
+
+    # ── 单元枚举（图定义索引；节点从会话索引取） ──
+
+    def _units_from_graph(self) -> list[Atom]:
+        out: list[Atom] = []
+        for name, path in self._graph.definitions.items():
+            info = self._ctx.module_index.get(name)
+            node = getattr(info, "node", None) if info is not None else None
+            out.append(Atom(key=name, path=path, node=node))
         return out
 
     # ── 单元枚举（走声明） ──

@@ -20,7 +20,7 @@ Doc: analyzer/semantic_checks.md（跨文件语义检查）
 import os
 
 from core.define import GrammarRulesRegister, DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
-from core._protocol import CTX_ANALYZED_FILE, CTX_MACRO_INVOCATIONS
+from core._protocol import CTX_ANALYZED_FILE, CTX_INSTANTIATION_SITES, CTX_MACRO_INVOCATIONS
 
 from analyzer.structure import (
     FilePipeline,
@@ -131,9 +131,13 @@ class ProjectChecker:
         #    重复入口不会重复 parse）
         self._discover_all(entries)
 
-        # 1a) 精化（ADR-0019）：按语言包项列表建产物容器（文件 / 单元 / 项目作用域）。
+        # 1a) 单元图（块 6）：发现完成后边已齐备——精化基座从这里**消费**图
+        #     （原子/定义索引/实例点），图同时作为 check 的出口。
+        graph = build_unit_graph(self._ctx, entries)
+
+        # 1b) 精化（ADR-0019）：按语言包项列表建产物容器（文件 / 单元 / 项目作用域）。
         #     容器经 _external_extra 交给 postpass——**引擎不解释其中语义**。
-        self._elaborate()
+        self._elaborate(graph)
 
         # 2) 每个文件跑语义分析（postpass 拿到完整 module_index 与精化产物容器）
         self._analyze_all()
@@ -143,7 +147,7 @@ class ProjectChecker:
         return {
             "files": files,
             "modules": {n: i.file for n, i in self._ctx.module_index.items()},
-            "graph": build_unit_graph(self._ctx, entries).to_dict(),
+            "graph": graph.to_dict(),
             "exit_code": 1 if any_error else 0,
         }
 
@@ -203,17 +207,20 @@ class ProjectChecker:
             )
         return files, any_error
 
-    def _elaborate(self) -> None:
+    def _elaborate(self, graph=None) -> None:
         """跑语言包精化项列表（ADR-0019）：建产物容器。
 
         容器 `self._elab_extra[CTX_ELABORATION]`（条目名与值形状由插件定）经
         `_external_extra` 交付 postpass；未声明能力的语言包 → 不产生该键（降级）。
 
+        **块 6（图化）**：原子供源与服务句柄都带 `graph`——精化只消费图
+        （文件原子=图节点、单元原子=图定义索引、实例点=发现期产物），插件不再自建索引。
+
         ⚠ **引擎不消费任何产物**（P3 收口后）：所有产物都由语言包插件自己读容器
         （产出方与消费方同源）。故此处**不按角色位取任何东西**——角色的**机制**已整体退场。
         """
-        source = StructureAtomSource(self._ctx)
-        service = ElaborationService(self._ctx)
+        source = StructureAtomSource(self._ctx, graph)
+        service = ElaborationService(self._ctx, graph)
         self._elaborator.run(source, self._elab_extra, service)
 
     def _analyze(self, fr: FileResult) -> None:
@@ -231,7 +238,9 @@ class ProjectChecker:
             analyzer._checks_enabled = list(self._enabled_rules)
         # 跨文件上下文注入（analyze() 重建 context 后合并进 extra）
         analyzer._external_extra["module_index"] = self._ctx.module_index
-        analyzer._external_extra["inst_sites"] = fr.inst_sites
+        # 实例化点（块 6）：改用协议键注入（T3 命名接受项收口）；精化插件的同一
+        # 发现期产物走服务面 `instantiation_sites()`，两条消费面同源。
+        analyzer._external_extra[CTX_INSTANTIATION_SITES] = fr.inst_sites
         # 端口方向值集（插件规则消费：未连接端口/驱动负载判定；语言包声明）
         analyzer._external_extra["output_dirs"] = sorted(self._ctx.dirs("output_dirs"))
         analyzer._external_extra["input_dirs"] = sorted(self._ctx.dirs("input_dirs"))

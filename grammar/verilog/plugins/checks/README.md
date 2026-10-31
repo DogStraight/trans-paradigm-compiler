@@ -50,7 +50,7 @@
 |---|---|---|
 | 单符号名/形态（正则可表达） | **L1 声明式** | 零代码，注释驱动测试免费 |
 | 需符号表/跨节点走查 | **L2 handler** | 单符号上下文足够，写一个函数 |
-| 需跨文件/全工程联动 | **L2 postpass** | module_index/inst_sites 只在 postpass 可得 |
+| 需跨文件/全工程联动 | **L2 postpass** | module_index/instantiation_sites 只在 postpass 可得 |
 | 多次遍历/复杂分析 | **L2 postpass + 内部函数化** | 参考 width_check 分层 |
 
 **L1 和 L2 共用同一报告管道**（Diagnostic + related 链 + 统一抑制
@@ -135,7 +135,7 @@ requires = ["hier_member_table"]      # 可选：链内契约（依赖更早环�
 def run(analyzer, context) -> None:
     """签名：fn(analyzer, context) -> None。
     analyzer：遍历后状态（.all_symbols / ._ast）
-    context：.report + .extra（module_index / inst_sites / connections /
+    context：.report + .extra（module_index / instantiation_sites / connections /
              signal_graph / output_dirs / input_dirs / inout_dirs）
     """
     root = getattr(analyzer, "_ast", None)
@@ -150,7 +150,7 @@ def run(analyzer, context) -> None:
 | 键 | 内容 | 消费场景 |
 |---|---|---|
 | `module_index` | {模块名: ModuleInfo（ports/params/node）} | 实例化点 × 模块表比对 |
-| `inst_sites` | 本文件实例化点列表 | W101-103/WC001 |
+| `instantiation_sites`（`CTX_INSTANTIATION_SITES`） | 本文件实例化点列表 | W101-103/WC001 |
 | `connections` | 端口连接展开（层 2） | 未连接端口/多驱动 |
 | `signal_graph` | (模块, 信号) → {drivers, loads} | W105 多驱动 |
 | `output_dirs` / `input_dirs` / `inout_dirs` | 端口方向值集 | 驱动/负载分类 |

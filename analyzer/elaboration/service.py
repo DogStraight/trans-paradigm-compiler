@@ -36,6 +36,10 @@ class ServiceApi(Protocol):
         """本次运行已发现的文件：`[(路径, AST 根 | None)]`（顺序 = 发现序）。"""
         ...
 
+    def instantiation_sites(self, path: str) -> list[Node]:
+        """文件里的实例化点节点（引擎发现期的产物；插件不再自行 `collect_nodes`）。"""
+        ...
+
     def unit_node(self, unit_name: str) -> Node | None:
         """单元名 → 单元声明节点（未定义 → None）。"""
         ...
@@ -69,18 +73,46 @@ class ElaborationService:
     `render` 的语义**完全等同于** `StructureCtx.render_subtree`（strip；拿不到 → 空串，
     调用方按"不可判"保守处理）。此处只**转交**、不重新实现——故不引入新的异常处理点
     （渲染失败即空串是既有且已论证的设计，不是本次新增的吞异常）。
+
+    **块 6（图化）**：传入 `UnitGraph` 时，`files()` 按**图节点**过滤、`instantiation_sites`
+    直接取自引擎发现期产物（`FileResult.inst_sites`）——精化插件从此不自行 `collect_nodes`；
+    未传图 = 旧行为（兼容/降级）。
     """
 
-    def __init__(self, session: _SessionLike) -> None:
+    def __init__(self, session: _SessionLike, graph: Any = None) -> None:
         self._session = session
+        self._graph = graph
+        self._nodes: set[str] | None = None
+        if graph is not None:
+            from analyzer.unit_graph import norm_node
+
+            self._nodes = {norm_node(p) for p in graph.nodes}
 
     def render(self, node: Node) -> str:
         """AST 子树 → 文本（宽度表达式 / 参数默认值 / 连接信号等值文本）。"""
         return self._session.render_subtree(node)
 
     def files(self) -> list[tuple[str, Node | None]]:
-        """本次运行已发现的文件（`memo` 的顺序即发现序，层 3 依赖它保持确定性）。"""
-        return [(path, fr.ast) for path, fr in self._session.memo.items()]
+        """本次运行已发现的文件（`memo` 顺序 = 发现序，层 3 依赖它保持确定性）。
+
+        传了图时按**图节点**过滤（`memo` 可能含图外文件；顺序仍取 memo）。
+        """
+        if self._nodes is None:
+            return [(path, fr.ast) for path, fr in self._session.memo.items()]
+        from analyzer.unit_graph import norm_node
+
+        return [
+            (path, fr.ast)
+            for path, fr in self._session.memo.items()
+            if norm_node(path) in self._nodes
+        ]
+
+    def instantiation_sites(self, path: str) -> list[Node]:
+        """文件里的实例化点节点（引擎发现期按语言包 `module_inst_rule` 收集的产物）。"""
+        fr = self._session.memo.get(path)
+        if fr is None:
+            return []
+        return list(getattr(fr, "inst_sites", []) or [])
 
     def unit_node(self, unit_name: str) -> Node | None:
         """单元名 → 单元声明节点（未定义 → None）。"""
@@ -89,6 +121,15 @@ class ElaborationService:
 
     def unit_file(self, unit_name: str) -> str:
         """单元名 → 定义文件路径（未定义 → ""）。"""
+        if self._graph is not None:
+            hit = self._graph.definitions.get(unit_name)
+            if hit:
+                from analyzer.unit_graph import norm_node
+
+                for path in self._session.memo:
+                    if norm_node(path) == hit:
+                        return path
+                return hit
         info = self._session.module_index.get(unit_name)
         if info is None:
             return ""

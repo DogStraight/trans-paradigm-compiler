@@ -51,10 +51,20 @@ class UnitGraph:
     Args:
         roots: 入口文件（顺序保留；重复入口去重）。
         edges: `(kind, source, target)` 三元组（路径可为相对/绝对，构造时统一规范化）。
+        definitions: 可选，`{单元名: 定义文件}`（引擎 `module_index` 的同键视图；精化
+            基座按它枚举单元原子/取定义文件，见 `analyzer/elaboration/`）。
     """
 
-    def __init__(self, roots: list[str], edges: list[UnitEdgeTuple]) -> None:
+    def __init__(
+        self,
+        roots: list[str],
+        edges: list[UnitEdgeTuple],
+        definitions: dict[str, str] | None = None,
+    ) -> None:
         self.roots: list[str] = list(dict.fromkeys(norm_node(r) for r in roots))
+        self.definitions: dict[str, str] = {
+            name: norm_node(path) for name, path in (definitions or {}).items()
+        }
         self.edges: list[UnitEdge] = []
         seen: set[tuple[str, str, str]] = set()
         for kind, source, target in edges:
@@ -99,6 +109,7 @@ class UnitGraph:
             "roots": list(self.roots),
             "nodes": list(self.nodes),
             "edges": [e.to_dict() for e in self.edges],
+            "definitions": dict(self.definitions),
         }
 
 
@@ -119,4 +130,6 @@ def build_unit_graph(ctx, roots: list[str]) -> UnitGraph:
     # 包含边：kind = 指令在语言包里的关键字（preprocessor 扫描时记录）
     for fr in ctx.memo.values():
         tuples.extend(fr.include_edges)
-    return UnitGraph(roots, tuples)
+    # 单元定义索引（name → 定义文件）：精化基座据此枚举单元原子（与 `module_index` 同键）
+    definitions = {name: info.file for name, info in ctx.module_index.items()}
+    return UnitGraph(roots, tuples, definitions)

@@ -20,7 +20,7 @@
 | 3 | **片段模式 P0** | ✅ 独立 `tpc fragment` + 显式记号 + bytes identity 四例 + `always @(*)` 规则 + dry-run diff；10 单测、真实语料 259 文件 0 变化；`gap-fragment-mode.md`（#70） |
 | 4 | **片段模式 P1** | ✅ 全域岛 / 零声明面 / 无记号（`islands/` 五模块 + `tpc fragment`；ADR-0026）；单测 10、真实语料 12 文件 0 crash/0 non-idem、lint 33/0/0 |
 | 5 | **unit graph 内置能力** | ✅ `report.graph`（多入口 ⇒ 多根森林；C include 边 / V 实例化边，kind = 配置数据；`inverse` 反查）+ CLI `tpc check <file>...` 多入参（ADR-0027）；新测试 4、analyzer+preprocessor 738 passed、A/B 0/144、benchmark 53 不变；P2 生产者注册表/自动推 roots 留档 |
-| 6 | **精化基座 graph 化** | ⏳ elaboration 只消费 graph 原子/边；T3 接受项 `inst_sites` 命名关闭 |
+| 6 | **精化基座 graph 化** | ✅ 精化只消费 `UnitGraph`（文件原子=图节点 / 单元原子=图定义索引 / `files()` 按图过滤 / `instantiation_sites()` 供实例点；插件删自建 `collect_nodes`）；T3 接受项 `inst_sites` 收口为 `CTX_INSTANTIATION_SITES`（ADR-0028）；analyzer 364、verilog+check_accuracy 406 passed、A/B 0/144、benchmark 53、lint 33/0/0 |
 | 7 | **增量解析/check** | ⏳ 单函数编辑重解析 ≥5x；增量诊断 = 全量结果；编辑器接口 |
 | 8 | **诊断粒度** | ✅ 块内 2 坏语句 → 2 条位置正确 `phase-statement`（#71；父容器粗诊断让位）；`test_c_block_diagnostics.py` |
 | 9 | **渲染/注释遗留** | ⏳ #72 调查：LineSuffix 吞 token 根因=flatten；强制 group broken 修 C 但 yaml 往返回归，已回退；需源行感知方案 |
@@ -28,17 +28,17 @@
 | 11 | **吞吐/基准** | ✅ 实测基线重锚（fuzz 5 → 12 iter/s 单进程 / 32 iter/s 8 worker；配置声明缓存 + parser 表复用）+ **共识下限进 CI**：`benchmark_baseline.json` + `test_benchmark_baseline.py`（verilator 53/18/343；只锚共识下限、缺 oracle 即 skip、解析失败=0）；阶段级 fuzz 留 P2.3 backlog（非阻塞） |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 
-**当前 8 / 12**。基线锚：A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、
+**当前 9 / 12**。基线锚：A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、
 `feature_sites compare` ✓（散点已收敛，基线已刷新）、verilator 共识 53；全量复现 `pytest tests/`
 （未通过数记 CHANGELOG 当轮条目）。
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 6 精化基座 graph 化——elaboration 只消费 unit graph 的原子/边（不再各插件
-  自建文件索引）；T3 接受项 `inst_sites` 命名关闭。块 9（#72 源行感知）按触发条件插入。
-- **待验证假设**：`inst_sites` / `module_index` 改由 `graph` 供源后，插件侧语义等价（A/B 逐字节）；
-  graph 边不足以表达"跨文件精化原子"时，需在 `unit_graph` 加语言无关边种类而非插件私有索引。
-- **台账**：块 1/2/3/4/5/8/10/11 ✅；块 9 ⏳（#72）、6/7 未开工；主线 2 当前 8/12。
+- **意图**：块 7 增量解析/check——单函数编辑重解析 ≥5x、增量诊断 = 全量结果、编辑器接口；
+  块 9（#72 源行感知）按触发条件插入；块 2 性能后续（失败记忆化/Node 协议）按常驻测试面排期。
+- **待验证假设**：`UnitGraph` + 图化后的发现/精化面足以承载"重解析受影响子集"（不需要把
+  文件层索引再拆一遍）；失败记忆化需先重构 `sibling_counter` 计数语义（ROADMAP P2.3 记）。
+- **台账**：块 1/2/3/4/5/6/8/10/11 ✅；块 9 ⏳（#72）、7 未开工；主线 2 当前 9/12。
 
 
 ## 估算依据（对照锚，可复核）

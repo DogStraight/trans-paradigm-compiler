@@ -38,7 +38,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from core.define import CHILDREN_FIELD, Node, collect_nodes, iter_nodes, unwrap_optional
+from core.define import CHILDREN_FIELD, Node, iter_nodes, unwrap_optional
 from core.errors import ConfigError
 from core.token_protocol import IDENT_RE
 
@@ -702,7 +702,8 @@ def _backfill_body_port_node(
 #   本项是连接表的**唯一来源**（消费方经容器 + `CTX_ANALYZED_FILE` 取本文件切片）。
 
 # ── 本语言包的实例化形态（原 `[structure]` / `[structure.fields]` 声明） ──
-_INST_RULE = "ModuleInst"
+# 实例规则名不再由本插件自行收集：实例化点由引擎发现期按 `[structure]
+# module_inst_rule` 收集，经服务面 `instantiation_sites()` 提供（块 6：消费图化设施）。
 _INST_NAME = "inst_name"
 _INST_CONNECTS = "ports"  # 连接列表字段（[structure.fields].connects 的值）
 _PORT_NAME = "port_name"
@@ -712,15 +713,15 @@ _CONN_VALUE = "value"
 def solve_connections(hits: list[Node], atom: Atom, ctx: SolveCtx) -> dict | None:
     """文件内实例化点的连接展开表（层 2）。
 
-    本项不声明定位（作用域 = `file`）→ `hits = [文件 AST 根]`；实例化点按**声明的实例
-    规则名**自行收集（`collect_nodes`，与引擎 `FileResult.inst_sites` 同源）。
+    本项不声明定位（作用域 = `file`）→ `hits = [文件 AST 根]`；实例化点取自**服务面**
+    `instantiation_sites()`（引擎发现期产物，块 6：插件不再自建索引/自行 `collect_nodes`）。
     """
     root = hits[0] if hits else None
-    if not isinstance(root, Node):
+    if not isinstance(root, Node) or ctx.service is None:
         return None
     conns = [
         _elaborate_connection(site, atom.path, ctx)
-        for site in collect_nodes(root, _INST_RULE)
+        for site in ctx.service.instantiation_sites(atom.path)
     ]
     return {_PROVIDES_CONNECTIONS: conns}
 

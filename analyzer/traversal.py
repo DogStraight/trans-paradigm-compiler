@@ -54,7 +54,7 @@ class AnalysisTraversal:
         self._scope_name_node_ids: set[int] = set()
         # 外部注入的跨文件状态（ProjectChecker 在 analyze() 前写入，
         # analyze() 创建新 context 后合并进 extra）：原语/postpass 通过
-        # context.extra 读取（如 module_index / inst_sites）。
+        # context.extra 读取（如 module_index；实例关系走精化服务面/单元图，块 6）。
         self._external_extra: dict[str, Any] = {}
         # 显式规则启用集（默认关闭的规则——如 NC 族——由测试/评测注入，
         # checks.py 经 getattr 读取）：None = 全部规则默认开关生效

@@ -90,6 +90,9 @@
   设计型（**已落地**）：`decisions/0027-unit-graph-multi-root.md`
   （unit graph = 多入口多根森林：边由发现/预处理阶段产、kind 是配置数据；
   `tpc check` 多入参、`--json` 出 `graph`）。
+  设计型（**已落地**）：`decisions/0028-elaboration-consumes-unit-graph.md`
+  （精化只消费 unit graph：原子/定义索引/实例点都从图与服务面来；`inst_sites`
+  命名收口为 `CTX_INSTANTIATION_SITES`）。
 - **长期暂缓项/触发条件（策略）** → `decisions/` 的**策略型 ADR**（"长期项不列待办" +
   「结论/为什么不做/触发条件」表，现存 `decisions/0021-long-term-deferral-strategy.md`）；
   **不进 TODO**——触发出现时按体量取回 TODO/ROADMAP，

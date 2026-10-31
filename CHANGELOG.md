@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **精化消费单元图 + `inst_sites` 命名收口（块 6 ✅，2026-10-31）**：`ProjectChecker.check()`
+  先建 `UnitGraph` 再跑精化——`StructureAtomSource(ctx, graph)`（文件原子=图节点、单元原子=
+  图定义索引 `definitions`）、`ElaborationService(ctx, graph)`（`files()` 按图过滤、
+  `unit_file()` 取图定义、新增 `instantiation_sites(path)`）；Verilog `solve_connections`
+  改走服务面（删本地 `_INST_RULE`/`collect_nodes`）；postpass 的裸字符串 `inst_sites` 收口为
+  `core/_protocol.CTX_INSTANTIATION_SITES`（`width_check`/`inst_check` 同步）。ADR-0028。
+  · 删除测试：`test_elaboration_consumes_graph`（图外文件不得进入精化原子/服务视图）。
+  · 证据：analyzer 364、verilog+check_accuracy 406 passed；A/B 0/144；benchmark 53
+  （53/18/343，parse_fail 0）；lint 33/0/0。
 - **unit graph：多入口多根森林（块 5 ✅，2026-10-31）**：`ProjectChecker.check([...])` 返回
   `report["graph"] = {roots, nodes, edges}`——多入口 ⇒ 多根森林（共享节点去重，`inverse` 可
   多根）；边 kind 来自**配置数据**：C 的包含边取指令关键字、V 的实例化边取

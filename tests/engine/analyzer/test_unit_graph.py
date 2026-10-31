@@ -96,3 +96,45 @@ def test_cli_check_accepts_multiple_entries():
     data = json.loads(proc.stdout)
     assert len(data["graph"]["roots"]) == 2, data["graph"]["roots"]
     assert data["graph"]["edges"], "CLI 多入口的图至少应有实例化边"
+
+
+class _FakeSession:
+    """精化供源的最小会话替身（memo / module_index / 渲染 / 声明面）。"""
+
+    def __init__(self, memo: dict) -> None:
+        self.memo = memo
+        self.module_index: dict = {}
+
+    def rule(self, key: str) -> str:
+        return ""
+
+    def field(self, key: str) -> str:
+        return ""
+
+    def render_subtree(self, node) -> str:
+        return ""
+
+
+def test_elaboration_consumes_graph(tmp_path):
+    """块 6：精化原子/服务面消费图——图外文件不得进入文件原子/服务视图。"""
+    from types import SimpleNamespace
+
+    from analyzer.elaboration import SCOPE_FILE, ElaborationService, StructureAtomSource
+    from analyzer.unit_graph import UnitGraph
+
+    a = str(tmp_path / "a.v")
+    b = str(tmp_path / "b.v")
+    (tmp_path / "a.v").write_text("module a; endmodule\n", encoding="utf-8")
+    (tmp_path / "b.v").write_text("module b; endmodule\n", encoding="utf-8")
+    memo = {a: SimpleNamespace(ast=None, inst_sites=[]),
+            b: SimpleNamespace(ast=None, inst_sites=[])}
+    session = _FakeSession(memo)
+    graph = UnitGraph([a], [], {})  # 图只含 a（b 是"已发现但不在图里"的文件）
+
+    atoms = StructureAtomSource(session, graph).atoms(SCOPE_FILE)
+    assert [os.path.basename(atom.key) for atom in atoms] == ["a.v"], atoms
+    assert [os.path.basename(p) for p, _ in ElaborationService(session, graph).files()] == ["a.v"]
+
+    # 不传图 = 旧行为（直读会话），证明差异来自"消费图"
+    atoms_plain = StructureAtomSource(session).atoms(SCOPE_FILE)
+    assert {os.path.basename(atom.key) for atom in atoms_plain} == {"a.v", "b.v"}

@@ -13,7 +13,7 @@
 import os
 import re
 
-from core._protocol import CTX_ANALYZED_FILE, CTX_ELABORATION
+from core._protocol import CTX_ANALYZED_FILE, CTX_ELABORATION, CTX_INSTANTIATION_SITES
 from core.define import Node, iter_nodes, unwrap_optional
 from grammar.verilog.plugins.checks._shared import is_parameterized, port_table
 
@@ -23,7 +23,7 @@ _LITERAL_RE = re.compile(r"^\d+'\s*[hdb]?[0-9a-fA-F_]*$")
 def run_inst_check(analyzer, context) -> None:
     """postpass 入口：本文件实例化点 × 全工程模块表 联动检查。"""
     module_index = context.extra.get("module_index", {}) or {}
-    inst_sites = context.extra.get("inst_sites", []) or []
+    inst_sites = context.extra.get(CTX_INSTANTIATION_SITES, []) or []
     # 层 2 连接展开来自**本语言包的精化产物**（ADR-0019）：本插件的 `connections` 项按
     # **文件**给出 `{路径: [连接...]}`，而 postpass 是**逐文件**跑的 → 用引擎给的"当前
     # 分析文件"取切片（引擎不再按文件注入 `connections`；层 2 实现已删）。

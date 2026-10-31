@@ -14,6 +14,7 @@
 |------|--------|
 | `contract.py` | 契约与**声明解析**：`Locator`（声明式定位：规则名）/ `ElaborationItem`（项）/ `ElaboratorSpec`（能力面）+ `parse_spec` 全字段 fail-fast 校验（未知键 / 重名 / 容器键跨项重复 / `depends_on` 自引用与成环 / `locator` 与 `locator_fn` 二选一） |
 | `driver.py` | **驱动器**（引擎侧唯一执行体，语言无关）：按拓扑序驱动「原子枚举 → 定位 → 求解 → 归位 → 强方向核验」；未声明能力 → 全空降级。含 `Atom`（文件 / 单元 / 工程）/ `AtomSource`（原子供源协议）/ `SolveCtx` / `ElaborationResult` |
+| `atoms.py` / `service.py` | **块 6 图化**：原子供源与服务句柄都带 `UnitGraph`——文件原子 = 图节点、单元原子 = 图定义索引、`files()` 按图过滤、`unit_file()` 取图定义、`instantiation_sites(path)` 供发现期实例点（插件不再自建索引） |
 | `loader.py` | **读取点**：`load_elaborator_spec(rules_dir)` 按语言包作用域查找能力（与 `preprocessor/macro_policy.py` 同款）；未声明 → `None` = 降级 |
 
 ## 契约要点
@@ -29,7 +30,7 @@
 ## 接线（已完成）
 
 唯一调用点是 `analyzer/checker.py::ProjectChecker`：构造期 `Elaborator(load_elaborator_spec(...))`，
-`_elaborate()` 在发现之后运行项列表，把产物容器注入 `context.extra[CTX_ELABORATION]`，
+`_elaborate(graph)` 在**建图之后**运行项列表（块 6：精化只消费图），把产物容器注入 `context.extra[CTX_ELABORATION]`，
 并注入 `CTX_ANALYZED_FILE`（**文件作用域产物的切片依据**——后处理逐文件跑，
 语言包靠它取对本文件的产物）。
 

@@ -29,7 +29,7 @@ analyzer 遍历（原语按 [RuleName.analyzer] 触发）       ← 已有（che
           │
           └─ 统一报告管道（Diagnostic + related 链）     ← 已实现（P1）
                 └─ 跨文件联动（ProjectChecker 注入
-                    module_index / inst_sites）          ← 已实现（inst_check
+                    module_index / instantiation_sites）          ← 已实现（inst_check
                     插件：W101/W102/W103/WC001）
 ```
 
@@ -143,7 +143,7 @@ def run(analyzer, context) -> None:
   组件标志（纯 postpass 插件如 inst_check 不因无 handlers 被丢弃）。
 - 收集阶段沿用现有原语副作用模式（`context.extra` 传递临时状态）。
 - **跨文件扩展**（ADR-0005）：ProjectChecker 在 analyze() 前把
-  `module_index`（全工程模块表）/`inst_sites`（本文件实例化点）写入
+  `module_index`（全工程模块表）/`instantiation_sites`（本文件实例化点，协议常量 `CTX_INSTANTIATION_SITES`）写入
   `AnalysisTraversal._external_extra`，analyze() 合并进 context.extra——
   插件 postpass 可直接做跨文件联动比对。
 
@@ -209,7 +209,7 @@ kind 分发的 L1 规则；`requires` 不得含 `scope`，加载期 fail-fast）
 
 | 键 | 形状 | 来源 / 消费先例 |
 |---|---|---|
-| `module_index` / `inst_sites` | 跨文件模块表 / 本文件实例化点 | ProjectChecker（ADR-0005） |
+| `module_index` / `instantiation_sites`（`CTX_INSTANTIATION_SITES`） | 跨文件模块表 / 本文件实例化点 | ProjectChecker（ADR-0005；块 6 收口命名） |
 | `analyzed_file`（`CTX_ANALYZED_FILE`） | 当前文件路径 | 插件按文件取精化产物切片 |
 | `macro_invocations`（`CTX_MACRO_INVOCATIONS`） | `[{name, slots, single_empty, params, line, column}]`（**原始源**坐标；`params` 已按定义时间线取**调用点时点**值） | `map_invocations_to_source`（`expand_tokens` 的 `out_invocations` + `macro_timeline`）；C 包 `checks/macro_args/`（MAC001 实参个数）先例 |
 

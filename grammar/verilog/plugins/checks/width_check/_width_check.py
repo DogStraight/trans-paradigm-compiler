@@ -13,7 +13,7 @@
 
 from typing import Any, Callable
 
-from core._protocol import CTX_ELABORATION
+from core._protocol import CTX_ELABORATION, CTX_INSTANTIATION_SITES
 from core.define import Node, iter_nodes, unwrap_optional
 from grammar.verilog.plugins.checks._shared import (
     _IntExprParser,
@@ -385,7 +385,7 @@ def _site_module_map(analyzer) -> dict[int, str]:
 def _check_port_connections(analyzer, context, table: dict) -> None:
     """B3：逐实例化点检查端口连接宽度（W201）。"""
     module_index = context.extra.get("module_index", {}) or {}
-    inst_sites = context.extra.get("inst_sites", []) or []
+    inst_sites = context.extra.get(CTX_INSTANTIATION_SITES, []) or []
     site_module = _site_module_map(analyzer)
     for site in inst_sites:
         _check_site_connections(context, site, module_index, table, site_module)
@@ -497,7 +497,7 @@ def _check_conn_width(context, mod_name: str, port, val, table: dict,
 def _check_inst_internal_widths(context, table: dict) -> None:
     """B4：实例化点覆盖参数 → 目标模块内部赋值截断重算（W201）。"""
     module_index = context.extra.get("module_index", {}) or {}
-    inst_sites = context.extra.get("inst_sites", []) or []
+    inst_sites = context.extra.get(CTX_INSTANTIATION_SITES, []) or []
     for site in inst_sites:
         mod_name = node_text(getattr(site, "module_name", None))
         if not mod_name:

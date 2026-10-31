@@ -8,7 +8,7 @@
 # 数据来源（全部已就绪，缺的只是解析链）：
 #     module_index —— 模块端口表（宽度表达式/方向）+ 参数默认值 +
 #                     ModuleInfo.node（可走查内部成员声明）
-#     inst_sites 形态 —— 本文件 ModuleInst（inst_name/module_name/params）
+#     instantiation_sites 形态（CTX_INSTANTIATION_SITES）—— 本文件 ModuleInst（inst_name/module_name/params）
 #     参数合并 —— B3 三层（调用者参数 → 模块默认 → 实例覆盖，最高优先）
 #
 # 服务方式：run_hier_check 建当前文件 per-module 实例表 + 节点→模块映射

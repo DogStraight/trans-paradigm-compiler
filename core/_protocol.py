@@ -66,6 +66,13 @@ CTX_MACRO_INVOCATIONS = "macro_invocations"
 这是**语言无关的展开期事实**：引擎只记录"谁在哪儿被调用、给了几槽实参"，
 "个数合不合规"属语言包 check 族的判定。parse 失败的文件也能拿到（展开先于解析）。"""
 
+CTX_INSTANTIATION_SITES = "instantiation_sites"
+"""**本文件实例化点节点**列表（`context.extra` 中的 key；块 6 收口 T3 命名接受项）。
+
+引擎发现期按语言包 `[structure] module_inst_rule` 收集（`FileResult.inst_sites`）；
+postpass 插件从此键读取（不再用裸字符串 `inst_sites`）。精化基座的插件走服务面
+`instantiation_sites()`（同一发现期产物），check 插件走本协议键——两条消费面同源。"""
+
 # ── 组件元数据 key（component.toml 字段名）──
 META_NAME = "name"
 META_LANG = "lang"
