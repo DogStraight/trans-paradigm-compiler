@@ -2653,3 +2653,14 @@ HN：[C semantics 48 分](https://news.ycombinator.com/item?id=25395934) /
 
 
 
+
+## 增量解析实现调研（tree-sitter 源码口径，2026-10-31）
+
+- 🔥 **tree-sitter 无"改动占比阈值"**：核心靠 `ts_tree_edit` 给受影响节点置 `has_changes`
+  + `reusable_node` 按 byte_offset 对齐做结构性复用；大改动自然退化为接近全量。所谓"改动超过
+  X% 就别增量"是产品/工程启发式，不是实现事实（`lib/src/parser.c` 常量只有 GLR 版本数/错误代价）。
+- 🔥 **`ts_tree_get_changed_ranges` 是消费者 API**：事后比较新旧树返回"祖先链变化"区间（可能略大），
+  供高亮/查询失效——不是解析决策。可借鉴为：增量解析结果要能输出变更区间，供 check/渲染收缩范围。
+- 💡 `ts_subtree_edit` 的失效判据 = 字节区间与节点范围**求交**（不是比例）；编辑后的节点只平移。
+- 参考：`parser.c` / `subtree.c` / `reusable_node.h` / `tree.c` / `api.h`（tree-sitter 仓库）；
+  ECOOP 2026《Incremental parsing with Tree-sitter》。

@@ -39,6 +39,9 @@ class ReparseResult:
     tokens_reparsed: int
     fallback: str = ""
     level: str = "full"  # fragment / unit / full / none
+    #: 变更区间的 token 坐标（新 token 列表）；`None` = 无前一轮/未计算。
+    #: 对应 tree-sitter `changed_ranges` 的粒度提示：下游增量失效/重渲染可据此缩小范围。
+    changed_range: tuple[int, int] | None = None
 
 
 def _token_key(tok) -> tuple[str, str]:
@@ -87,10 +90,12 @@ def _max_change_ratio(total_tokens: int) -> float:
     return _RATIO_MIN + (_RATIO_MAX - _RATIO_MIN) * ramp
 
 
-def _fallback(parser, tokens: list, reason: str) -> ReparseResult:
+def _fallback(
+    parser, tokens: list, reason: str, changed_range: tuple[int, int] | None = None
+) -> ReparseResult:
     """回退：重解析全量；`ast` 即全量结果，语义与直接 parse 等价。"""
     total = len(tokens)
-    return ReparseResult(parser.parse(tokens), total, total, reason, "full")
+    return ReparseResult(parser.parse(tokens), total, total, reason, "full", changed_range)
 
 
 def _locate_chain(ast: Node, pfx: int, old_end: int) -> list[_Item]:
@@ -152,21 +157,22 @@ def incremental_reparse(
     pfx, old_end, new_end = _diff(old_tokens, new_tokens)
     if pfx == old_end and new_end == pfx:
         return ReparseResult(old_ast, total, 0, "", "none")  # 无变更：复用同一 AST
+    changed_range = (pfx, new_end)
     if pfx == 0 or old_end >= len(old_tokens):
-        return _fallback(parser, new_tokens, "full:edge-change")
+        return _fallback(parser, new_tokens, "full:edge-change", changed_range)
 
     chain = _locate_chain(old_ast, pfx, old_end)
     if not chain:
-        return _fallback(parser, new_tokens, "full:unit-not-found")
+        return _fallback(parser, new_tokens, "full:unit-not-found", changed_range)
     # 大改动闸门：最细候选（chain[-1]）的修改片占比超过阈值 → 回退全量
     _, _, _, frag_start, frag_end = chain[-1]
     frag_tokens = frag_end + (total - len(old_tokens)) - frag_start
     if frag_tokens / max(total, 1) > _max_change_ratio(total):
-        return _fallback(parser, new_tokens, "full:too-large")
+        return _fallback(parser, new_tokens, "full:too-large", changed_range)
     delta = total - len(old_tokens)
     for item, level in ((chain[-1], "fragment"), (chain[0], "unit")):
         spliced = _splice_node(parser, item, new_tokens, level, delta)
         if spliced is not None:
             _, reparsed = spliced
-            return ReparseResult(old_ast, total, reparsed, "", level)
-    return _fallback(parser, new_tokens, "full:subparse-failed")
+            return ReparseResult(old_ast, total, reparsed, "", level, changed_range)
+    return _fallback(parser, new_tokens, "full:subparse-failed", changed_range)

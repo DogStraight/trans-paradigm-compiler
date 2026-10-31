@@ -123,8 +123,39 @@
 
 - 依据（作者 + 模型估算）：修改片超过文件 **~20–30%** 时，增量收益被摊薄、并树/一致性风险
   上升，不如直接全量重解析。**阈值不钉死**：小文件更保守（固定开销占比大），大文件放到 30%。
+  注意：**这不是 tree-sitter 的实现事实**（其核心无改动占比阈值，见下节调研）——这是我们的
+  产品级护栏，按"普遍次优"取舍。
 - 实现：`_max_change_ratio(total) = 0.20 + 0.10 * min(1, total/20000)`（20k tokens 到顶 30%）。
   闸门 = 最细候选片段的 token 占比；超过 → `full:too-large` 回退全量（结果 = 全量）。
 - 已知取舍：这是**启发式**（不是成本模型），按"普遍次优"设计；精确成本模型
   （parse/splice/diff 实测常数）留长期目标。tv80 实测：1.5% 编辑 67x、3.2% 编辑 23x、
   ~46% 合成用例回退全量（`test_large_change_falls_back_to_full`）。
+
+## 调研：tree-sitter 的增量实现与阈值（2026-10-31，源码核对）
+
+- **结论：tree-sitter 核心没有"改动占比阈值"**。`parser.c` 里没有按编辑大小的比例判断；
+  常量只有 GLR 版本数（`MAX_VERSION_COUNT`/`MAX_VERSION_COUNT_OVERFLOW`）、错误代价
+  （`MAX_COST_DIFFERENCE`）等，与编辑大小无关。
+- **机制是结构性复用**：
+  - `ts_tree_edit`（`lib/src/subtree.c::ts_subtree_edit`）按**字节区间与节点范围求交**，
+    对受影响的节点置 `has_changes` 并重塑 padding/size；编辑区间之后的节点只平移、不清空。
+  - 再解析时（`ts_parser_parse(old_tree, input)`）用 `reusable_node` 按 **byte_offset 对齐**
+    遍历旧树；`ts_parser__reuse_node` 只在（位置相等 ∧ 无 `has_changes` ∧ 非 error/missing/fragile
+    ∧ 外部扫描器状态一致 ∧ 无 included-range 差异）时整棵子树复用，否则下探/跳过/重新词法解析。
+  - 大改动 ⇒ 大多数节点带 `has_changes` ⇒ 复用失败 ⇒ **自然退化为接近全量**（还多付复用尝试的
+    簿记开销）。这正是"大改不如全量"的机制来源，但**没有显式比例开关**。
+- **`ts_tree_get_changed_ranges`** 是**事后**比较新旧树（双游标，`get_changed_ranges.c`），返回
+  "祖先链发生变化"的区间（官方注明可能比精确变更区略大），供高亮/查询等下游做失效——
+  它是**消费者 API**，不是解析决策阈值。
+- **对我们的取舍**：
+  - 我们保留 `_max_change_ratio`（产品护栏，明确标注非 tree-sitter 对标）；它防的是并树
+    一致性风险与"增量收益被摊薄"，不是复刻 tree-sitter。
+  - 借鉴其 `changed_ranges`：`ReparseResult.changed_range` 输出变更 token 区间（新 token 坐标），
+    供后续 check 增量失效/重渲染缩小范围（对应"编辑器接口"）。
+  - 借鉴其"不可复用节点"规则：我们已用保守回退（多单元/首尾/符号门控/子集解析失败→全量）
+    覆盖 error/缺口的同类风险。
+- 来源：[`lib/src/parser.c`](https://github.com/tree-sitter/tree-sitter/blob/master/lib/src/parser.c)、
+  [`lib/src/subtree.c`](https://github.com/tree-sitter/tree-sitter/blob/master/lib/src/subtree.c)、
+  [`lib/src/reusable_node.h`](https://github.com/tree-sitter/tree-sitter/blob/master/lib/src/reusable_node.h)、
+  [`lib/src/tree.c`](https://github.com/tree-sitter/tree-sitter/blob/master/lib/src/tree.c)、
+  [`api.h`](https://github.com/tree-sitter/tree-sitter/blob/master/lib/include/tree_sitter/api.h)。

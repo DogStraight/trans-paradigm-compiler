@@ -218,3 +218,16 @@ def test_large_change_falls_back_to_full():
     assert res.fallback == "full:too-large", (res.level, res.fallback)
     assert res.level == "full"
     assert _fingerprint(res.ast) == _fingerprint(parser.parse(new_tokens))
+
+def test_changed_range_reports_edit_span():
+    """`changed_range` 给出变更 token 区间（对标 tree-sitter changed_ranges 的粒度提示）。"""
+    import parser.incremental as inc
+
+    lexer, parser = _load()
+    src = _padded_module("  wire target;")
+    old_tokens = lexer.tokenize(src)
+    old_ast = parser.parse(old_tokens)
+    new_tokens = lexer.tokenize(src.replace("wire target;", "wire target2;"))
+    res = incremental_reparse(parser, old_tokens, new_tokens, old_ast)
+    pfx, _old_end, new_end = inc._diff(old_tokens, new_tokens)
+    assert res.changed_range == (pfx, new_end)

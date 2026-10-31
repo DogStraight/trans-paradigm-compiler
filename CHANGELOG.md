@@ -12,6 +12,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   · tv80：语句级编辑重解析 **329/22,604 tokens**，**1540ms → 22.9ms（67x）**；模块级 23x；
   增量 AST 与全量逐节点相等。含注释片段实测等价（采样 5/5）走片段级，注释锚跨边界无形式
   保证，由等价测试盯住。8 测试。
+  · 调研（tree-sitter 源码）：核心**无**改动占比阈值，靠 `has_changes` + `reusable_node` 结构复用；
+  我们的 `_max_change_ratio` 明确标注为产品护栏（非对标）。借鉴 `changed_ranges` 增
+  `ReparseResult.changed_range`（变更 token 区间，供下游失效/重渲染）。
   · 大改动闸门：修改片占比 > `20%→30%`（随文件规模放开，`_max_change_ratio`）→ `full:too-large`
   明确回退全量——增量收益被摊薄时不做增量（经验次优；精确成本模型留长期目标）。9 测试。
   · 边界：增量 check 语义层（跨文件失效传播/常驻 watch）= v0.2 P3.4。
