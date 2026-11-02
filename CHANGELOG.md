@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **行尾注释源行感知修复（块 9 ✅，2026-11-03，#72）**：`renderer/doc.py` 的 `flatten`
+  不再把 `line_ending=True` 的 `LineSuffix` 文本化（保持 pending）；`_resolve_suffix*` 增
+  `in_flat`，**仅 flat 支**在落点把软换行升 `HardBreak`——行终止注释必须终结所在行，flat
+  不再吞后续 token；broken 支不变（yaml 断行布局零变化，上次全局强制 broken 的回归不再现）。
+  删死函数 `_resolve_suffix_union`（Union 分支已内联）。
+  · 判据（改前红）：C `struct S { int // c` + 换行 + `x; };` 改前 `int // c x;`（丢 x、二遍
+  结构不等）→ 改后 `int x; // c` 且幂等；Doc 级 flat 支改前 `a // note b` → `a // note` 换行 `b`
+  （块注释仍内联）。
+  · 回归：yaml nightly 往返结构相等；yaml 111、C fidelity 104、渲染+注释/e2e **697 passed/7 skipped**；
+  A/B **0/144**；Fill 路径同类残洞保留（生产布局未用 fill+line_suffix）。
 - **增量重解析升级到片段级（块 7 P2，2026-10-31）**：`Parser.parse_fragment(tokens, rule_name)`
   ——按 AST 节点名（配置派生）把 token 子集解析成子树；`incremental_reparse` 改三级：
   **片段级**（最深 span 节点）→ 单元级 → 全量，`ReparseResult.level` 记录层级。

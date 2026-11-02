@@ -45,14 +45,29 @@ class TestLineSuffixDoc:
         assert layout(doc) == "a // x // y\nb"
 
     def test_suffix_in_flat_group(self):
-        """group flat 模式：LineSuffix 直接显示（跟在行尾）。"""
+        """group flat 模式（行终止注释，#72）：不得就地并入后续 token——落点升硬换行。"""
         from renderer.doc import group
 
         doc = group(
             Concat([Text("a"), LineSuffix(" // note"), Line(), Text("b")])
         )
-        # flat：'a // note b'（suffix 就地，line 变空格）
-        assert layout(doc, 80) == "a // note b"
+        assert layout(doc, 80) == "a // note\nb"
+
+    def test_block_comment_stays_inline_in_flat_group(self):
+        """group flat 模式（块注释 line_ending=False）：不结束行，仍就地显示。"""
+        from renderer.doc import group
+
+        doc = group(
+            Concat(
+                [
+                    Text("a"),
+                    LineSuffix(" /* c */", line_ending=False),
+                    Line(),
+                    Text("b"),
+                ]
+            )
+        )
+        assert layout(doc, 80) == "a /* c */ b"
 
     def test_suffix_in_broken_group(self):
         """group broken 模式：suffix 锚定行尾。"""

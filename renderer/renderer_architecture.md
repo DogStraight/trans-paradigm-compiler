@@ -71,12 +71,12 @@ Nest/Align/Prefix 上提**（Prettier lineSuffix 是全局缓冲，不是按层�
 token 落进注释（C 包 `enum` 尾逗号 / `struct` / 初始化 / 带声明符形态实测丢
 token）；行终止注释必须终结所在行。
 
-**残洞（2026-10-19 审计登记，未修）**：pending 相等（通常都为空）时仍保留 Union；
-flat 选择把 `Line` 渲染成空格、`Fill` 逐项就地冲刷 ⇒ 行终止注释仍可能落行中
-（`group(Concat([Text("a"), LineSuffix(" // n"), Line()]))` → `a // n b`，既有
-`test_suffix_in_flat_group` 期望即此形态）。现有 C/verilog/yaml 布局未用
-`fill`/`line_suffix` 原语 ⇒ 未触发；彻底修法 = `flatten` 不把 `line_ending=True`
-的 LineSuffix 文本化（审计原型已验证，代价：改 flat 刻意行为 + 1 条既有期望）。
+**flat 支行终止注释（#72，2026-11-03 已修）**：`flatten` 不再把 `line_ending=True`
+的 LineSuffix 文本化（保持 pending）；`_resolve_suffix*` 的 `in_flat` 在落地时把软换行
+落点升 `HardBreak` ⇒ flat 支渲染 `group(Concat([Text("a"), LineSuffix(" // n"), Line()]))`
+为 `a // n\nb`（改前吞 `b` 为 `a // n b`）。broken 支语义不变（yaml 断行布局零变化）。
+**Fill 残洞仍在**：Fill 内逐项就地冲刷，行终止注释仍可落行中；生产 C/verilog/yaml 布局
+未用 `fill`+`line_suffix` 组合 ⇒ 未触发（触发条件 = 有布局同时用二者）。
 
 **行中锚兜底**（2026-10-19）：`inline_after` 由 line / join 的锚 token 定位消费；
 **原子节点**（无子节点，如 `Number` 的 `ref = "value"` 布局）定位不到时渲染为节点尾

@@ -23,22 +23,22 @@
 | 6 | **精化基座 graph 化** | ✅ 精化只消费 `UnitGraph`（文件原子=图节点 / 单元原子=图定义索引 / `files()` 按图过滤 / `instantiation_sites()` 供实例点；插件删自建 `collect_nodes`）；T3 接受项 `inst_sites` 收口为 `CTX_INSTANTIATION_SITES`（ADR-0028）；analyzer 364、verilog+check_accuracy 406 passed、A/B 0/144、benchmark 53、lint 33/0/0 |
 | 7 | **增量解析/check** | ✅ **解析层（P2 片段级）**：token diff → 最深 span 节点按**规则名片段解析**（`Parser.parse_fragment`，与片段模式同源）→ 并树；逐级回退单元级/全量；`ReparseResult.changed_range`（对标 ts changed_ranges）。tv80 语句级 **67x**（329/22,604 tokens，22.9ms vs 1540ms）、模块级 23x；增量 AST 逐节点 = 全量；8 测试。**边界（长期目标，本块只交付解析层最小面）**：单文件单次编辑、**修改片 >20–30%（随规模放开）自动回退全量**（经验次优）、符号门控语言回退、叶子 span 粒度/注释锚/持久化未做，详见 `gap-incremental-parse.md`「诚实边界」；增量 check 语义层 = v0.2 P3.4 单列 |
 | 8 | **诊断粒度** | ✅ 块内 2 坏语句 → 2 条位置正确 `phase-statement`（#71；父容器粗诊断让位）；`test_c_block_diagnostics.py` |
-| 9 | **渲染/注释遗留** | ⏳ #72 调查：LineSuffix 吞 token 根因=flatten；强制 group broken 修 C 但 yaml 往返回归，已回退；需源行感知方案 |
+| 9 | **渲染/注释遗留** | ✅ #72 已修（源行感知最小面）：`flatten` 保留行终止 suffix 的 pending 语义 + `in_flat` 落点升 `HardBreak`（broken 支不变 ⇒ yaml 零回归）；C `struct S { int // c\nx; }` 不再丢 token、二遍幂等；yaml nightly 往返结构相等；C fidelity 104 / yaml 111 / 渲染+注释 697 passed；A/B 0/144 |
 | 10 | **工程化缺口** | ✅ A/B inproc #73；C→V→C #74；yaml 幂等 #76；cp1252 排练 #77；benchmark 口径 #79（parse 失败事实码保留 + 语法 lint 不再误排除；verilator 共识 0→53） |
 | 11 | **吞吐/基准** | ✅ 实测基线重锚（fuzz 5 → 12 iter/s 单进程 / 32 iter/s 8 worker；配置声明缓存 + parser 表复用）+ **共识下限进 CI**：`benchmark_baseline.json` + `test_benchmark_baseline.py`（verilator 53/18/343；只锚共识下限、缺 oracle 即 skip、解析失败=0）；阶段级 fuzz 留 P2.3 backlog（非阻塞） |
 | 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
 
-**当前 10 / 12**。基线锚：A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、
+**当前 11 / 12**。基线锚：A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、
 `feature_sites compare` ✓（散点已收敛，基线已刷新）、verilator 共识 53；全量复现 `pytest tests/`
 （未通过数记 CHANGELOG 当轮条目）。
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 9 渲染/注释遗留（#72 源行感知）——先查 LineSuffix 吞 token 的 flatten 根因与
-  源行感知方案，判据 = C/yaml 往返 + render 124/124 不变；块 12 收口前置按块 9 后评估。
+- **意图**：块 12（0.1.4 收口）——先处理 isolation 偶发，再跑全量 `pytest tests` + A/B + render
+  + c_acceptance + corpus + 文档门禁，出发布候选；块 9 已收口（#72 源行感知修复，ADR 无需新增）。
 - **待验证假设**：`UnitGraph` + 图化后的发现/精化面足以承载"重解析受影响子集"（不需要把
   文件层索引再拆一遍）；失败记忆化需先重构 `sibling_counter` 计数语义（ROADMAP P2.3 记）。
-- **台账**：块 1/2/3/4/5/6/7/8/10/11 ✅（块 7 = 解析层片段级；check 语义层归 v0.2 P3.4）；块 9 ⏳（#72）、块 12 收口待办；主线 2 当前 **10/12**。
+- **台账**：块 1–11 ✅（块 7 = 解析层片段级；check 语义层归 v0.2 P3.4）；块 12 收口待办；主线 2 当前 **11/12**。
 
 
 ## 估算依据（对照锚，可复核）

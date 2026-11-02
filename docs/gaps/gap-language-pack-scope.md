@@ -160,19 +160,27 @@ render → 与源比对，七条：
     digit_separator`，引擎零语言判断；
   · **绕不开** = 形态只由**核心 token** 组成：`_Static_assert(1)`（#41）与 `enum e : int`
     （#42）——修法都是"门控 + c23 插件规则注入核心空槽位/交替"，正是 ADR-0023 的立项原因。
-## 行尾注释 LineSuffix 调查（#72，2026-10-23，未修）
+## 行尾注释 LineSuffix 调查（#72，2026-10-23 立；**2026-11-03 已修**）
 
-- 复现：`struct S { int // c\nx; };` → 渲染 `int // c x;`（`x` 被并进行注释）。
+- 复现：`struct S { int // c\nx; };` → 渲染 `int // c x;`（`x` 被并进行注释，二遍 parse 结构变）。
 - 根因：`renderer/doc.py::flatten` 把 `LineSuffix(line_ending=True)` 直接变 `Text`；
-  该节点 doc 被 `group()` 包成 Union 的 **flat 支**时，注释已在构造期变 Text，
-  后续 token 同行。`_resolve_line_suffix` 只是事后重写，无法恢复行终止语义。
-- 尝试 1（已回退）：`group()` 对含行终止 LineSuffix 的 doc 强制 broken（`_forces_break`）。
-  · C 修复：token 序列保持 + 幂等（输出把注释规范化到下一行点，`int x; // c`）；
-  · **回归**：`.github/workflows/nightly.yml` 往返结构不一致（多一个 `MappingEntry`），
-    全量 4391 passed/1 failed —— yaml 注释布局被强制断行改变，不可接受，已 `git checkout` 回退。
-- 结论：需要**源行感知**的落地（注释源行 vs 下一个换行点；只在该行确实还有后续
-  token 时才强制断），或对语言包布局提供"注释后必须断"的声明面；单纯全局 group 断开
-  不是语言无关解。下一轮按此方向再试；当前行为保持原样（缺口仍在）。
+  `group()` 的 **flat 支**在构造期已无 suffix 语义，`_resolve_line_suffix` 事后无法恢复行终止。
+- 否决方案（2026-10-23）：`group()` 对含行终止 LineSuffix 的 doc 全局强制 broken ——
+  C 修好但 `.github/workflows/nightly.yml` 往返结构变（多 `MappingEntry`），已回退。
+- **修法（2026-11-03，源行感知最小面）**：
+  · `flatten`：行终止 suffix **保持 `LineSuffix`**（pending 语义），块注释仍就地 Text；
+  · `_resolve_line_suffix`/`_resolve_suffix`/`_resolve_suffix_concat` 增 `in_flat`：
+    **仅 flat 支**在落地行终止注释时，把软换行落点（`Line`/`Break`）升为 `HardBreak`；
+    broken 支语义完全不变（故 yaml 既有断行布局不受影响）；
+  · 删除已内联的死函数 `_resolve_suffix_union`（Union 分支在 `_resolve_suffix` 内处理）。
+- 判据（改前红）：
+  · C `struct S { int // c\nx; };`：改前 `int // c x;`（丢 `x`、二遍结构不等）→ 改后
+    `int x; // c`，token 序列保持、二遍幂等（`test_c_render_fidelity.py::TestLineCommentInDeclarator`）；
+  · Doc 级：`group(... LineSuffix(" // note") ...)` flat 支改前 `a // note b`（吞 b）→
+    改后 `a // note\nb`；块注释仍 `a /* c */ b`（`test_doc_line_suffix.py` 两条）。
+- 回归面：yaml nightly 往返结构**相等**；yaml 111、C fidelity 104、verilog/yaml/e2e 渲染与注释
+  697 passed/7 skipped；A/B **0/144**。Fill 路径的同类残洞仍在（生产布局未用
+  `fill`+`line_suffix`，见架构档）。
 
 ## 关联条目
 

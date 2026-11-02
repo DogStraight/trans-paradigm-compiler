@@ -283,9 +283,10 @@ def flatten(doc: Doc) -> Doc:
         case Fill(docs):
             # fill 扁平化：分隔符（Line）→ 空格，内容拼接
             return Concat([flatten(d) for d in docs])
-        case LineSuffix(text, _):
-            # flat 模式：suffix 直接显示（跟在当前行尾）
-            return Text(text)
+        case LineSuffix(text, line_ending):
+            # 源行感知（#72）：行终止注释在 flat 支**保持 pending 语义**（不就地变 Text，
+            # 否则后续 token 会被并进注释）；块注释不结束行，仍就地显示。
+            return doc if line_ending else Text(text)
         case Pad(width):
             # 恒输出：flat 保留 padding（对齐参与 fits）
             return _spaces(width)
@@ -321,7 +322,7 @@ def nest(indent: int, doc: Doc) -> Doc:
 # ── Layout 算法 ──
 
 
-def _resolve_line_suffix(doc: Doc) -> Doc:
+def _resolve_line_suffix(doc: Doc, in_flat: bool = False) -> Doc:
     """将 LineSuffix 内容推迟到下一个换行点之前（行尾锚定）。
 
     规则（Prettier lineSuffix 语义的 Doc 层实现）：
@@ -334,10 +335,12 @@ def _resolve_line_suffix(doc: Doc) -> Doc:
         、`join` 的 `,`）会被印在该注释之后 → 落进注释里被吃掉；
       - 序列结束/整棵 doc 结束仍有挂起 → 追加到末尾（末尾即行尾）；
       - Union 两支后缀文本相同才上提；不同则强制 broken 支并继续上提（行终止
-        注释不得就地落地，见 `_resolve_suffix_union`）；
-        Fill 内不跨项推迟（分隔符即换行点，内容项内就地文本化）。
+        注释不得就地落地，2026-10-19 修）；flat 支按 `in_flat=True` 解析（2026-11-03，
+        #72）：落点原为软换行时升硬换行，防 flat 吞后续 token；
+      - Fill 内不跨项推迟（分隔符即换行点，内容项内就地文本化）——Fill 的
+        `line_ending` 注释残洞仍在（生产布局未用 fill+line_suffix，见架构档）。
     """
-    resolved, pending = _resolve_suffix(doc)
+    resolved, pending = _resolve_suffix(doc, in_flat)
     if pending:
         return _append_suffix(resolved, "".join(pending))
     return resolved
@@ -352,7 +355,7 @@ def _append_suffix(doc: Doc, text: str) -> Doc:
     return Concat([doc, Text(text)])
 
 
-def _resolve_suffix(doc: Doc) -> tuple[Doc, list[str]]:
+def _resolve_suffix(doc: Doc, in_flat: bool = False) -> tuple[Doc, list[str]]:
     """行尾锚定（内部）：返回 (去 suffix 的 doc, 尚未落地的挂起后缀文本)。
 
     挂起后缀由调用方在**下一个换行点前**落地；本层序列已结束仍未落地 →
@@ -362,21 +365,21 @@ def _resolve_suffix(doc: Doc) -> tuple[Doc, list[str]]:
         case LineSuffix():
             return _suffix_entry(doc)
         case Concat(docs):
-            return _resolve_suffix_concat(docs)
+            return _resolve_suffix_concat(docs, in_flat)
         case Nest(i, d):
-            resolved, pending = _resolve_suffix(d)
+            resolved, pending = _resolve_suffix(d, in_flat)
             return Nest(i, resolved), pending
         case Align(a, d):
-            resolved, pending = _resolve_suffix(d)
+            resolved, pending = _resolve_suffix(d, in_flat)
             return Align(a, resolved), pending
         case Prefix(i, d):
-            resolved, pending = _resolve_suffix(d)
+            resolved, pending = _resolve_suffix(d, in_flat)
             return Prefix(i, resolved), pending
         case Union(flat, broken):
-            return _resolve_suffix_union(flat, broken)
+            return _resolve_union(flat, broken, in_flat)
         case Fill(docs):
             # Fill 内分隔符是换行点：suffix 若在内容项里，就地显示
-            return Fill([_resolve_line_suffix(d) for d in docs]), []
+            return Fill([_resolve_line_suffix(d, in_flat) for d in docs]), []
         case _:
             return doc, []
 
@@ -388,35 +391,22 @@ def _suffix_entry(suffix: LineSuffix) -> tuple[Doc, list[str]]:
     return Text(suffix.text), []
 
 
-def _resolve_suffix_union(flat: Doc, broken: Doc) -> tuple[Doc, list[str]]:
-    """Union 两支的行尾锚定：后缀文本相同才上提；不同则**强制 broken 支**。
+def _resolve_union(flat: Doc, broken: Doc, in_flat: bool) -> tuple[Doc, list[str]]:
+    """Union 两支的行尾锚定（flat 支按 flat 上下文解析；broken 支保持原语义）。
 
-    ⚠ 行终止注释不得就地落地（2026-10-19 修）：两支 pending 不同时，旧实现"各自
-    就地落地"会把注释写成 branch 末尾的 Text，而父级同行后续 token（`;`/`,`
-    声明符）印在注释之后 ⇒ 二遍渲染时被并进注释（C 包 `enum` 尾逗号 / `struct` /
-    初始化 / 带声明符四形态实测丢 token、产物非法）。改为选 broken 支渲染、其
-    pending 继续上提，由父层在下一个换行点前落地——行终止注释必须终结所在行。
-
-    前提（生产形态）：Union 由 `group()` 生成，flat 是 broken 的 `flatten` 副本，
-    同一条 suffix 在两支都有 ⇒ 两支 pending 只可能差**落地位置**（一支被内部换行
-    点冲刷、另一支仍挂在末尾），不存在"只在 flat 支的注释文本"，故选 broken 支
-    不丢注释。**手工**构造"两支各带不同 line-ending 后缀文本"的 Union 不是生产
-    形态，此实现取 broken 侧文本（`test_both_branches_pending_keeps_broken_texts`
-    锁该语义）。
-
-    残洞（2026-10-19 审计登记）：pending 相等（通常都为空）时仍保留 Union；flat
-    选择把 `Line` 渲染成空格、`Fill` 逐项就地冲刷 ⇒ 行终止注释仍可能落行中。
-    现有 C/verilog/yaml 布局未触发（未用 `fill`/`line_suffix` 原语）；彻底修法与
-    触发条件见 `renderer/renderer_architecture.md`「行尾锚定」残洞注。
+    行终止注释不得就地落地（2026-10-19）：两支 pending 不同则选 broken 支、pending
+    继续上提（父层在下一个换行点前落地）。flat 支落点升级为硬换行（2026-11-03，#72）。
     """
-    flat_doc, flat_pending = _resolve_suffix(flat)
-    broken_doc, broken_pending = _resolve_suffix(broken)
+    flat_doc, flat_pending = _resolve_suffix(flat, True)
+    broken_doc, broken_pending = _resolve_suffix(broken, in_flat)
     if flat_pending == broken_pending:
         return Union(flat_doc, broken_doc), flat_pending
     return broken_doc, broken_pending
 
 
-def _resolve_suffix_concat(docs: Sequence[Doc]) -> tuple[Concat, list[str]]:
+def _resolve_suffix_concat(
+    docs: Sequence[Doc], in_flat: bool = False
+) -> tuple[Concat, list[str]]:
     """Concat 的行尾锚定：收集挂起 suffix，遇换行点先插入挂起文本。
 
     子项递归后为空但 suffix 挂起时**不下发**（`continue`）——等到下一个换行点
@@ -435,6 +425,11 @@ def _resolve_suffix_concat(docs: Sequence[Doc]) -> tuple[Concat, list[str]]:
             if pending:
                 out.append(Text("".join(pending)))
                 pending = []
+                # 源行感知（#72）：flat 支里行终止注释必须终结所在行——落点原为
+                # 软换行（flat 后会成空格）时升为硬换行，否则后续 token 被并进
+                # 注释（C `struct S { int // c\nx; }` 丢 `x`）；broken 支不变。
+                if in_flat and isinstance(resolved, (Line, Break)):
+                    resolved = HardBreak()
             out.append(resolved)
         elif isinstance(resolved, Empty):
             continue

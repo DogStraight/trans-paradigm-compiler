@@ -517,3 +517,19 @@ class TestInitListInnerComment:
         want = _significant(c_env["tokenize"](src))
         got = _significant(c_env["tokenize"](out))
         assert got == want, _token_diff(src.strip(), want, got)
+
+class TestLineCommentInDeclarator:
+    """#72 回归：行终止注释不得吞同组后续 token（struct 声明符跨行；源行感知修复）。"""
+
+    def test_struct_declarator_comment_keeps_token(self, c_render, c_env):
+        src = "struct S { int // c\nx; };\n"
+        out = c_render(src)
+        assert "// c" in out
+        # token 序列不丢（修复前 x 被并进注释 → 二遍 parse 结构变化）
+        names = [c for (_t, c) in _significant(c_env["tokenize"](out))]
+        assert "x" in names, out
+        # 行终止注释后必须换行（x 不能和注释同行）
+        c_line = next(ln for ln in out.splitlines() if "// c" in ln)
+        assert c_line.rstrip().endswith("// c"), repr(c_line)
+        # 二遍渲染幂等
+        assert c_render(out) == out
