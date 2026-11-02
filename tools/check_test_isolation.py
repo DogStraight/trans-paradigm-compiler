@@ -98,6 +98,9 @@ def _pytest_env(random_hashseed: bool, hashseed: int | None = None) -> dict[str,
     """
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
+    # 隔离档两档会并发跑同一临时目录里的多个块：`__pycache__` 共享写入有竞态，
+    # 实测表现为两个块同时 "1 error"（收集/导入期）的偶发红；隔离档不需要缓存字节码。
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     if hashseed is not None:
         env["PYTHONHASHSEED"] = str(hashseed)
     elif random_hashseed:
@@ -221,6 +224,12 @@ def _summary_line(output: str) -> str:
         line = raw.strip()
         if line and ("passed" in line or "failed" in line or "error" in line.lower()):
             return line.strip("=").strip()
+    # 收集/导入期错误没有 "N passed/failed" 行时，把首个 Traceback/Error 行带上，
+    # 否则摘要只剩 "1 error in 2.27s"，偶发红无法定位（2026-11-03 全量实测）。
+    for raw in output.splitlines():
+        line = raw.strip()
+        if line and ("Traceback" in line or "Error" in line or "error:" in line):
+            return line[:300]
     for raw in reversed(output.splitlines()):
         if raw.strip():
             return raw.strip()[:200]

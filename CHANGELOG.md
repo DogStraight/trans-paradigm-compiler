@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **0.1.4 收口（块 12 ✅，2026-11-03，主线 2 = 12/12）**：全量 `pytest tests` **4502 passed /
+  7 skipped**（0 失败）；A/B **0/144**；`render_coverage` C 包 **124/124**；`c_acceptance` **49/0**；
+  corpus/渲染/注释随全量绿；doc 门禁 D1–D4=0；结构 S **1013**（新增 0/变大 0）。发布候选 = `21c0fcc`+本提交。
+  · 收口修复：① isolation 偶发红根因——隔离档两个子进程并发写同一临时目录的
+  `__pycache__` 竞态（实测两档同报 "1 error"）；`_pytest_env` 对子进程设
+  `PYTHONDONTWRITEBYTECODE=1`，并让错误摘要带上首个 Traceback/Error 行（下次可定位）。
+  ② 两条门禁变异载荷因块 5/7 重构失效（include 缩进、`parse()` 抽 `_reset_parse_state`）——
+  同步 `tools/check_gate_efficacy.py` 的 `old/new`。③ `analyzer.unit_graph.EDGE_KINDS`
+  登记为 CONSTANT（新增全局态凭据）。
 - **行尾注释源行感知修复（块 9 ✅，2026-11-03，#72）**：`renderer/doc.py` 的 `flatten`
   不再把 `line_ending=True` 的 `LineSuffix` 文本化（保持 pending）；`_resolve_suffix*` 增
   `in_flat`，**仅 flat 支**在落点把软换行升 `HardBreak`——行终止注释必须终结所在行，flat

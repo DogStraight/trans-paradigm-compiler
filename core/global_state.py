@@ -190,6 +190,7 @@ CONSTANT: dict[str, str] = {
     "core.engine_capabilities.CAPABILITIES": "引擎能力表（能力名 → 版本，只读字面量）",
     "core.engine_capabilities.SECTION_CAPABILITY": "语言包清单段 → 能力映射（只读字面量）",
     "preprocessor.condition._ACTIONS": "条件表达式动作词表（动作名 → 元数，只读字面量）",
+    "analyzer.unit_graph.EDGE_KINDS": "图化边种类注册表（引擎词汇，import 期固定，永不改写）",
 }
 
 _ENGINE_PACKAGES = (

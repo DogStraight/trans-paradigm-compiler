@@ -26,19 +26,19 @@
 | 9 | **渲染/注释遗留** | ✅ #72 已修（源行感知最小面）：`flatten` 保留行终止 suffix 的 pending 语义 + `in_flat` 落点升 `HardBreak`（broken 支不变 ⇒ yaml 零回归）；C `struct S { int // c\nx; }` 不再丢 token、二遍幂等；yaml nightly 往返结构相等；C fidelity 104 / yaml 111 / 渲染+注释 697 passed；A/B 0/144 |
 | 10 | **工程化缺口** | ✅ A/B inproc #73；C→V→C #74；yaml 幂等 #76；cp1252 排练 #77；benchmark 口径 #79（parse 失败事实码保留 + 语法 lint 不再误排除；verilator 共识 0→53） |
 | 11 | **吞吐/基准** | ✅ 实测基线重锚（fuzz 5 → 12 iter/s 单进程 / 32 iter/s 8 worker；配置声明缓存 + parser 表复用）+ **共识下限进 CI**：`benchmark_baseline.json` + `test_benchmark_baseline.py`（verilator 53/18/343；只锚共识下限、缺 oracle 即 skip、解析失败=0）；阶段级 fuzz 留 P2.3 backlog（非阻塞） |
-| 12 | **0.1.4 收口** | ⏳ 全量/A-B/render/c_acceptance/corpus/文档全绿，发布候选 |
+| 12 | **0.1.4 收口** | ✅ 全量 **4502 passed / 7 skipped**（0 失败）；A/B **0/144**；render_coverage C 包 **124/124**；`c_acceptance` **49/0**；corpus 随全量绿；doc 门禁 D1–D4=0；结构 S 1013（新增 0/变大 0）⇒ **发布候选**。附：isolation 偶发根因修复（隔离子进程 `PYTHONDONTWRITEBYTECODE=1` 防并发写 pyc 竞态）+ 失效变异两条同步当前代码 |
 
-**当前 11 / 12**。基线锚：A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、
+**当前 12 / 12（主线 2 收口）**。基线锚：A/B 0/144、render 124/124、c_acceptance 49/0、S=1110、
 `feature_sites compare` ✓（散点已收敛，基线已刷新）、verilator 共识 53；全量复现 `pytest tests/`
 （未通过数记 CHANGELOG 当轮条目）。
 
 ## 下一轮入口（每轮替换，不追加）
 
-- **意图**：块 12（0.1.4 收口）——先处理 isolation 偶发，再跑全量 `pytest tests` + A/B + render
-  + c_acceptance + corpus + 文档门禁，出发布候选；块 9 已收口（#72 源行感知修复，ADR 无需新增）。
+- **意图**：主线 2 已收口（12/12，发布候选）；后续按作者决策——推送/发版，或转 0.1.5
+  （PyO3 评估、增量 check v0.2 P3.4、性能常驻测试面落档）。
 - **待验证假设**：`UnitGraph` + 图化后的发现/精化面足以承载"重解析受影响子集"（不需要把
   文件层索引再拆一遍）；失败记忆化需先重构 `sibling_counter` 计数语义（ROADMAP P2.3 记）。
-- **台账**：块 1–11 ✅（块 7 = 解析层片段级；check 语义层归 v0.2 P3.4）；块 12 收口待办；主线 2 当前 **11/12**。
+- **台账**：块 1–12 ✅（块 7 = 解析层片段级；check 语义层归 v0.2 P3.4）；主线 2 当前 **12/12**。
 
 
 ## 估算依据（对照锚，可复核）

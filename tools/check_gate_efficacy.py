@@ -1158,8 +1158,8 @@ _MUTATIONS: list[dict[str, str]] = [
         "why": "include 子扫描继承包含点宏环境（T1 连带修复）：include guard 必须跨多次"
                "include 可见，否则同一守卫头重复铺入、类型二次定义（真实 zlib TAG001 命中）",
         "file": "preprocessor/primitives/include.py",
-        "old": '            predefined=dict(ctx.get("_active_defs") or {}),',
-        "new": "            predefined=None,  # 变异：不继承包含点宏环境",
+        "old": '        predefined=dict(ctx.get("_active_defs") or {}),',
+        "new": "        predefined=None,  # 变异：不继承包含点宏环境",
         "test": "tests/engine/preprocessor/test_expand_timeline.py",
     },
     {
@@ -1216,8 +1216,8 @@ _MUTATIONS: list[dict[str, str]] = [
         "why": "parse() 不重建/不绑定符号 store ⇒ 跨 parse 复用时上一轮 root 作用域注册"
                "残留，本轮 `lookup` 读到过期符号",
         "file": "parser/parser_core.py",
-        "old": "        self.scope_stack = _ScopeStack()\n        context = ParseContext(tokens)\n        context.bind_symbol_store(self.scope_stack)\n",
-        "new": "        context = ParseContext(tokens)  # 变异：不重建、不绑定符号 store\n",
+        "old": "        self._reset_parse_state()\n        context = ParseContext(tokens)\n        context.bind_symbol_store(self.scope_stack)\n",
+        "new": "        self._reset_parse_state()\n        context = ParseContext(tokens)  # 变异：不绑定符号 store\n",
         "test": "tests/engine/parser/test_symbol_rollback.py",
     },
     # ── D5 补齐：三个默认 policy gate 的直接变异（task-3）──
