@@ -1,0 +1,122 @@
+[
+  {
+    "target_ratio": 0.02,
+    "actual_ratio": 0.0222,
+    "unit": "ModuleDecl",
+    "frag_tokens": 501,
+    "total_tokens": 22604,
+    "full_ms": 1671.82,
+    "frag_ms": 39.17,
+    "speedup": 42.68,
+    "full_all_ms": [
+      1502.54,
+      1692.36,
+      1671.82
+    ],
+    "frag_all_ms": [
+      36.76,
+      52.67,
+      39.17
+    ]
+  },
+  {
+    "target_ratio": 0.05,
+    "actual_ratio": 0.0324,
+    "unit": "ModuleDecl",
+    "frag_tokens": 733,
+    "total_tokens": 22604,
+    "full_ms": 1631.19,
+    "frag_ms": 46.95,
+    "speedup": 34.74,
+    "full_all_ms": [
+      1636.1,
+      1631.19,
+      1624.59
+    ],
+    "frag_all_ms": [
+      46.95,
+      42.94,
+      47.96
+    ]
+  },
+  {
+    "target_ratio": 0.1,
+    "actual_ratio": 0.1161,
+    "unit": "ModuleDecl",
+    "frag_tokens": 2624,
+    "total_tokens": 22604,
+    "full_ms": 1614.1,
+    "frag_ms": 201.21,
+    "speedup": 8.02,
+    "full_all_ms": [
+      1614.1,
+      1586.78,
+      1643.06
+    ],
+    "frag_all_ms": [
+      218.63,
+      201.21,
+      174.66
+    ]
+  },
+  {
+    "target_ratio": 0.2,
+    "actual_ratio": 0.1161,
+    "unit": "ModuleDecl",
+    "frag_tokens": 2624,
+    "total_tokens": 22604,
+    "full_ms": 1591.52,
+    "frag_ms": 204.94,
+    "speedup": 7.77,
+    "full_all_ms": [
+      1615.3,
+      1515.58,
+      1591.52
+    ],
+    "frag_all_ms": [
+      198.91,
+      241.56,
+      204.94
+    ]
+  },
+  {
+    "target_ratio": 0.3,
+    "actual_ratio": 0.3276,
+    "unit": "ModuleDecl",
+    "frag_tokens": 7405,
+    "total_tokens": 22604,
+    "full_ms": 1510.59,
+    "frag_ms": 452.55,
+    "speedup": 3.34,
+    "full_all_ms": [
+      1510.59,
+      1582.94,
+      1415.63
+    ],
+    "frag_all_ms": [
+      409.0,
+      452.55,
+      454.49
+    ]
+  },
+  {
+    "target_ratio": 0.45,
+    "actual_ratio": 0.4901,
+    "unit": "ModuleDecl",
+    "frag_tokens": 11078,
+    "total_tokens": 22604,
+    "full_ms": 1594.13,
+    "frag_ms": 762.99,
+    "speedup": 2.09,
+    "full_all_ms": [
+      1594.13,
+      1611.19,
+      1568.48
+    ],
+    "frag_all_ms": [
+      773.3,
+      737.43,
+      762.99
+    ]
+  }
+]

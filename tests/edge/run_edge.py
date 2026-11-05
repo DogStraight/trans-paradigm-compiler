@@ -29,15 +29,14 @@ for _p in (_REPO, os.path.join(_REPO, "tests", "fuzz")):
 
 import oracle  # noqa: E402  (tests/fuzz/oracle.py：不变量/管线单一来源)
 
-# Windows 控制台/管道默认编码（GBK/cp1252）编不了中文——CI runner 无
-# PYTHONUTF8，非 ASCII 输出会让门禁脚本自己崩。本进程自护 stdout/stderr
-# （reconfigure 只影响本进程，比替换 sys.stdout 安全；受限环境拒绝则忽略）。
-if hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue] — hasattr 守卫的真实运行时方法
-        sys.stderr.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
-    except Exception:  # noqa: BLE001 — 受限环境无 reconfigure，忽略
-        pass
+# 控制台 UTF-8 自护走单点 `core/console.py`（tests/edge 脚本 sys.path[0]=本目录，
+# 先把仓库根加进 sys.path 再 import）。
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from core.console import ensure_utf8_stdio  # noqa: E402 — 路径引导之后才可 import
+
+ensure_utf8_stdio()
 
 _CORPUS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edge_corpus")
 _CLEAN = os.path.join(_CORPUS, "clean")

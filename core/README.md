@@ -14,6 +14,7 @@
 | `errors.py` | 统一异常层级 |
 | `debug_report.py` | 失败现场报告工具（parser/linter 共用） |
 | `global_state.py` | 引擎全局状态快照/还原（测试隔离，顺序无关） |
+| `console.py` | 进程级 stdout/stderr UTF-8 自护（单一实现：引擎入口 + tools 脚本共用；失败不阻断入口） |
 | `_user_config.py` / `utils.py` | 用户项目配置定位 / 通用工具 |
 
 > 配置机制见 `core/config_lifecycle.md`；组件协议见 `core/component_protocol.md`。

@@ -18,6 +18,7 @@ import os
 import argparse
 
 from core import __version__
+from core.console import ensure_utf8_stdio
 from core.utils import safe_relpath
 
 _project_root = os.path.dirname(os.path.abspath(__file__))
@@ -610,13 +611,7 @@ def _add_fragment_parser(sub) -> None:
 def _cmd_fragment(args: argparse.Namespace) -> None:
     """tpc fragment — 片段模式：岛式分片 → 真实管线 → 合成（water 原样）。"""
     # 远端 Windows runner 默认 cp1252：中文 diff/摘要直接 print 会 UnicodeEncodeError。
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            try:
-                reconfigure(errors="backslashreplace")
-            except (OSError, ValueError):
-                pass
+    ensure_utf8_stdio()
     from islands import print_diff, rewrite_file
 
     result = rewrite_file(args.file, args.rules_dir, args.write)

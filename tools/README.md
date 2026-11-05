@@ -65,6 +65,7 @@
 - `min_pack_probe.py` — 最小语言包探针（行为面基线）：换迷你包跑引擎测试，记录哪些测试仍绿；`--record` 写 `baselines/min_pack_baseline.json`。**强制串行**（并行结果随 worker 分配漂移）。
 - `c_acceptance.py` — C 包接受面扫描：45 条构造逐条试解析，报"进 AST / 空 AST / 词法抛错"。**空洞是无声的**。见 `docs/gaps/gap-language-pack-scope.md`。
 - `render_coverage.py` — 渲染覆盖率盘点：哪些规则带 `layout`/`body`。引擎对无布局规则**静默输出空串**。见 `docs/gaps/gap-language-pack-scope.md`。
+- `threshold_sweep.py` — **通用数值旋钮 sweep 量具**（只出原始表，不出结论）：`--runner module:function` 接任意旋钮/目标量；`--selftest` 证明表随旋钮变化；`--incremental` 用真实语料出增量闸门的原始表（片段解析 vs 全量，多轮离散度）。外部性：语料分离由调用方保证、不输出阈值建议。见 `docs/gaps/gap-incremental-parse.md`「阈值 sweep」。
 
 ### 4. 诊断与实验
 
@@ -80,6 +81,7 @@
 | `structural_baseline.json` / `structural_kept.json` | `structural_score.py` | `tests/policy/test_structural_kept.py` |
 | `feature_sites_baseline.json` / `_converged.json` / `_kept.json` | `feature_sites.py` | `tests/policy/test_feature_sites.py` |
 | `min_pack_baseline.json` | `min_pack_probe.py --record` | `min_pack_probe.py`（比对即 exit 1） |
+| `incremental_threshold_sweep.json` | `threshold_sweep.py --incremental --save` | `docs/gaps/gap-incremental-parse.md`（原始证据） |
 
 ## 非本目录的按需门禁
 

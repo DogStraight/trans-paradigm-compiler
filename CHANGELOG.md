@@ -6,6 +6,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **审计三件（作者批，2026-11-05）**：① **A 阈值 sweep 量具** `tools/threshold_sweep.py`
+  ——通用（`--runner module:function` 接任意旋钮/目标量；`--selftest` 证明表随旋钮变化；
+  `--incremental` 用真实语料出原始表）+ 外部性（只出原始数字、不输出阈值建议；语料分离
+  由调用方保证）。tv80 实测（一次完整 run 的各轮中位数）：实际片段占比
+  2.2%/3.2%/11.6%/32.8%/49.0% → 速度比 42.7x/34.7x/8.0x/3.3x/2.1x（同命令重跑有
+  ±20–40% 机器噪声，单调趋势稳定）；原始表落 `docs/gaps/gap-incremental-parse.md`
+  「阈值 sweep」+ `tools/baselines/incremental_threshold_sweep.json`。
+  ② **B stdout 自护抽离**：4 处副本（main / structural_score / check_test_isolation /
+  check_platform_encoding；另 tests/edge/run_edge 同类第 5 处）统一为
+  `core/console.py::ensure_utf8_stdio()`（utf-8 + backslashreplace，失败不阻断）；
+  新增 cp1252 子进程测试（引擎侧 + 工具侧），`pytest tests/policy -q -k cp1252` 2 passed。
+  ③ **C** ADR-0027 封闭规则按审计口径补全（升 v2 + 消费方同步 + fail-fast 理由；
+  保持封闭/注册制待作者裁定，集合未动）。
 - **审计小项修复（0.1.4 复审，2026-11-05）**：① 宏展开预算 `[expand] max_iterations`
   用尽此前**静默**保留未展开文本 → 现三处（对象宏重扫 / 函数宏重扫 / 接缝重扫）统一发
   `RuntimeWarning`（`macro_expand.warn_budget_exhausted`；接缝重扫重构出 `_junction_step`

@@ -20,9 +20,11 @@ SCons Scanner 的边生产者、Ninja 的动态依赖与路径精确匹配）—
    `instantiation`（结构发现阶段）/ `include`（预处理器阶段）；语言包只在
    `[unit_graph] edge_kinds` 声明产出哪些种类，规则名/指令关键字不进图词汇；
    未注册 kind 加载/建图时 fail-fast。
-   **封闭规则**：`EDGE_KINDS` 是**封闭注册表**——新增边种类必须引擎注册表与能力版本
-   （`unit_graph.edges` 升版或新能力）同步变更，语言包只能声明子集、不得自造；
-   消费者契约因此稳定（换语言不换图词汇），这是刻意成本而非遗漏。
+   **封闭规则（保持封闭 vs 改语言包注册制待作者裁定；裁定前不改集合）**：`EDGE_KINDS`
+   是**封闭注册表**——新增一种 kind = 改引擎注册表 + 能力面 `unit_graph.edges` 升 v2 +
+   消费方同步；语言包只能声明子集、不得自造。未注册 kind 建图即 fail-fast，因为
+   语言包自造词汇会让消费方静默失配（换语言换图词汇），且失败模式不可见；这属
+   **刻意成本**而非遗漏（测试 `test_unknown_edge_kind_fails_fast`）。
 3. **边由阶段产，图只装配**：`ModuleIndexer.discover` 产单元依赖边；preprocessor 的 include
    产包含边（新增 `out_include_edges` 出参，嵌套子扫描的边并入宿主）；`unit_graph` 只做
    规范化/去重/反查。**不做第二遍解析**（Ninja 教训：两套路径口径会静默错）。

@@ -159,3 +159,29 @@
   [`lib/src/reusable_node.h`](https://github.com/tree-sitter/tree-sitter/blob/master/lib/src/reusable_node.h)、
   [`lib/src/tree.c`](https://github.com/tree-sitter/tree-sitter/blob/master/lib/src/tree.c)、
   [`api.h`](https://github.com/tree-sitter/tree-sitter/blob/master/lib/include/tree_sitter/api.h)。
+
+## 阈值 sweep（2026-11-05，审计 A；量具 `tools/threshold_sweep.py`）
+
+作者要求把 20–30% 闸门从**估算**升级为**测量**，且量具必须通用 + 有外部性（只出原始表，
+不出结论；语料与调参语料分离由调用方保证）。复跑：
+`python tools/threshold_sweep.py --incremental --save tools/baselines/incremental_threshold_sweep.json`
+（`--selftest` 绿；真实语料 tv80，展开后 22,604 tokens；每点 3 轮取中位数）。
+
+| 目标片段占比 | 实际占比 | 片段 tokens | 全量 parse | 片段 parse（增量成本代理） | 速度比 |
+|---|---|---|---|---|---|
+| 0.02 | 0.0222 | 501 | 1671.8 ms | 39.2 ms | 42.68x |
+| 0.05 | 0.0324 | 733 | 1631.2 ms | 47.0 ms | 34.74x |
+| 0.10 | 0.1161 | 2624 | 1614.1 ms | 201.2 ms | 8.02x |
+| 0.20 | 0.1161 | 2624 | 1591.5 ms | 204.9 ms | 7.77x |
+| 0.30 | 0.3276 | 7405 | 1510.6 ms | 452.6 ms | 3.34x |
+| 0.45 | 0.4901 | 11078 | 1594.1 ms | 763.0 ms | 2.09x |
+
+**读法（事实，不是结论）**：
+- 片段解析成本随占比**单调上升**、全量成本恒定 ⇒ 速度比单调下降（42.7x → 2.1x）；
+- 在闸门上限附近（实际 32.8%）仍有 **3.3x**，到 ~49% 仍有 2.1x——即"20–30% 回退"在
+  **纯解析耗时**上并非收益拐点，它守的是并树一致性/风险与后续 check 增量成本；
+- **噪声量级**：同一命令重复跑，各点速度比有 ±20–40% 波动（机器负载），但**单调趋势稳定**；
+  表为一次完整 run 的各轮中位数（每轮原始值在 baselines JSON 里可查）；
+- 评估语料与调参语料**分离**由使用方保证；本表只给原始数字，"阈值该多少/是否改"归作者裁定；
+- 已知局限：真实语料单元尺寸离散，0.20 目标点无更近单元（如实记重复点）；速度比是
+  `parse_fragment` 代理（绕过闸门），不等于端到端 check 加速。
