@@ -47,7 +47,7 @@ from .macro_shape import (
 
 # preprocessor.expand
 #   #sym:config = [expand]
-#   格式: dict — { max_iterations: int }
+#   格式: dict — { max_iterations: int }（用尽 → RuntimeWarning + 保留未展开文本）
 _expand_cfg: dict = declare_cfg("preprocessor.expand", {"max_iterations": 128}, __name__, "_expand_cfg")
 
 # preprocessor.directives
@@ -1364,6 +1364,49 @@ def _last_meaningful(body_toks: list) -> int:
     return i
 
 
+def _junction_step(
+    ctx: "_MacroExpandCtx",
+    body_toks: list,
+    line: str,
+    end: int,
+    prefix: str,
+) -> tuple[int, Any, list, int, int, list] | None:
+    """识别一个可形成的接缝（**只识别不改写**）→ `(call_start, cand, args, after, consumed, rest_toks)`。
+
+    条件与既有接缝语义一致：宏体最后一个有意义 token 是**可展开的函数宏名**（前缀语言
+    还要求其前是声明的调用前缀 token），源码后续（从 `end` 起）以实参开括号开始。
+    返回 None = 不再形成接缝（或无法形成一次完整调用）。
+    """
+    li = _last_meaningful(body_toks)
+    if li < 0:
+        return None
+    cand = body_toks[li]
+    if cand.masked or not IDENT_RE.fullmatch(cand.text):
+        return None
+    if prefix:
+        if li == 0 or body_toks[li - 1].text != prefix:
+            return None
+        call_start = li - 1  # 前缀 token 随调用一并消费
+    else:
+        call_start = li
+    if cand.text not in ctx.macro_defs or cand.text in cand.hide:
+        return None
+    if cand.text not in ctx.func_macros or ctx.call_args is None:
+        return None
+    rest = line[end:]
+    rest_toks = macro_expand.tokenize(
+        rest,
+        ctx.operators,
+        macro_expand.mask_spans(rest, ctx.string_delimiters, ctx.escape, ctx.syntax),
+    )
+    got = macro_expand.collect_args_at(rest_toks, 0, ctx.call_args, ctx.syntax)
+    if got is None:
+        return None
+    args, after = got
+    consumed = sum(len(t.text) for t in rest_toks[:after])
+    return call_start, cand, args, after, consumed, rest_toks
+
+
 def _rescan_junction(
     ctx: "_MacroExpandCtx",
     body_toks: list,
@@ -1380,46 +1423,26 @@ def _rescan_junction(
     + `f(2)(9)` ⇒ `2*9*g`。本函数只处理这一条接缝：宏体最后一个有意义 token 是
     **可展开的函数宏名**（前缀语言还要求其前是声明的调用前缀 token），且源码后续
     （跳空白/注释）以实参开括号开始。消费的源码字符并入该调用的 `end`——区域/锚/
-    行映射**不新增机制**（输出行数不变）。循环到不再形成接缝，预算
-    `max_iterations` 兜底；函数宏调用点事实照记（供语言包 check 族）。
+    行映射**不新增机制**（输出行数不变）。循环到不再形成接缝；预算
+    `max_iterations` 用尽时**发可见告警**（不静默保留未展开接缝）并停止。
+    函数宏调用点事实照记（供语言包 check 族）。
 
     不处理：接缝重扫**不跨行**（宏体末名字 + 下一行 `(` 不接；跨行调用本身由
     `_match_one` 的跨行实参收集处理）；宏体**内部**的替换重扫已由
     `macro_expand` 的 hideset 引擎负责。
     """
-    budget = int(_get_expand_config().get("max_iterations", 128))
+    limit = int(_get_expand_config().get("max_iterations", 128))
+    budget = limit
     prefix = ctx.call_prefix if ctx.call_prefix is not None else ""
-    while budget > 0:
+    while True:
+        step = _junction_step(ctx, body_toks, line, end, prefix)
+        if step is None:
+            break
+        if budget <= 0:
+            macro_expand.warn_budget_exhausted(limit, "接缝重扫")
+            break
         budget -= 1
-        li = _last_meaningful(body_toks)
-        if li < 0:
-            break
-        cand = body_toks[li]
-        if cand.masked or not IDENT_RE.fullmatch(cand.text):
-            break
-        if prefix:
-            if li == 0 or body_toks[li - 1].text != prefix:
-                break
-            call_start = li - 1  # 前缀 token 随调用一并消费
-        else:
-            call_start = li
-        if cand.text not in ctx.macro_defs or cand.text in cand.hide:
-            break
-        if cand.text not in ctx.func_macros or ctx.call_args is None:
-            break
-        rest = line[end:]
-        rest_toks = macro_expand.tokenize(
-            rest,
-            ctx.operators,
-            macro_expand.mask_spans(
-                rest, ctx.string_delimiters, ctx.escape, ctx.syntax
-            ),
-        )
-        got = macro_expand.collect_args_at(rest_toks, 0, ctx.call_args, ctx.syntax)
-        if got is None:
-            break
-        args, after = got
-        consumed = sum(len(t.text) for t in rest_toks[:after])
+        call_start, cand, args, after, consumed, rest_toks = step
         # hideset 交集（Prosser）：调用区间各 token 的 hide 集交集 ∪ {宏名}
         hideset = cand.hide
         for arg in args:
@@ -1427,6 +1450,7 @@ def _rescan_junction(
                 hideset = hideset & t.hide
         hideset = hideset & rest_toks[after - 1].hide
         named = [p for p in (ctx.func_macros.get(cand.text) or []) if p != "..."]
+        rest = line[end:]
         expanded = macro_expand.substitute_call_tokens_tokens(
             cand.text,
             args,

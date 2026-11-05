@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **审计小项修复（0.1.4 复审，2026-11-05）**：① 宏展开预算 `[expand] max_iterations`
+  用尽此前**静默**保留未展开文本 → 现三处（对象宏重扫 / 函数宏重扫 / 接缝重扫）统一发
+  `RuntimeWarning`（`macro_expand.warn_budget_exhausted`；接缝重扫重构出 `_junction_step`
+  只识别不改写，预算检查移到候选识别之后，避免边沿误报）；保留原文语义不变。
+  测试 `tests/engine/preprocessor/test_expand_limits.py`（对象宏/接缝各 1 条）。
+  ② ADR-0027 补**封闭注册规则**：`EDGE_KINDS` 新增边种类必须引擎注册表与能力版本同步，
+  语言包只能声明子集、不得自造（此前仅写了注册表位置与 fail-fast）。
+  · 验证：`pytest tests/engine/preprocessor -q` → 376 passed（含新 2 条）；结构 compare 新增 0/变大 0。
 - **0.1.4 收口（块 12 ✅，2026-11-03，主线 2 = 12/12）**：全量 `pytest tests` **4502 passed /
   7 skipped**（0 失败）；A/B **0/144**；`render_coverage` C 包 **124/124**；`c_acceptance` **49/0**；
   corpus/渲染/注释随全量绿；doc 门禁 D1–D4=0；结构 S **1013**（新增 0/变大 0）。发布候选 = `21c0fcc`+本提交。

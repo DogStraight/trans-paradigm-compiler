@@ -8,7 +8,8 @@
   重扫描时 hide 里已有的宏**不再展开** ⇒ 自引用/互递归抑制由算法保证
   （`#define x x` → `x`；`y→z→y` → `z`），不靠预判；
 - `budget` 只是**资源上限守卫**（同一算法上的预算，不是第二套算法）：超限即停止
-  继续展开（保留原文），调用方可用 `[expand] max_iterations` 配置。
+  继续展开（保留原文）并发出 `RuntimeWarning`（**不静默**，审计小项）；调用方可用
+  `[expand] max_iterations` 配置。
 
 语言无关：标识符形态取 `core.token_protocol.IDENT_RE`，实参括号/分隔符取语言包声明
 的 `MacroCallArgs`（`[macro_recognition]` 的 `call_args` / `arg_separator`）。
@@ -22,6 +23,7 @@ Doc: preprocessor/README.md
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -32,6 +34,19 @@ from .macro_shape import MacroCallArgs, MacroOperators
 
 #: 展开次数预算的默认值（与 `[expand] max_iterations` 同义，仅作资源上限）
 DEFAULT_BUDGET = 128
+
+
+def warn_budget_exhausted(budget: int, where: str) -> None:
+    """预算用尽时的**可见信号**（保留未展开文本是既有边界，但不能静默）。
+
+    `where` = 消费方（对象宏重扫 / 函数宏重扫 / 接缝重扫），便于定位是哪一层超限。
+    """
+    warnings.warn(
+        f"[preprocessor] 宏展开迭代预算超限（{where}，max_iterations={budget}）："
+        "保留未展开文本；可在 [expand] max_iterations 调整",
+        RuntimeWarning,
+        stacklevel=3,
+    )
 
 
 @dataclass(frozen=True)
@@ -408,6 +423,7 @@ def _expand_one(
                 continue
             steps += 1
             if steps > budget:
+                warn_budget_exhausted(budget, "函数宏重扫")
                 out.extend(work[i:])
                 break
             raw_variadic = _call_raw_variadic(
@@ -438,6 +454,7 @@ def _expand_one(
             continue
         steps += 1
         if steps > budget:
+            warn_budget_exhausted(budget, "对象宏重扫")
             out.extend(work[i:])
             break
         hide = tok.hide | {name}
