@@ -58,6 +58,7 @@
   （功能切面打包已就近 `packaging/packaging.md`，facets.json 规格随目录）
 - 验证（fuzz/差分/边缘）：`tests/fuzz/README.md`（语法驱动 + 变异 fuzzing，不变量：不崩溃/token 保序/幂等）、`tests/edge/run_edge.py`（边缘语料门禁）、`tests/differential/run_differential.py`（与 verible-verilog-format 对拍，可选依赖）
 - 片段模式：`islands/README.md`（岛式分片实现）+ `docs/gaps/gap-fragment-mode.md`（契约/退出判据）
+- 依赖图/增量：`docs/decisions/0027-unit-graph-multi-root.md`、`0028-elaboration-consumes-unit-graph.md`、`docs/gaps/gap-unit-graph.md`、`docs/gaps/gap-incremental-parse.md`
 - 缺口档案：`docs/gaps/README.md`（档案规约 + 登记表）——能力边界/缺口一个
   `gaps/gap-*.md`，宽泛条目（TODO/ROADMAP）链接过来
 - 地图/索引：各引擎子包目录 `README.md`（部件就近说明：每文件一句话，随目录同步）、

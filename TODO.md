@@ -9,12 +9,6 @@
 ## 一、C 包缺陷（能做的）
 
 ### 1.2 渲染保真 / 注释归属（`gap-language-pack-scope.md`「已知偏差」）
-- [ ] **展平行内行尾注释的 LineSuffix 落地**：行终止注释落在**展平行内**的声明符/说明符之间
-      时，LineSuffix 在原子节点边界就地落地，把后续 token 吞进注释（`struct S { int // c\nx; };`
-      渲染成 `int // c x;`，**旧语法同样坏**；#44 对抗审计发现）。修法 = 渲染器让行终止
-      LineSuffix 跨节点边界延迟到**全局**下一个换行点（`doc._resolve_line_suffix` 的作用域
-      从节点 doc 提到整棵树）。触发 = 真实语料出现该形态；判据 = 复现渲染 token 序列与源
-      相同且幂等（`test_c_declaration_spec_order.py` 现已锁"注释不丢"一侧）。
 - [ ] **注释簿记事务化 + 原子节点领取面**（#44 审计 B）：声明符优先交替回滚后，typedef 名后的
       注释（`extern T // c\nv;` 行尾、`extern\n// c\nT *p;` 独占行）可能被去重吞掉；试修
       （行尾台账/锚点集进快照）在 C 可行但触发 verilog 注释恢复回归（端口注释位置漂移），已

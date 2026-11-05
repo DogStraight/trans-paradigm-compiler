@@ -53,6 +53,17 @@ tpc 是**配置驱动的语言流水线**：语言知识全部写在 `grammar/` 
 token 是 token 级 lint 与 parser 的输入，AST 是语义与变换的载体，Doc IR 是
 文本布局的可排版中间表示。
 
+**`tpc check` 的发现/图化支线**（不在默认 format 路径上）：递归发现文件 → 建
+**依赖/单元图**（`analyzer/unit_graph.py`：roots/nodes/edges/definitions，多入口 ⇒
+多根森林）→ 精化基座**只消费图**（原子/定义索引/实例点）→ 逐文件 postpass。
+图的边种类是**注册能力面**（`unit_graph.edges.v1`），语言包只声明产出哪些种类；
+`--tree`/`--json` 是图的文本/机器出口（ADR-0027 / ADR-0028）。
+
+**增量重解析**（`parser/incremental.py`）是同文件的库级旁路：token diff → 最深
+span 节点按**规则名片段解析**（`Parser.parse_fragment`）→ 并树；判不准回退单元/全量。
+它不改变默认管线，边界（单文件、解析层、无跨文件失效传播）见
+`docs/gaps/gap-incremental-parse.md`。
+
 ## 一次 `tpc format foo.v` 走一遍
 
 | 站 | 数据形态 / 动作 | 负责 | 为什么在这 | 深入读 |
@@ -97,6 +108,8 @@ token 是 token 级 lint 与 parser 的输入，AST 是语义与变换的载体�
   `core/config_lifecycle.md`。
 - **组件协议**（`core/plugin_loader.py`）：插件 tpc.toml 声明 → 发现/依赖排序/
   加载；魔数键集中在 `core/_protocol.py`。见 `core/component_protocol.md`。
+- **依赖/单元图**（`analyzer/unit_graph.py`）：多入口多根森林；边 = `(kind, source,
+  target)`，kind 是注册能力面；`tpc check --tree` 文本出口。见 ADR-0027/0028。
 - **核心类型**：Token/GrammarRule/Node/FileManager（`core/define.py`），错误层级
   （`core/errors.py`）。
 - **核心类型即接口**：token 类型命名协议（`core/token_protocol.py`）是 lexer 与

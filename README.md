@@ -160,6 +160,8 @@ tpc lint input.v --json      # LSP-compatible JSON diagnostics
 tpc check input.v            # cross-file semantic check (syntax then semantic stages)
 tpc check input.v --json     # machine-readable diagnostics (code/severity/range)
 tpc check input.v --html report.html   # human-readable HTML report
+tpc check a.v b.v           # multi-entry check (multi-root dependency forest)
+tpc check input.v --tree    # print the file→file dependency graph as a text tree
 tpc trace input.v --html trace.html     # pipeline unit trace as HTML
 tpc expand input.v           # expand macros + transform (per [commands].expand)
 tpc config dump              # show every config key's source (file + section)
@@ -172,6 +174,13 @@ suppressions keep
 generated code honest: `/* tpc-check off <code> */` … `/* tpc-check on */`
 (region) and `// tpc-check: disable-line <code>` (single line) filter
 diagnostics by code without touching the checkers.
+
+`tpc check` also returns a **dependency/unit graph** (`report["graph"]`: roots /
+nodes / edges / unit definitions) — multi-entry checks produce a multi-root
+forest, and `--tree` prints the same graph as text. Edge kinds are a registered
+engine capability (`unit_graph.edges.v1`), not language-specific vocabulary;
+see [ADR-0027](./docs/decisions/0027-unit-graph-multi-root.md) and
+[ADR-0028](./docs/decisions/0028-elaboration-consumes-unit-graph.md).
 
 `tpc config dump` is the debugging entry point for "where does this config
 value come from" — it resolves the language pack and prints each key's source
@@ -186,6 +195,9 @@ Style entry points:
 - **Where does this config value come from?** — `tpc config dump`.
 
 Python API 参考：各模块用法见就近 docstring（main.py / pipeline / 各子包 README）。
+同文件**增量重解析**是库级 API（`parser/incremental.py::incremental_reparse`，
+复用 `Parser.parse_fragment`）——只覆盖解析层（单文件、片段级、判不准回退全量），
+跨文件语义失效传播仍是 v0.2；边界见 [gap-incremental-parse.md](./docs/gaps/gap-incremental-parse.md)。
 
 ## Example: a Verilog type extension
 
@@ -324,6 +336,8 @@ zero to a working language): [docs/language_walkthrough.md](./docs/language_walk
 | [analyzer/semantic_checks.md](./analyzer/semantic_checks.md) | Semantic check slot design (two-layer rules + post-pass) |
 | [docs/pipeline_stages.md](./docs/pipeline_stages.md) | Stage contracts: data shapes, blocking semantics, cross-stage channels |
 | [docs/gaps/README.md](./docs/gaps/README.md) | Known limitations (component gap files) |
+| [docs/gaps/gap-incremental-parse.md](./docs/gaps/gap-incremental-parse.md) | Incremental re-parsing: fragment-level parse layer + honest boundaries |
+| [docs/decisions/0027-unit-graph-multi-root.md](./docs/decisions/0027-unit-graph-multi-root.md) | Dependency / unit graph: multi-entry multi-root forest, registered edge kinds |
 | [policy/release-checklist.md](./policy/release-checklist.md) | Release SOP |
 | [docs/language_walkthrough.md](./docs/language_walkthrough.md) | Build a language from zero (c4 as the worked example) |
 
@@ -335,8 +349,8 @@ zero to a working language): [docs/language_walkthrough.md](./docs/language_walk
 | `preprocessor/` | Macro expansion / reverse mapping |
 | `lexer/` | Lexing: token-definition-driven scanning |
 | `linter/` | Pre-parse, token-level lint (reverse parser, reuses the same TOML grammar) |
-| `parser/` | Syntax: recursive descent + Pratt + rule selection |
-| `analyzer/` | Semantic analysis: scopes, symbols, types (extensible primitives) |
+| `parser/` | Syntax: recursive descent + Pratt + rule selection + fragment-level incremental re-parse |
+| `analyzer/` | Semantic analysis: scopes, symbols, types + dependency/unit graph |
 | `transform/` | Semantic mapping + config-driven transformations |
 | `renderer/` | Doc IR → formatted output (Wadler-Lindig) |
 | `pipeline/` | Orchestration: stage sequencing (`run_pipeline_on_source`) + pass scheduling |
@@ -389,7 +403,9 @@ Python 3.11/3.12/3.13 × Windows/Ubuntu.
 
 ## Status
 
-**Experimental — Alpha, not yet published to PyPI.** Version 0.1.2.
+**Experimental — Alpha, not yet published to PyPI.** Version 0.1.2
+(working tree: 0.1.4 release candidate — 12/12 scale closed; version bump and
+publish are pending).
 
 Verilog support targets IEEE 1364-2005 (Verilog-2005), with the
 synthesizable core in the main pack and simulation/library syntax in plugins
@@ -420,8 +436,12 @@ Summary:
 - **Elaboration is per-project, not full-design** — no elaboration-time
   generate semantics beyond the built-in branch evaluator, no numerical width
   propagation, no CDC.
-- **No IDE / LSP; no incremental parsing; interpreter-bound throughput**
-  (~19k tok/s combined; fine for single files and small/medium projects).
+- **No IDE / LSP wiring, interpreter-bound throughput.** Incremental
+  **re-parsing** exists as a library API (single file, fragment-level, parse
+  layer only; cross-file semantic invalidation is v0.2), not as a watcher/LSP.
+  Measured on the real-corpus V files: 0.6–12 s per file (7 files ≈ 26.9 s);
+  fuzz throughput 12 iters/s single / 32 iters/s on 8 workers; verilator
+  benchmark consensus 53 (see `tests/README.md` for reproduction).
 - **Deep semantics live in plugin code, not TOML** — config drives syntax,
   rendering, and shallow semantics; genuinely new semantic capabilities are
   engine primitives / plugin scripts.
@@ -450,7 +470,7 @@ revision, but if you find any statement that does not match the actual code,
 please open an issue with a correction — precise documentation is preferred
 over polished claims.
 
-> Last synced against the codebase: **2026-09-26** (core-idea section, structure
-> table, CI gate list, documentation index, version).
+> Last synced against the codebase: **2026-11-03** (unit graph / `--tree`,
+> incremental re-parsing boundaries, quick start, limitations, doc index).
 
 [Design docs](./docs/) · [Known limitations](./docs/gaps/README.md)
