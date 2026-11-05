@@ -56,7 +56,8 @@ token 是 token 级 lint 与 parser 的输入，AST 是语义与变换的载体�
 **`tpc check` 的发现/图化支线**（不在默认 format 路径上）：递归发现文件 → 建
 **依赖/单元图**（`analyzer/unit_graph.py`：roots/nodes/edges/definitions，多入口 ⇒
 多根森林）→ 精化基座**只消费图**（原子/定义索引/实例点）→ 逐文件 postpass。
-图的边种类是**注册能力面**（`unit_graph.edges.v1`），语言包只声明产出哪些种类；
+图的边种类是**语言包词汇**（`[[unit_graph.edges]] kind + from`，能力面 `unit_graph.edges.v2`），
+引擎只保留产边通道注册表；
 `--tree`/`--json` 是图的文本/机器出口（ADR-0027 / ADR-0028）。
 
 **增量重解析**（`parser/incremental.py`）是同文件的库级旁路：token diff → 最深

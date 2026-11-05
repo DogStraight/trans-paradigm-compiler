@@ -178,8 +178,9 @@ diagnostics by code without touching the checkers.
 `tpc check` also returns a **dependency/unit graph** (`report["graph"]`: roots /
 nodes / edges / unit definitions) — multi-entry checks produce a multi-root
 forest, and `--tree` prints the same graph as text. Edge kinds are a registered
-engine capability (`unit_graph.edges.v1`), not language-specific vocabulary;
-see [ADR-0027](./docs/decisions/0027-unit-graph-multi-root.md) and
+declared by the language pack as `[[unit_graph.edges]] kind + from` (capability
+`unit_graph.edges.v2`); the engine keeps only a closed **edge-channel registry**.
+See [ADR-0027](./docs/decisions/0027-unit-graph-multi-root.md) and
 [ADR-0028](./docs/decisions/0028-elaboration-consumes-unit-graph.md).
 
 `tpc config dump` is the debugging entry point for "where does this config

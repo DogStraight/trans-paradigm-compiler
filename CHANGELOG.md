@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **EDGE_KINDS 改语言侧声明面（审计 D，作者裁定 2026-11-05）**：kind 词汇归语言包——
+  语言包用 `[[unit_graph.edges]] kind + from` 声明"产哪些边、从哪个通道收"；引擎只保留
+  封闭的**产边通道注册表** `EDGE_CHANNELS`（`structure.unit_edges` /
+  `preprocessor.include_edges`），不再有 `if producer == ...` 分支。能力面
+  `unit_graph.edges` **v1 → v2**（声明面语义变化，两个真实包已同步）。
+  · fail-closed：`from` 未注册 / kind 重复 / kind 非法命名（`^[a-z][a-z0-9_]*$`）/
+  旧键 `edge_kinds` 均 `ConfigError`（旧键报错指向新写法，不留兼容垫片）；
+  `EDGE_KINDS` 与 `core/global_state.py` 登记一并删除（新增 `EDGE_CHANNELS` 登记）。
+  · **硬证据**：临时语言包声明 `kind = "custom_link"` + 已注册通道 → 不改引擎即出
+  `custom_link` 边（`test_custom_edge_kind_from_pack_without_engine_change`）。
+  · 验证：`tests/engine/analyzer/test_unit_graph.py` → 13 passed；`check_hardcode --strict-*`
+  绿；结构 compare 新增 0/变大 0；feature_sites 因键形状变化重录基线（config 29→34，
+  理由：新键 `unit_graph.edges` 在引擎声明 + 2 包声明 + ADR/gap 文档 5 处，旧键仅 legacy
+  探测器 1 处）。
 - **审计三件（作者批，2026-11-05）**：① **A 阈值 sweep 量具** `tools/threshold_sweep.py`
   ——通用（`--runner module:function` 接任意旋钮/目标量；`--selftest` 证明表随旋钮变化；
   `--incremental` 用真实语料出原始表）+ 外部性（只出原始数字、不输出阈值建议；语料分离

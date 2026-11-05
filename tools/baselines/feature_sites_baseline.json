@@ -1206,15 +1206,40 @@
      "stage_count": 0,
      "stage_files": [],
      "total": 1
+    },
+    "unit_graph.edges": {
+     "converged": [
+      "core/engine_capabilities.py"
+     ],
+     "converged_count": 1,
+     "declared_in": "analyzer/unit_graph.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 6,
+      "插件内": 2,
+      "文档": 9,
+      "测试": 1
+     },
+     "scatter": [
+      "analyzer/README.md",
+      "analyzer/structure.py",
+      "analyzer/unit_graph.py",
+      "preprocessor/_expand.py",
+      "preprocessor/primitives/include.py"
+     ],
+     "scatter_count": 5,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 18
     }
    },
    "summary": {
-    "budget": 29,
-    "converged_total": 2,
-    "instances": 15,
-    "scatter_max": 3,
+    "budget": 34,
+    "converged_total": 3,
+    "instances": 16,
+    "scatter_max": 5,
     "scatter_median": 2,
-    "scatter_total": 29,
+    "scatter_total": 34,
     "stage_max": 0,
     "stage_median": 0
    }

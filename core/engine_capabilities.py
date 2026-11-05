@@ -46,7 +46,7 @@ CAPABILITIES: dict[str, str] = {
     "transform.slots": "1",         # [transform] slots / ctx_channels
     "pipeline.units": "1",          # [pipeline] units / pass / schedule
     "structure.protocol": "1",      # [structure] 单元/实例发现协议
-    "unit_graph.edges": "1",        # [unit_graph] edge_kinds（图化边种类注册面）
+    "unit_graph.edges": "2",        # [[unit_graph.edges]] kind+from（声明面语义变更：kind 归语言包）
     "discovery.shape": "1",         # [discovery] 语句发现形态（容器/延续/属性对/子句分隔符）
     "checks.rules": "1",            # rules/*.toml 声明式检查规则表
     "capability.elaborator": "1",   # [capabilities] elaborator 入口
