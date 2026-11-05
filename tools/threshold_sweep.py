@@ -17,11 +17,17 @@
 用法：
     python tools/threshold_sweep.py --selftest
     python tools/threshold_sweep.py --incremental                 # 增量闸门评估（真实语料）
+    python tools/threshold_sweep.py --incremental --history 200    # 目标点并入真实提交 diff 分位
     python tools/threshold_sweep.py --incremental --save tools/baselines/incremental_threshold_sweep.json
     python tools/threshold_sweep.py --runner mymod:fn --points 1,2,4 --repeats 3
 
 通用接口契约（`--runner`）：`fn(knob: float) -> float`，返回该旋钮取值下的目标量
 （秒 / 字节 / 计数均可，单位由 runner 自己负责）。
+
+builtin 采样口径（审计 task.sweep2 修订）：候选片段 = **AST 里所有带 `_tok_span` 的
+节点**（不限于顶层单元），按"离目标占比最近且片段可独立解析"取点、同一片段不重复；
+`--history N` 额外从最近 N 条真实提交的 `git numstat` 估计改动行占比分位，并入目标点
+（分位本身只打印，不解释），避免只在估算网格上采样。
 """
 
 from __future__ import annotations
@@ -30,6 +36,7 @@ import argparse
 import importlib
 import json
 import statistics
+import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -43,8 +50,9 @@ from core.console import ensure_utf8_stdio  # noqa: E402 — 路径引导之后�
 
 ensure_utf8_stdio()
 
-_DEFAULT_POINTS = "0.02,0.05,0.10,0.20,0.30,0.45"
+_DEFAULT_POINTS = "0.02,0.05,0.10,0.15,0.20,0.25,0.30,0.35,0.45"
 _DEFAULT_CORPUS = "tests/e2e/samples/real/ref/ref_tv80_core.v"
+_HISTORY_SUFFIXES = {".py", ".v", ".c", ".h", ".toml"}
 
 
 @dataclass
@@ -135,18 +143,26 @@ def _expand_source(source: str, rules: str = "grammar/verilog") -> str:
     return clean
 
 
-def _units_with_span(ast) -> list[tuple[int, int, str]]:
-    """顶层单元 `(start, end, rule)`（只收带 `_tok_span` 的节点）。"""
-    units: list[tuple[int, int, str]] = []
-    for child in getattr(ast, "sub_node", []) or []:
-        span = getattr(child, "_tok_span", None)
-        if isinstance(span, tuple) and len(span) == 2 and span[0] < span[1]:
-            units.append((span[0], span[1], child.node_name))
-    return units
+def _candidate_spans(ast) -> list[tuple[int, int, str]]:
+    """AST 里**所有**带 `_tok_span` 的节点（嵌套片段也收；同 span 去重）。"""
+    from core.define import iter_nodes
+
+    spans: list[tuple[int, int, str]] = []
+    seen: set[tuple[int, int]] = set()
+    for node in iter_nodes(ast):
+        span = getattr(node, "_tok_span", None)
+        if not isinstance(span, tuple) or len(span) != 2 or span[0] >= span[1]:
+            continue
+        key = (span[0], span[1])
+        if key in seen:
+            continue
+        seen.add(key)
+        spans.append((span[0], span[1], node.node_name))
+    return spans
 
 
 def _rename_identifier(tokens: list, start: int, end: int):
-    """单元内挑一个标识符改成合法新名 → `(下标, 新 Token)`；无可用 token → None。"""
+    """片段内挑一个标识符改成合法新名 → `(下标, 新 Token)`；无可用 token → None。"""
     from core.define import Token
 
     for i in range(start + 3, end - 3):
@@ -162,49 +178,98 @@ def _rename_identifier(tokens: list, start: int, end: int):
 
 
 def _measure_one(parser, tokens: list, start: int, end: int, rule: str, repeats: int):
-    """单个占比点：多轮测全量 parse 与片段 parse（只计时调用本身）。"""
+    """单个片段：多轮测片段 parse（先测，失败即弃）与全量 parse（只计时调用本身）。"""
     edit = _rename_identifier(tokens, start, end)
     if edit is None:
         return None
     index, new_token = edit
     new_tokens = list(tokens)
     new_tokens[index] = new_token
-    full_times: list[float] = []
     frag_times: list[float] = []
+    for _ in range(max(1, repeats)):
+        t0 = time.perf_counter()
+        node = parser.parse_fragment(new_tokens[start:end], rule)
+        frag_times.append(time.perf_counter() - t0)
+        if node is None:  # 片段不可独立解析 ⇒ 该片段对增量无意义（闸门会回退）
+            return None
+    full_times: list[float] = []
     for _ in range(max(1, repeats)):
         t0 = time.perf_counter()
         parser.parse(new_tokens)
         full_times.append(time.perf_counter() - t0)
-        t0 = time.perf_counter()
-        parser.parse_fragment(new_tokens[start:end], rule)
-        frag_times.append(time.perf_counter() - t0)
     return full_times, frag_times
 
 
 def _row_for_point(
-    parser, tokens: list, units: list, total: int, target: float, repeats: int
+    parser,
+    tokens: list,
+    candidates: list[tuple[int, int, str]],
+    used: set[tuple[int, int]],
+    total: int,
+    target: float,
+    repeats: int,
 ) -> dict:
-    """一个目标占比点 → 原始表行（实际占比如实记录，不假装精确命中）。"""
-    start, end, rule = min(units, key=lambda u: abs((u[1] - u[0]) / total - target))
-    ratio = (end - start) / total
-    measured = _measure_one(parser, tokens, start, end, rule, repeats)
-    if measured is None:
-        return {"target_ratio": target, "actual_ratio": ratio, "note": "no-id-token"}
-    full_times, frag_times = measured
-    full_ms = statistics.median(full_times) * 1000
-    frag_ms = statistics.median(frag_times) * 1000
-    return {
-        "target_ratio": target,
-        "actual_ratio": round(ratio, 4),
-        "unit": rule,
-        "frag_tokens": end - start,
-        "total_tokens": total,
-        "full_ms": round(full_ms, 2),
-        "frag_ms": round(frag_ms, 2),
-        "speedup": round(full_ms / frag_ms, 2) if frag_ms else None,
-        "full_all_ms": [round(v * 1000, 2) for v in full_times],
-        "frag_all_ms": [round(v * 1000, 2) for v in frag_times],
-    }
+    """一个目标占比点 → 原始表行：取最近且可解析、未用过的片段（实际占比如实记录）。"""
+    ordered = sorted(candidates, key=lambda c: abs((c[1] - c[0]) / total - target))
+    for start, end, rule in ordered[:8]:  # 近邻上限：避免逐点扫全树
+        if (start, end) in used:
+            continue
+        measured = _measure_one(parser, tokens, start, end, rule, repeats)
+        if measured is None:
+            continue
+        used.add((start, end))
+        full_times, frag_times = measured
+        full_ms = statistics.median(full_times) * 1000
+        frag_ms = statistics.median(frag_times) * 1000
+        return {
+            "target_ratio": target,
+            "actual_ratio": round((end - start) / total, 4),
+            "fragment": rule,
+            "frag_tokens": end - start,
+            "total_tokens": total,
+            "full_ms": round(full_ms, 2),
+            "frag_ms": round(frag_ms, 2),
+            "speedup": round(full_ms / frag_ms, 2) if frag_ms else None,
+            "full_all_ms": [round(v * 1000, 2) for v in full_times],
+            "frag_all_ms": [round(v * 1000, 2) for v in frag_times],
+        }
+    return {"target_ratio": target, "note": "no-parsable-fragment"}
+
+
+def _history_quantiles(limit: int) -> list[float]:
+    """最近 `limit` 条真实提交的改动行占比分位（numstat ÷ 当前文件行数，粗略代理）。"""
+    try:
+        out = subprocess.run(
+            ["git", "log", f"-n{limit}", "--numstat", "--format="],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except OSError:
+        return []
+    ratios: list[float] = []
+    for line in (out.stdout or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        if Path(parts[2]).suffix not in _HISTORY_SUFFIXES:
+            continue
+        try:
+            total = len(
+                (Path(_REPO_ROOT) / parts[2])
+                .read_text(encoding="utf-8")
+                .splitlines()
+            )
+        except OSError:
+            continue
+        ratio = (int(parts[0]) + int(parts[1])) / max(total, 1)
+        if ratio <= 0.5:  # >0.5 的改动一律回退全量，不在"增量适用分布"内
+            ratios.append(ratio)
+    if not ratios:
+        return []
+    ratios.sort()
+    return [round(ratios[int(q * (len(ratios) - 1))], 4) for q in (0.1, 0.25, 0.5, 0.75, 0.9)]
 
 
 def _incremental_sweep(
@@ -212,8 +277,8 @@ def _incremental_sweep(
 ) -> list[dict]:
     """增量闸门原始表：目标片段占比 → 片段解析/全量解析耗时（多轮中位数）。
 
-    口径：旋钮 = 目标片段占比（片段 token / 全量 token），取最近的真实顶层单元并
-    记录**实际占比**；片段耗时 = `Parser.parse_fragment`（增量成本代理，绕过闸门），
+    口径：旋钮 = 目标片段占比（片段 token / 全量 token），取最近的真实**可解析**片段
+    且同一片段不重复；片段耗时 = `Parser.parse_fragment`（增量成本代理，绕过闸门），
     全量耗时 = `Parser.parse`。只出原始表，不写"阈值该设多少"。
     """
     lexer, parser = _load_v_parser()
@@ -222,11 +287,12 @@ def _incremental_sweep(
     ast = parser.parse(tokens)
     if ast is None or getattr(parser, "_parse_truncated", False):
         raise SystemExit(f"语料解析失败：{corpus}")
-    units = _units_with_span(ast)
-    if not units:
-        raise SystemExit("语料没有带 span 的顶层单元（无法 sweep）")
+    candidates = _candidate_spans(ast)
+    if not candidates:
+        raise SystemExit("语料没有带 span 的节点（无法 sweep）")
+    used: set[tuple[int, int]] = set()
     rows = [
-        _row_for_point(parser, tokens, units, len(tokens), target, repeats)
+        _row_for_point(parser, tokens, candidates, used, len(tokens), target, repeats)
         for target in points
     ]
     if save:
@@ -239,19 +305,26 @@ def _incremental_sweep(
 
 def _print_incremental(rows: list[dict]) -> None:
     """原始表（列名即口径；不输出结论）。"""
-    print("target_ratio actual_ratio unit frag_tokens/total full_ms frag_ms speedup")
+    print("target_ratio actual_ratio fragment frag_tokens/total full_ms frag_ms speedup")
     for r in rows:
         if "note" in r:
-            print(f"{r['target_ratio']:.2f} {r['actual_ratio']:.4f} {r['note']}")
+            print(f"{r['target_ratio']:.2f} {r['note']}")
             continue
         print(
-            f"{r['target_ratio']:.2f} {r['actual_ratio']:.4f} {r['unit']} "
+            f"{r['target_ratio']:.2f} {r['actual_ratio']:.4f} {r['fragment']} "
             f"{r['frag_tokens']}/{r['total_tokens']} {r['full_ms']:.2f} "
             f"{r['frag_ms']:.2f} {r['speedup']}"
         )
 
 
 def _cmd_incremental(args: argparse.Namespace, points: list[float]) -> int:
+    if args.history:
+        quantiles = _history_quantiles(args.history)
+        print(
+            f"[info] 真实提交 diff 行占比分位（10/25/50/75/90%，最近 {args.history} 条）："
+            f"{quantiles}"
+        )
+        points = sorted({*points, *quantiles})
     rows = _incremental_sweep(args.corpus, points, args.repeats, args.save)
     _print_incremental(rows)
     return 0
@@ -283,6 +356,13 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("--corpus", default=_DEFAULT_CORPUS, help="builtin 评估语料（默认 tv80）")
     ap.add_argument("--points", default=_DEFAULT_POINTS, help="旋钮取值列表（逗号分隔）")
     ap.add_argument("--repeats", type=int, default=3, help="每个取值重复轮数（看离散度）")
+    ap.add_argument(
+        "--history",
+        type=int,
+        default=0,
+        metavar="N",
+        help="builtin：并入最近 N 条真实提交 diff 的改动行占比分位（只打印分位，不解释）",
+    )
     ap.add_argument("--runner", default=None, help="通用模式：module:function（knob→value）")
     ap.add_argument("--save", default=None, help="把原始表 JSON 写到该路径")
     return ap

@@ -7,16 +7,17 @@ from collections.abc import Iterator
 
 import pytest
 
-# Windows 控制台/管道编码：DSH 等宿主以 UTF-8 解码子进程输出，而本机活动代码页
-# 为 GBK(936) 时 Python stdout 默认用 GBK 编码 → 中文输出（测试 docstring 等）
-# 在 UTF-8 解码侧乱码。收集前强制 stdout/stderr 以 UTF-8 输出（Python 3.7+，
-# reconfigure 仅影响本进程；测试收集/运行的所有中文输出随之正常）。
-if hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue] — hasattr 守卫的真实运行时方法
-        sys.stderr.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
-    except Exception:  # noqa: BLE001 — 非 tty/受限环境可能拒绝，忽略
-        pass
+import os as _os
+import sys as _sys
+
+# 控制台 UTF-8 自护走单点 `core/console.py`（脚本入口 sys.path[0] 不是仓库根，
+# 先引导再 import；行为见 core/console.py，不要在这里复制 reconfigure 逻辑）。
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+if _REPO_ROOT not in _sys.path:
+    _sys.path.insert(0, _REPO_ROOT)
+from core.console import ensure_utf8_stdio  # noqa: E402 — 路径引导之后才可 import
+
+ensure_utf8_stdio()
 
 # 将项目根目录加入 sys.path，使各模块可直接导入
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

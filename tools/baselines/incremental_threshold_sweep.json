@@ -1,122 +1,282 @@
 [
   {
-    "target_ratio": 0.02,
-    "actual_ratio": 0.0222,
-    "unit": "ModuleDecl",
-    "frag_tokens": 501,
+    "target_ratio": 0.0055,
+    "actual_ratio": 0.0055,
+    "fragment": "AlwaysStmt",
+    "frag_tokens": 125,
     "total_tokens": 22604,
-    "full_ms": 1671.82,
-    "frag_ms": 39.17,
-    "speedup": 42.68,
+    "full_ms": 1579.12,
+    "frag_ms": 6.7,
+    "speedup": 235.87,
     "full_all_ms": [
-      1502.54,
-      1692.36,
-      1671.82
+      1585.07,
+      1579.12,
+      1470.17
     ],
     "frag_all_ms": [
-      36.76,
-      52.67,
-      39.17
+      6.71,
+      6.7,
+      4.43
+    ]
+  },
+  {
+    "target_ratio": 0.013,
+    "actual_ratio": 0.013,
+    "fragment": "CaseItemList",
+    "frag_tokens": 294,
+    "total_tokens": 22604,
+    "full_ms": 1488.93,
+    "frag_ms": 23.97,
+    "speedup": 62.12,
+    "full_all_ms": [
+      1464.45,
+      1534.26,
+      1488.93
+    ],
+    "frag_all_ms": [
+      22.53,
+      23.97,
+      25.7
+    ]
+  },
+  {
+    "target_ratio": 0.02,
+    "actual_ratio": 0.0197,
+    "fragment": "BeginEnd",
+    "frag_tokens": 445,
+    "total_tokens": 22604,
+    "full_ms": 1551.24,
+    "frag_ms": 32.58,
+    "speedup": 47.61,
+    "full_all_ms": [
+      1487.31,
+      1551.24,
+      1615.37
+    ],
+    "frag_all_ms": [
+      34.8,
+      32.58,
+      30.97
+    ]
+  },
+  {
+    "target_ratio": 0.0369,
+    "actual_ratio": 0.0349,
+    "fragment": "IfBlock",
+    "frag_tokens": 789,
+    "total_tokens": 22604,
+    "full_ms": 1560.47,
+    "frag_ms": 40.58,
+    "speedup": 38.46,
+    "full_all_ms": [
+      1467.73,
+      1560.47,
+      1582.11
+    ],
+    "frag_all_ms": [
+      46.22,
+      40.58,
+      40.34
     ]
   },
   {
     "target_ratio": 0.05,
-    "actual_ratio": 0.0324,
-    "unit": "ModuleDecl",
-    "frag_tokens": 733,
+    "actual_ratio": 0.0491,
+    "fragment": "ElseBlockBranch",
+    "frag_tokens": 1110,
     "total_tokens": 22604,
-    "full_ms": 1631.19,
-    "frag_ms": 46.95,
-    "speedup": 34.74,
+    "full_ms": 1584.83,
+    "frag_ms": 61.56,
+    "speedup": 25.75,
     "full_all_ms": [
-      1636.1,
-      1631.19,
-      1624.59
+      1498.04,
+      1628.84,
+      1584.83
     ],
     "frag_all_ms": [
-      46.95,
-      42.94,
-      47.96
+      64.55,
+      56.92,
+      61.56
     ]
   },
   {
     "target_ratio": 0.1,
-    "actual_ratio": 0.1161,
-    "unit": "ModuleDecl",
-    "frag_tokens": 2624,
+    "actual_ratio": 0.1052,
+    "fragment": "BeginEnd",
+    "frag_tokens": 2378,
     "total_tokens": 22604,
-    "full_ms": 1614.1,
-    "frag_ms": 201.21,
-    "speedup": 8.02,
+    "full_ms": 1523.11,
+    "frag_ms": 135.26,
+    "speedup": 11.26,
     "full_all_ms": [
-      1614.1,
-      1586.78,
-      1643.06
+      1611.38,
+      1523.11,
+      1458.12
     ],
     "frag_all_ms": [
-      218.63,
-      201.21,
-      174.66
+      135.26,
+      129.19,
+      160.36
+    ]
+  },
+  {
+    "target_ratio": 0.1159,
+    "actual_ratio": 0.1161,
+    "fragment": "ModuleDecl",
+    "frag_tokens": 2624,
+    "total_tokens": 22604,
+    "full_ms": 1498.48,
+    "frag_ms": 196.46,
+    "speedup": 7.63,
+    "full_all_ms": [
+      1498.48,
+      1504.87,
+      1445.75
+    ],
+    "frag_all_ms": [
+      196.46,
+      181.76,
+      208.01
+    ]
+  },
+  {
+    "target_ratio": 0.15,
+    "actual_ratio": 0.1136,
+    "fragment": "AlwaysStmt",
+    "frag_tokens": 2567,
+    "total_tokens": 22604,
+    "full_ms": 1474.1,
+    "frag_ms": 144.9,
+    "speedup": 10.17,
+    "full_all_ms": [
+      1533.19,
+      1474.1,
+      1471.22
+    ],
+    "frag_all_ms": [
+      162.79,
+      144.9,
+      135.89
     ]
   },
   {
     "target_ratio": 0.2,
-    "actual_ratio": 0.1161,
-    "unit": "ModuleDecl",
-    "frag_tokens": 2624,
+    "actual_ratio": 0.2577,
+    "fragment": "CaseItemList",
+    "frag_tokens": 5826,
     "total_tokens": 22604,
-    "full_ms": 1591.52,
-    "frag_ms": 204.94,
-    "speedup": 7.77,
+    "full_ms": 1522.09,
+    "frag_ms": 401.14,
+    "speedup": 3.79,
     "full_all_ms": [
-      1615.3,
-      1515.58,
-      1591.52
+      1522.09,
+      1453.12,
+      1663.91
     ],
     "frag_all_ms": [
-      198.91,
-      241.56,
-      204.94
+      379.41,
+      406.58,
+      401.14
+    ]
+  },
+  {
+    "target_ratio": 0.2222,
+    "actual_ratio": 0.2582,
+    "fragment": "CaseStmt",
+    "frag_tokens": 5837,
+    "total_tokens": 22604,
+    "full_ms": 1556.61,
+    "frag_ms": 423.71,
+    "speedup": 3.67,
+    "full_all_ms": [
+      1593.02,
+      1556.61,
+      1484.06
+    ],
+    "frag_all_ms": [
+      397.42,
+      423.71,
+      496.49
+    ]
+  },
+  {
+    "target_ratio": 0.25,
+    "actual_ratio": 0.259,
+    "fragment": "BeginEnd",
+    "frag_tokens": 5854,
+    "total_tokens": 22604,
+    "full_ms": 1610.32,
+    "frag_ms": 399.83,
+    "speedup": 4.03,
+    "full_all_ms": [
+      1639.43,
+      1610.32,
+      1509.47
+    ],
+    "frag_all_ms": [
+      399.83,
+      371.65,
+      441.18
     ]
   },
   {
     "target_ratio": 0.3,
     "actual_ratio": 0.3276,
-    "unit": "ModuleDecl",
+    "fragment": "ModuleDecl",
     "frag_tokens": 7405,
     "total_tokens": 22604,
-    "full_ms": 1510.59,
-    "frag_ms": 452.55,
-    "speedup": 3.34,
+    "full_ms": 1602.32,
+    "frag_ms": 461.89,
+    "speedup": 3.47,
     "full_all_ms": [
-      1510.59,
-      1582.94,
-      1415.63
+      1638.77,
+      1519.71,
+      1602.32
     ],
     "frag_all_ms": [
-      409.0,
-      452.55,
-      454.49
+      456.12,
+      516.38,
+      461.89
+    ]
+  },
+  {
+    "target_ratio": 0.35,
+    "actual_ratio": 0.4182,
+    "fragment": "CaseItemList",
+    "frag_tokens": 9453,
+    "total_tokens": 22604,
+    "full_ms": 1586.17,
+    "frag_ms": 654.19,
+    "speedup": 2.42,
+    "full_all_ms": [
+      1606.45,
+      1586.17,
+      1579.96
+    ],
+    "frag_all_ms": [
+      665.05,
+      654.19,
+      612.54
     ]
   },
   {
     "target_ratio": 0.45,
-    "actual_ratio": 0.4901,
-    "unit": "ModuleDecl",
-    "frag_tokens": 11078,
+    "actual_ratio": 0.444,
+    "fragment": "AlwaysStmt",
+    "frag_tokens": 10037,
     "total_tokens": 22604,
-    "full_ms": 1594.13,
-    "frag_ms": 762.99,
-    "speedup": 2.09,
+    "full_ms": 1628.09,
+    "frag_ms": 724.92,
+    "speedup": 2.25,
     "full_all_ms": [
-      1594.13,
-      1611.19,
-      1568.48
+      1642.75,
+      1558.35,
+      1628.09
     ],
     "frag_all_ms": [
-      773.3,
-      737.43,
-      762.99
+      724.92,
+      712.77,
+      760.01
     ]
   }
 ]

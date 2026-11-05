@@ -23,9 +23,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **审计三件（作者批，2026-11-05）**：① **A 阈值 sweep 量具** `tools/threshold_sweep.py`
   ——通用（`--runner module:function` 接任意旋钮/目标量；`--selftest` 证明表随旋钮变化；
   `--incremental` 用真实语料出原始表）+ 外部性（只出原始数字、不输出阈值建议；语料分离
-  由调用方保证）。tv80 实测（一次完整 run 的各轮中位数）：实际片段占比
-  2.2%/3.2%/11.6%/32.8%/49.0% → 速度比 42.7x/34.7x/8.0x/3.3x/2.1x（同命令重跑有
-  ±20–40% 机器噪声，单调趋势稳定）；原始表落 `docs/gaps/gap-incremental-parse.md`
+  由调用方保证）。审计复核后采样升级：候选 = AST 所有带 span 节点（含嵌套）、
+  `--history 200` 并入真实提交 diff 行占比分位（0.55/1.30/3.69/11.59/22.22%），
+  闸门带 12–32% 已有采样点。tv80 实测（一次完整 run 的中位数）：实际占比
+  0.55%→44.4% 各点速度比 236x/62x/38x/11.3x/7.6x/3.7–4.0x/3.5x/2.3x（小片段噪声大、
+  单调趋势稳定）；原始表落 `docs/gaps/gap-incremental-parse.md`
   「阈值 sweep」+ `tools/baselines/incremental_threshold_sweep.json`。
   ② **B stdout 自护抽离**：4 处副本（main / structural_score / check_test_isolation /
   check_platform_encoding；另 tests/edge/run_edge 同类第 5 处）统一为

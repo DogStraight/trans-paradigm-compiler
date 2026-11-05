@@ -22,11 +22,14 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-# 与 tests/conftest.py 同一防护：reconfigure 仅影响本进程，比替换 sys.stdout
-# 对象更安全（pytest 捕获 stdout 时不会破坏捕获器）；非 tty/受限环境拒绝则忽略。
-if hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue] — hasattr 守卫的真实运行时方法
-        sys.stderr.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
-    except Exception:  # noqa: BLE001 — 同 conftest 的取舍，忽略
-        pass
+import os as _os
+import sys as _sys
+
+# 控制台 UTF-8 自护走单点 `core/console.py`（脚本入口 sys.path[0] 不是仓库根，
+# 先引导再 import；行为见 core/console.py，不要在这里复制 reconfigure 逻辑）。
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+if _REPO_ROOT not in _sys.path:
+    _sys.path.insert(0, _REPO_ROOT)
+from core.console import ensure_utf8_stdio  # noqa: E402 — 路径引导之后才可 import
+
+ensure_utf8_stdio()
