@@ -12,6 +12,7 @@
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -83,3 +84,18 @@ def test_summarize_verdict_precedence_matrix() -> None:
         rows = [_row("pytest", v) for v in verdicts]
         overall, _ = cr.summarize(rows)
         assert overall == expect, f"{verdicts} → {overall}（应 {expect}）"
+
+
+def test_every_ci_script_step_is_rehearsed() -> None:
+    """`ci.yml` 里的每个 `python <脚本>` 必须在排练表里出现。
+
+    实测代价（2026-11-05）：本文件 docstring 早就写着"步骤表与 ci.yml 对齐"，却
+    没有判据——于是 `ci.yml` 加了 `check_invariants` 之后排练矩阵悄悄少跑一步，
+    直到本轮新加 D2/D9 两个 ratchet 步骤才被发现。**写着对齐，不等于对齐会被抓。**
+    """
+    ci = (_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    scripts = sorted(set(re.findall(r"python ([A-Za-z0-9_./-]+\.py)", ci)))
+    assert len(scripts) >= 6, f"ci.yml 只解析出 {scripts}，判据可能已失效"
+    src = (_ROOT / "tools" / "ci_rehearsal.py").read_text(encoding="utf-8")
+    missing = [s for s in scripts if s not in src]
+    assert not missing, f"ci.yml 有排练表没覆盖的步骤：{missing}"

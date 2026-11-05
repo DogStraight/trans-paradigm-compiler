@@ -14,3 +14,4 @@
 {"at": "2026-10-25T16:43:39+0800", "retro": "D3 收口为不删：57 项候选的成本在 min_pack 基线重录，不在参数化本身；这条要写进 not_doing 防反复争论"}
 {"at": "2026-10-25T16:52:50+0800", "retro": "探针每次现写有效但需人工复核：45 条命中里 7 条良性、2 条 vacuous 才是真问题——机器给候选、人给判决，分工成立"}
 {"at": "2026-10-25T17:43:05+0800", "retro": "test_check_test_isolation 在 xdist 并行下偶发失败（它自身 spawn pytest 子进程）：单跑 20 passed、全跑首轮 1 failed 次轮 626 passed——属测试隔离问题，非本轮改动"}
+{"at": "2026-11-05T18:43:00+0800", "retro": "同一条「stdout reconfigure 自护」片段已出现在 main.py:613、tools/check_test_isolation.py:59，本轮又为 structural_score、check_platform_encoding 两处复制——共 4 处重复。候选：抽 core/console.py 的 relax_stream_errors()。未当场改：工具脚本 import 包的方式需权衡（python tools/x.py 的 sys.path[0] 是 tools/），请作者定位置。另一条：ad hoc 探针对 Path.open('rb') 假阳（按 builtins.open 参数位置读 mode），说明「自造探针必须先自证不会误报」，建议工具一律带 --selftest。"}

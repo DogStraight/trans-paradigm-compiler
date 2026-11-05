@@ -39,7 +39,7 @@
      "roles": {
       "引擎侧登记": 13,
       "插件内": 14,
-      "文档": 19,
+      "文档": 21,
       "测试": 30,
       "行为基线": 5
      },
@@ -65,7 +65,7 @@
      "scatter_count": 17,
      "stage_count": 0,
      "stage_files": [],
-     "total": 81
+     "total": 83
     },
     "macro_policy": {
      "converged": [
@@ -965,7 +965,7 @@
      "roles": {
       "引擎侧登记": 2,
       "插件内": 2,
-      "文档": 4
+      "文档": 2
      },
      "scatter": [
       "linter/discovery_shape.py"
@@ -973,7 +973,7 @@
      "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
-     "total": 8
+     "total": 6
     },
     "lexer.bracket_map": {
      "converged": [],
@@ -1190,15 +1190,31 @@
      "stage_count": 0,
      "stage_files": [],
      "total": 4
+    },
+    "unit_graph.edge_kinds": {
+     "converged": [],
+     "converged_count": 0,
+     "declared_in": "analyzer/unit_graph.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1
+     },
+     "scatter": [
+      "analyzer/unit_graph.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 1
     }
    },
    "summary": {
-    "budget": 28,
+    "budget": 29,
     "converged_total": 2,
-    "instances": 14,
+    "instances": 15,
     "scatter_max": 3,
     "scatter_median": 2,
-    "scatter_total": 28,
+    "scatter_total": 29,
     "stage_max": 0,
     "stage_median": 0
    }
@@ -1360,6 +1376,6 @@
    }
   }
  },
- "recorded": "2026-10-25",
+ "recorded": "2026-11-05",
  "skipped_inputs": []
 }

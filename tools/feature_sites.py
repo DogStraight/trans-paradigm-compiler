@@ -309,12 +309,17 @@ def scan(families: list[str] | None = None) -> dict:
     return result
 
 
+def _load_registry(path: pathlib.Path, key: str) -> dict[str, dict]:
+    """登记表读取：`{key: {instance: {...}}}` 取出内层映射；文件缺失视为空表。"""
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {k: v for k, v in data.get(key, {}).items()}
+
+
 def _load_kept() -> dict[str, dict]:
     """已判保持的登记（`family:instance` → {reason, source}）。"""
-    if not KEPT.exists():
-        return {}
-    data = json.loads(KEPT.read_text(encoding="utf-8"))
-    return {k: v for k, v in data.get("kept", {}).items()}
+    return _load_registry(KEPT, "kept")
 
 
 def _load_converged() -> dict[str, dict]:
@@ -323,10 +328,7 @@ def _load_converged() -> dict[str, dict]:
     判据：**不再靠人手记着同步**（由单一来源派生，或由门禁校验）。没有判据就
     别往里加——否则等于把欠账洗掉（同 `policy/structural_budget.md` R6 的理由）。
     """
-    if not CONVERGED.exists():
-        return {}
-    data = json.loads(CONVERGED.read_text(encoding="utf-8"))
-    return {k: v for k, v in data.get("converged", {}).items()}
+    return _load_registry(CONVERGED, "converged")
 
 
 # ── 输出 ────────────────────────────────────────────────────

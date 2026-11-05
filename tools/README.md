@@ -20,6 +20,7 @@
 | 查某语言包还差哪些构造没被接受 / 没渲染 | `c_acceptance.py` / `render_coverage.py` |
 | 查引擎里还有没有语言知识渗透 | `lang_penetration.py` |
 | 判断某个测试是不是"靠语言包声明才成立" | `min_pack_probe.py` |
+| 查代码是否依赖平台默认编码 / 路径分隔符 | `check_platform_encoding.py` |
 | 排查"换跑法就变脸"（进程/哈希隔离） | `check_test_isolation.py` |
 | 诊断跨语言串味 / 看管线状态 | `dump_pipeline_state.py` |
 | 发布前本地排练 CI 全部门禁 | `ci_rehearsal.py` |
@@ -42,6 +43,7 @@
 - `check_gate_efficacy.py` — 门禁有效性抽查（真实事故变异，期望门禁变红）。怀疑门禁失灵时。规程见 `docs/audit_system.md`（D5 维度）。
 - `check_macro_coverage.py` — 宏位置透明性量化 + 失败面按 token 类型分布。动宏/预处理器路径时。见 `preprocessor/README.md`。
 - `check_test_isolation.py` — 进程级隔离对照（每文件一进程 vs 单进程共享档；`--hashseed-scan N` 再换一维）。排查"换跑法就变脸"。见 `tests/README.md`。
+- `check_platform_encoding.py` — **跨平台文本 I/O 与路径分隔符**门禁：E1 文本模式 `open`/`read_text` 无 `encoding`、E2 `subprocess` 文本模式无 `encoding`、E3 `str(路径)` 参与含分隔符判断、E4 路径 `.split(字面量分隔符)`。防假绿下限（扫描面 <100 文件直接失败）与 ALLOW 腐化检查（未命中即报）；`--selftest` 逐码自证。见 `docs/audit_dimensions.toml`（D9）。
 - `check_coverage_delta.py` — 增量覆盖率（只看改动文件，几十秒）。大改收尾看新增行是否被覆盖。
 - `ci_rehearsal.py` — **本地排练 `ci.yml` 全部门禁**，输出 PASS·FAIL·**SKIP** 矩阵；**SKIP 与「零步骤」都不算绿**（整体 INCOMPLETE，exit 2）。打 tag 或推送分支前。见 `policy/release-checklist.md` §1。
 

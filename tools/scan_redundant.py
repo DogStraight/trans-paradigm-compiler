@@ -60,7 +60,8 @@ def _record_skipped_input(rel: str, reason: str) -> None:
 
 def _tracked_files() -> list[str]:
     out = subprocess.run(
-        ["git", "-C", str(ROOT), "ls-files"], capture_output=True, text=True, check=True
+        ["git", "-C", str(ROOT), "ls-files"], capture_output=True, text=True,
+        encoding="utf-8", check=True,
     )
     return [l for l in out.stdout.splitlines() if l.strip()]
 
@@ -69,7 +70,7 @@ def _ignored_entries() -> list[str]:
     """gitignored 的顶层条目（含未跟踪的 scratch 区）。"""
     out = subprocess.run(
         ["git", "-C", str(ROOT), "status", "--ignored", "--porcelain"],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, encoding="utf-8", check=True,
     )
     entries = []
     for line in out.stdout.splitlines():

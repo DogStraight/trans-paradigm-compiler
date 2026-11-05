@@ -61,6 +61,19 @@ jobs:
           #   （policy 规则 id / 测试函数 / 变异序号）必须可解析，防清单腐烂
           python policy/check_invariants.py
 
+      - name: Structural / scatter ratchet (D2 门禁)
+        # 结构欠账分与功能散点：**新增即回归**（不是"总分下降就算过"——那样会把
+        # 欠账洗掉）。口径见 policy/structural_budget.md、gap-feature-scatter.md。
+        run: |
+          python tools/structural_score.py --compare
+          python tools/feature_sites.py compare
+
+      - name: Cross-platform text I/O gate (D9 门禁)
+        # --strict：输入面缺失（扫描根不存在）升为 gate；工具内含防假绿下限
+        #   （扫描面 <100 个 .py 直接失败），空集合不许当绿。
+        run: |
+          python tools/check_platform_encoding.py --strict
+
       - name: Static type gate (pyright strict)
         # 版本钉在 1.1.413（与本地验证一致）；升级时同步 bump
         run: |

@@ -83,7 +83,10 @@ def run_probe(pack: str, targets: list[str], extra: list[str]) -> dict:
             "--junitxml", xml, "-q", "--no-header", *extra,
         ]
         env = dict(os.environ, TPC_CONFIG=cfg)
-        proc = subprocess.run(cmd, cwd=_ROOT, env=env, text=True)
+        proc = subprocess.run(
+            cmd, cwd=_ROOT, env=env, text=True,
+            encoding="utf-8", errors="replace",
+        )
         if not os.path.isfile(xml):
             raise SystemExit(
                 f"[min-pack-probe] pytest 未产出报告（exit {proc.returncode}）"

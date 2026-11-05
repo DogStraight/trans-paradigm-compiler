@@ -62,7 +62,10 @@ def run_dimension(dim: dict) -> dict:
         return {"id": dim["id"], "status": "no_probe", "exit": None,
                 "tail": f"无探针（trigger: {dim.get('trigger', '—')}）"}
     started = time.time()
-    proc = subprocess.run(probe, shell=True, cwd=ROOT, capture_output=True, text=True)
+    proc = subprocess.run(
+        probe, shell=True, cwd=ROOT, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
     out = (proc.stdout or "") + (proc.stderr or "")
     return {
         "id": dim["id"],

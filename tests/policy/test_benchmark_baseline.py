@@ -53,6 +53,7 @@ def _verilator_ready() -> bool:
             [eb._BASH, "-c",
              "export PATH=/mingw64/bin:/usr/bin:$PATH; verilator --version"],
             capture_output=True, text=True, timeout=30,
+            encoding="utf-8", errors="replace",
         )
     except (OSError, subprocess.TimeoutExpired):
         return False

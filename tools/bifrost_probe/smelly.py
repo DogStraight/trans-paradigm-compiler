@@ -33,7 +33,9 @@ def run_each(cmds: list[str]) -> list[str]:
     """循环内 subprocess + json.loads（子进程与解析都在循环里）。"""
     outs: list[str] = []
     for c in cmds:
-        res = subprocess.run(c, shell=True, capture_output=True, text=True)
+        res = subprocess.run(
+            c, shell=True, capture_output=True, text=True, encoding="utf-8",
+        )
         outs.append(json.loads(res.stdout or "{}").get("k", ""))
     return outs
 

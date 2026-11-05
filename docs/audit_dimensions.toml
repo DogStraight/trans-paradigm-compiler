@@ -34,7 +34,8 @@ probe = "python tools/structural_score.py --compare"
 proxies = "同一事实只有一处实现；新增机制不抬复杂度/重复度"
 invalidated_if = "复杂度口径或 kept 账本口径改变（分数不再可比），或重构把重复搬进新文件"
 closure = "新增 0 项；同一事实只有一处（副本清零，或有 fail-closed 门禁保证漏了会响）"
-status = "open"
+status = "closed"
+closed_evidence = "CLONE 3→2（_load_kept/_load_converged 合并为 _load_registry）；余 2 对经人判保持并记理由；structural_score --compare 与 feature_sites compare 已挂 CI（新增即红）"
 
 [[dimension]]
 id = "D3"
@@ -117,14 +118,15 @@ closed_evidence = "test_structural_kept 绿；kept 条目均可解析"
 id = "D9"
 name = "跨平台与编码假设"
 origin = "agent"
-probe = "adhoc"
+probe = "python tools/check_platform_encoding.py --strict"
 trigger = "出现一次只在 Windows/某 locale 下失效的门禁或测试"
 adhoc = "AST 扫 open()/read_text() 缺 encoding、str(path) 参与比较、反斜杠字面量判断"
-measured = "引擎面现写扫描 0 真问题：2 处 ch==\"\\\\\" 为字符比较（良性），1 处 open(\"rb\") 为探测器自身假阳"
+measured = "全仓 485 py：E1/E2/E3/E4 全 0 违规（E2 修 7 处缺 encoding）；排序面 12 处目录遍历未排序但全在 tests/tools/policy、引擎面 0；main.py:617 reconfigure(errors=) 判良性（流错误策略，非解码默认）；ad hoc 探针对 Path.open(\"rb\") 假阳已修正"
 proxies = "代码不依赖 locale 编码、路径分隔符、文件系统排序"
 invalidated_if = "开发/CI 统一到单一容器环境，跨平台差异不再暴露"
 closure = "open()/read_text() 无缺省编码；路径比较无 str(path) 拼接；无反斜杠字面量判断"
-status = "open"
+status = "closed"
+closed_evidence = "check_platform_encoding.py 四码各自可触发（--selftest + Lead 独立样本）；全仓 0 违规且防假绿下限在位；CI 挂 --strict"
 
 # ============================================================================
 # 审计管线（槽位化）：可插拔，不是固定流程

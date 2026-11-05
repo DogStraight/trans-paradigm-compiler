@@ -206,7 +206,10 @@ def _smoke_test(name: str, exe: str, spec: dict, dry_run: bool) -> None:
     if "check" in facets:
         probes.append(("check", ["check", sample]))
     for tag, argv in probes:
-        r = subprocess.run([exe, *argv], cwd=_ROOT, capture_output=True, text=True)
+        r = subprocess.run(
+            [exe, *argv], cwd=_ROOT, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+        )
         if r.returncode != 0:
             sys.exit(
                 f"smoke test failed for {name} {tag} (exit {r.returncode}):\n"

@@ -39,6 +39,16 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
+# Windows 控制台/管道默认编码（GBK/cp1252）编不了中文——CI runner 无 PYTHONUTF8，
+# 非 ASCII 输出会让本工具自己崩（子进程的 PYTHONIOENCODING 只管子进程）。
+# 本进程自护 stdout/stderr（reconfigure 只影响本进程，比替换 sys.stdout 安全）。
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue] — hasattr 守卫的真实运行时方法
+        sys.stderr.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
+    except Exception:  # noqa: BLE001 — 受限环境无 reconfigure，忽略
+        pass
+
 # ── 口径常量（改动须同步 policy/structural_budget.md）──────────────────────
 SKIP_DIRS = ("tests", "_drafts", "dist", ".git", "__pycache__", "egg-info", ".agents", ".scratch")
 CC_BASE = 10                     # 工具阈值（提示线）
