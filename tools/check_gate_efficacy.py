@@ -828,11 +828,12 @@ _MUTATIONS: list[dict[str, str]] = [
     },
     {
         "why": "调用点事实若不按**宏定义时间线**过滤（用展开器的最终宏表）⇒ 后置定义 / 重定义"
-               "前的合法调用点被误判成宏调用（`int F(int);` 之后才 `#define F(a,b)` 的合法 C 报 arity 错）",
+               "前的合法调用点被误判成宏调用（`int F(int);` 之后才 `#define F(a,b)` 的合法 C 报 arity 错）。"
+               "守卫已下沉到 preprocessor 的时间线单测（C 语言级由 T1 定义序语义兜住，不再直接踩本行）",
         "file": "preprocessor/_expand.py",
         "old": "        if macro_events:\n",
         "new": "        if False:  # 变异：不按定义时间线过滤\n",
-        "test": "tests/languages/c/test_c_macro_args_checks.py",
+        "test": "tests/engine/preprocessor/test_macro_timeline.py",
     },
     {
         "why": "`tpc check` 语法阶段若不查**原始源**宏定义形式语法 ⇒ 定义行被扫指令消费后"
@@ -1213,11 +1214,12 @@ _MUTATIONS: list[dict[str, str]] = [
         "test": "tests/engine/parser/test_symbol_rollback.py",
     },
     {
-        "why": "parse() 不重建/不绑定符号 store ⇒ 跨 parse 复用时上一轮 root 作用域注册"
-               "残留，本轮 `lookup` 读到过期符号",
+        "why": "parse()/parse_fragment() 每轮不重建符号 store ⇒ 跨 parse 复用时上一轮 root "
+               "作用域的注册残留（同深度、不随 pop 消失），本轮 `lookup` 读到过期符号。"
+               "原变异锚在 `bind_symbol_store` 行，但该行只在候选回滚路径可见、现无测试踩到，属哑变异",
         "file": "parser/parser_core.py",
-        "old": "        self._reset_parse_state()\n        context = ParseContext(tokens)\n        context.bind_symbol_store(self.scope_stack)\n",
-        "new": "        self._reset_parse_state()\n        context = ParseContext(tokens)  # 变异：不绑定符号 store\n",
+        "old": "        self.scope_stack = _ScopeStack()\n\n    def parse(self, tokens: list[Token]) -> Node | None:\n",
+        "new": "        pass  # 变异：不重建符号 store（跨 parse 残留）\n\n    def parse(self, tokens: list[Token]) -> Node | None:\n",
         "test": "tests/engine/parser/test_symbol_rollback.py",
     },
     # ── D5 补齐：三个默认 policy gate 的直接变异（task-3）──

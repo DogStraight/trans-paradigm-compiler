@@ -161,6 +161,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   pyright strict 0 errors。`format`/`lint` 等既有命令行为不变（片段模式独立入口）。
 
 ### Fixed
+- **D5 两条「哑变异」重指（审计 2026-11-07 全量 126 条抽查后）**：变异 78（`_expand.py`
+  宏时间线过滤 `if macro_events:`）关掉后 C 侧测试仍绿——守卫已下沉到
+  `tests/engine/preprocessor/test_macro_timeline.py`（C 语言级由 T1 定义序语义兜住，
+  不再踩该行），改指时间线单测；变异 119（`parser_core.parse` 的 `bind_symbol_store`
+  行）关掉后 `test_symbol_rollback` 仍绿——该行只在候选回滚路径可见、现无测试踩到，
+  属哑变异，改指真守卫「每轮重建符号 store」（`_reset_parse_state` 的
+  `self.scope_stack = _ScopeStack()`）。两条均在干净 worktree 用
+  `python tools/check_gate_efficacy.py --only 78` / `--only 119` 复跑 → **如期变红**；
+  `test_gate_efficacy_mutations.py` 378 passed。另：工作树里残留了一条被中断的
+  `_Atomic` 变异（`grammar/c/plugins/c11/16_atomic.toml` 的 `?` 被摘掉，正是变异 new
+  片段），已还原——那是 interrupted 变异未回滚，不是待提交改动。
 - **ratchet「全量消失」判据升为不变量（INV-RATCHET-NOT-VANISH，作者 2026-11-07 批准）**：
   单一实现 `tools/_ratchet.py::guard_not_vanished`——基线项集合非空、当前集合为空 ⇒
   exit 2，消息点名「基线有 N 项、当前 0 项」；归零只许 `--save`/`--record` 显式重录基线。
