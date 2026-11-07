@@ -120,7 +120,14 @@ def _chunks(items: list[str], size: int) -> list[list[str]]:
 # ── Bifrost 调用 ────────────────────────────────────────────────────────────
 
 def _bifrost(root: pathlib.Path, tool: str, args: dict) -> str:
-    """跑一次外部工具，返回报表文本；二进制不可用时给出可执行的提示。"""
+    """跑一次外部工具，返回报表文本；二进制不可用时给出可执行的提示。
+
+    **fail-closed（审计 2026-11-07 F1）**：报表是量具的输入——退出码非 0、JSON
+    结构不对、或 report 为空串都当作「量具死了」直接 FAIL，不许返回空串让上层
+    把「零命中」误读成「债还完了」。无命中的正常形态是 bifrost 给的
+    `No ... met threshold` 句子，不是空串（实测 `report_structural_clone_smells` /
+    `compute_cyclomatic_complexity`）。
+    """
     cmd = ["bifrost", "--root", str(root), "--tool", tool, "--args", json.dumps(args)]
     try:
         res = subprocess.run(
@@ -128,10 +135,20 @@ def _bifrost(root: pathlib.Path, tool: str, args: dict) -> str:
         )
     except FileNotFoundError as exc:  # pragma: no cover - 环境缺失路径
         raise SystemExit("[SKIP] 未找到 bifrost 二进制（见 policy/bifrost_audit.md）") from exc
+    if res.returncode != 0:
+        detail = (res.stderr or res.stdout).strip()[:200]
+        if res.returncode in (127, 9009):  # POSIX sh / Windows cmd：命令不存在
+            raise SystemExit("[SKIP] 未找到 bifrost 二进制（见 policy/bifrost_audit.md）")
+        raise SystemExit(f"[FAIL] {tool} 退出码 {res.returncode}：{detail!r}")
     try:
-        return json.loads(res.stdout)["structuredContent"]["report"]
-    except (json.JSONDecodeError, KeyError) as exc:  # pragma: no cover
+        report = json.loads(res.stdout)["structuredContent"]["report"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:  # pragma: no cover
         raise SystemExit(f"[FAIL] {tool} 报表解析失败：{res.stdout[:200]!r}") from exc
+    if not isinstance(report, str) or not report.strip():
+        raise SystemExit(
+            f"[FAIL] {tool} 报表为空（外部工具没产出口径）——拒绝把空报表当 0 欠账"
+        )
+    return report
 
 
 def _max_by_fqn(report: str, pattern: re.Pattern) -> dict[str, int]:
@@ -415,7 +432,12 @@ def _print_diff(added: list, grew: list) -> None:
 
 
 def _compare(root: pathlib.Path, score: _Score) -> int:
-    """与基线比较：**新增项才算回归**（退出码 1）。"""
+    """与基线比较：**新增项才算回归**（退出码 1）。
+
+    **fail-closed（审计 2026-11-07 F1）**：当前量具若一项都没产出、而基线里曾有
+    项，这是「全量消失」（量具/扫描面失效），不是「债还完了」——返回 2 并明说，
+    不许 exit 0 假绿。真要归零，先跑 `--save` 重录基线（那是一步显式动作）。
+    """
     base = _load_baseline(root)
     old = {k: int(v) for k, v in base["items"].items()}
     new = {f"{i.family}|{i.key}": i.excess for i in score.items}
@@ -423,6 +445,13 @@ def _compare(root: pathlib.Path, score: _Score) -> int:
     print(f"基线 S = {base['total']} → 当前 S = {score.total}（Δ {score.total - base['total']:+d}）")
     print(f"  消除 {len(gone)} 项 / 新增 {len(added)} 项 / 变大 {len(grew)} 项")
     _print_diff(added, grew)
+    if old and not new:
+        print(
+            f"[FAIL] 全量消失：基线有 {len(old)} 项、当前量具 0 项"
+            "——疑似报表/扫描面失效，拒绝当绿（真要归零先 --save 重录基线）",
+            file=sys.stderr,
+        )
+        return 2
     return 1 if (added or grew) else 0
 
 

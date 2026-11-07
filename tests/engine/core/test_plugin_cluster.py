@@ -141,6 +141,38 @@ class TestDiscoverRuleFiles:
         files = discover_rule_files(str(tmp_path / "plugins2"))
         assert len(files) == 1 and files[0].endswith(os.path.join("rules", "r.toml"))
 
+    def test_discovery_order_is_sorted_regardless_of_walk_order(
+        self, tmp_path, monkeypatch
+    ):
+        """排序稳定（审计 2026-11-07 F3）：返回值不得随 os.walk 遍历序变化。
+
+        此前只对每个 `rules/` 内的文件名排序，根目录顺序仍随文件系统；诊断顺序
+        因此可翻转，而 docstring 却宣称"排序稳定"。这里把 walk 的 dirs 反向，
+        断言最终列表仍完整排序。
+        """
+        from core import check_registry as cr
+
+        plugins = tmp_path / "plugins"
+        for name in ("zeta", "alpha", "mu"):
+            rules = plugins / name / "rules"
+            rules.mkdir(parents=True)
+            (rules / "r.toml").write_text(
+                "[[checks]]\nid = 'OR001'\ncategory = 'x'\nseverity = 'info'\n"
+                "kind = 'wire'\nmessage = 'm'\n",
+                encoding="utf-8",
+            )
+
+        real_walk = os.walk
+
+        def reversed_walk(top, *args, **kwargs):
+            for root, dirs, names in real_walk(top, *args, **kwargs):
+                yield root, list(reversed(dirs)), list(reversed(names))
+
+        monkeypatch.setattr(cr.os, "walk", reversed_walk)
+        files = cr.discover_rule_files(str(plugins))
+        assert len(files) == 3
+        assert files == sorted(files)
+
 
 class TestPluginConfigDeclarations:
     def test_find_plugin_tpc_recursive(self, tmp_path):

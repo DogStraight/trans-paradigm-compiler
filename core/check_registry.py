@@ -51,14 +51,15 @@ def discover_rule_files(plugins_dir: str = "") -> list[str]:
         return []
     files: list[str] = []
     for root, dirs, fnames in os.walk(comp_dir):
-        # 跳过私有目录（_ 前缀，如 __pycache__）
-        dirs[:] = [d for d in dirs if not d.startswith("_")]
+        # 跳过私有目录（_ 前缀，如 __pycache__）；遍历序与文件系统有关，
+        # 这里显式排序，返回值必须与 walk 的产出顺序无关（审计 2026-11-07 F3）。
+        dirs[:] = sorted(d for d in dirs if not d.startswith("_"))
         if os.path.basename(root) != "rules":
             continue
         for fname in sorted(fnames):
             if fname.endswith(".toml"):
                 files.append(os.path.join(root, fname))
-    return files
+    return sorted(files)
 
 
 def _resolve_plugins_dir(plugins_dir: str) -> str:

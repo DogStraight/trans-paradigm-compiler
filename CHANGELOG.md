@@ -160,6 +160,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   12 文件 0 crash / 0 non-idempotent；`eval_lint_accuracy` 33 hit / 0 miss / 0 fp；
   pyright strict 0 errors。`format`/`lint` 等既有命令行为不变（片段模式独立入口）。
 
+### Fixed
+- **外部证伪五件收口（审计 2026-11-07，D2/D9 重开项 F1–F5）**：
+  · **F1 ratchet fail-closed**：`tools/structural_score.py` 的 `_bifrost` 拒空报表 / 非零
+  退出码 / 坏 JSON（报表是量具输入，空串 ≠ 零命中——无命中的规范输出是 `No ... met`
+  句子）；`_compare` 见「基线有项、当前 0 项」= 全量消失 → 退出码 **2** 并点名，不再
+  exit 0 假绿（真要归零先 `--save` 显式重录）。复现：空 `_Score` 调 `_compare` 此前报
+  「消除 78 项 / rc=0」，现 rc=2。`policy/structural_budget.md`「停止规则」同步。
+  · **F2 引擎入口编码自护**：`ensure_utf8_stdio()` 从 `_cmd_fragment` 提到 `main.py`
+  模块级（打包切面入口 import main 即生效）；此前 cp1252 下 `main.py check --tree` 因
+  图树符号 ●/├─ 直接 UnicodeEncodeError、cp936 下 `test_cli_tree_flag` 红。新增**真跑
+  引擎入口**的参数化测试（cp1252/cp936 → rc=0 且 stdout 为 UTF-8 字节）。
+  · **F3 规则发现排序**：`core/check_registry.discover_rule_files` 对 `os.walk` 的
+  dirs/文件名显式排序并最终 `sorted(files)`（此前只排每目录内文件名，诊断顺序随文件
+  系统遍历序翻转，docstring 却宣称「排序稳定」）；新增反向 walk 的顺序无关测试。
+  · **F4 编码探针漏面**：`check_platform_encoding` 的 E1 认 `io.open`/`builtins.open`
+  （参数位置同内建 open，二进制 `io.open(f,"rb")` 不误报）；E3/E4 把**插值路径的
+  f-string** 当字符串化路径（`f"{p}/x" == "a/b"`、`f"{p}".split("/")` 此前漏报）。
+  `--selftest` 样本与 `tests/policy/test_platform_encoding.py` 同步加用例。
+  · **F5 单点门禁扫描面**：`tests/policy/test_console_single_point.py` 由固定 13 目录
+  清单改为**全仓递归**（排除 VCS/缓存/草稿/产物；旧版漏 `packaging/` 与根级入口），且
+  `.py` 解析失败不再 `return []` 静默通过（记入 errors → 门禁 fail-closed）。
+  · 另同步 `tools/check_gate_efficacy.py` 的接缝重扫变异锚点（`_expand.py` 预算行改名
+  `limit` 后旧锚失效；该门禁自 `13d588e` 起即红，本轮修复）。
+  · 验证：`tests/policy` **657 passed**；`tests/engine/core tests/languages` **1956 passed**；
+  `check_platform_encoding --strict` **492 文件 0 违规**；`structural_score --compare`
+  新增 0/变大 0；`check_hardcode --strict-*` 绿。
+
 ### Changed
 - **会话协作前置判据（2026-10-30）**：`policy/session-wire.md` 开头新增「先判：会话间对话 vs
   Teams」——按**上下文归属**判模式（对方上下文/目标 → 只能提问 + 给证据；我播种 → 交付物

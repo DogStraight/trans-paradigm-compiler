@@ -57,6 +57,44 @@ def test_e1_text_io_without_encoding_is_reported(tmp_path: Path) -> None:
     assert all(item.path.endswith("sample.py") for item in e1)
 
 
+def test_e1_io_open_without_encoding_is_reported(tmp_path: Path) -> None:
+    """E1（F4）：`io.open` / `builtins.open` 是内建 open 的等价点分名，必须命中。"""
+    report = _scan_sample(
+        tmp_path,
+        "import builtins\n"
+        "import io\n"
+        "def probe() -> None:\n"
+        "    io.open(\"a.txt\").read()\n"
+        "    builtins.open(\"a.txt\").read()\n",
+    )
+    e1 = [item for item in report.findings if item.code == "E1"]
+    assert len(e1) == 2
+
+
+def test_e1_io_open_binary_is_not_reported(tmp_path: Path) -> None:
+    """E1（F4 反例）：io.open 的 mode 位置同内建 open，二进制模式不误报。"""
+    report = _scan_sample(
+        tmp_path,
+        "import io\n"
+        "def probe() -> None:\n"
+        "    io.open(\"a.bin\", \"rb\")\n",
+    )
+    assert report.findings == []
+
+
+def test_e3_e4_fstring_path_is_reported(tmp_path: Path) -> None:
+    """E3/E4（F4）：f-string 插值路径 = 字符串化路径，比较/切分都要命中。"""
+    report = _scan_sample(
+        tmp_path,
+        "from pathlib import Path\n"
+        "def probe(path: Path) -> bool:\n"
+        "    f\"{path}\".split(\"/\")\n"
+        "    return f\"{path}/x\" == \"a/b\"\n",
+    )
+    codes = _codes(report)
+    assert "E3" in codes and "E4" in codes
+
+
 def test_e2_subprocess_text_without_encoding_is_reported(tmp_path: Path) -> None:
     """E2：text=True 的 subprocess.run 缺 encoding 命中。"""
     report = _scan_sample(

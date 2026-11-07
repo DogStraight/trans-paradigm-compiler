@@ -847,7 +847,7 @@ _MUTATIONS: list[dict[str, str]] = [
                "`#define g f` + `g(2)` 停在 `f(2)`、`f(2)(9)` 停在 `2*g(9)`（C99 §6.10.3.4 "
                "替换列表连同其余源码重扫描缺失；verilog 前缀接缝同）",
         "file": "preprocessor/_expand.py",
-        "old": "    budget = int(_get_expand_config().get(\"max_iterations\", 128))\n",
+        "old": "    limit = int(_get_expand_config().get(\"max_iterations\", 128))\n",
         "new": "    return body_toks, end  # 变异：禁接缝重扫\n",
         "test": "tests/engine/preprocessor/test_macro_rescan.py",
     },

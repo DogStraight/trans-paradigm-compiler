@@ -8,16 +8,18 @@
 这些缺陷通常只在换机器/换 CI 后暴露，所以必须用可复跑的 AST 探针前移。
 
 检查码与判据：
-  E1  ``open()`` / ``Path.open()`` 的非二进制模式、``Path.read_text()`` /
-      ``Path.write_text()`` 未显式给出非 ``None`` 的 ``encoding=``。
-      二进制 ``open(..., "rb")`` 的 ``encoding`` 不适用，明确放行。
+  E1  ``open()`` / ``io.open()`` / ``builtins.open()`` / ``Path.open()`` 的非二进制
+      模式、``Path.read_text()`` / ``Path.write_text()`` 未显式给出非 ``None`` 的
+      ``encoding=``。二进制 ``open(..., "rb")`` 的 ``encoding`` 不适用，明确放行。
   E2  ``subprocess.run/Popen/check_output/check_call/call`` 在 ``text=True``
       或 ``universal_newlines=True`` 时未显式给出非 ``None`` 的 ``encoding=``。
-  E3  ``str(路径表达式)`` 与含 ``/`` 或 ``\\`` 的字符串字面量比较，或调用
-      ``.startswith()`` / ``.endswith()`` 时参数是含分隔符的字面量。
+  E3  ``str(路径表达式)`` / 插值路径的 f-string 与含 ``/`` 或 ``\\`` 的字符串
+      字面量比较，或调用 ``.startswith()`` / ``.endswith()`` 时参数是含分隔符
+      的字面量。
   E4  路径表达式的 ``.split("/")`` / ``.rsplit("/")`` /
       ``.startswith("/")`` / ``.endswith("/")``，以及 ``"/" in 路径表达式``
-      这类字面量分隔符判断。字符级 ``ch == "\\"`` 属词法扫描，不算。
+      这类字面量分隔符判断；f-string 插值的路径同属"字符串化路径"。
+      字符级 ``ch == "\\"`` 属词法扫描，不算。
 
 已知假阳：
   - ``open(path, mode=变量)`` 无法静态判定二进制时按文本检查（保守）。
@@ -68,6 +70,10 @@ _ALLOW_CODE = "E-ALLOW-STALE"
 _SUBPROCESS_CALLS = frozenset({
     "run", "Popen", "check_output", "check_call", "call",
 })
+#: 文本 I/O 打开函数：内建 ``open`` 的等价点分名（参数位置同内建，见 `_open_mode`）。
+#: 模块别名（``import io as x``）不在识别面内——轻量 AST 探针只认这两个规范名，
+#: 漏报宁可保守（见「已知假阳」节）。
+_BUILTIN_OPEN_NAMES = frozenset({"io.open", "builtins.open"})
 _PATH_CTORS = frozenset({
     "Path", "PurePath", "PosixPath", "PurePosixPath",
     "WindowsPath", "PureWindowsPath",
@@ -253,14 +259,21 @@ def _has_encoding(call: ast.Call) -> bool:
     return not (isinstance(value, ast.Constant) and value.value is None)
 
 
+def _is_builtin_open(func: ast.expr) -> bool:
+    """是否内建 ``open`` 或其等价点分名（``io.open`` / ``builtins.open``）。"""
+    if isinstance(func, ast.Name):
+        return func.id == "open"
+    return _dotted_name(func) in _BUILTIN_OPEN_NAMES
+
+
 def _open_mode(call: ast.Call) -> ast.expr | None:
     """取 open()/Path.open() 的 mode 实参。
 
-    builtin ``open(file, mode, ...)`` 的 mode 是第二位置参；
-    ``Path.open(mode, ...)`` 的 mode 是第一位置参。两者不可混用，否则
-    ``path.open("rb")`` 会被误判成文本模式（已知假阳，D9 实测过）。
+    builtin ``open(file, mode, ...)``（含 ``io.open``/``builtins.open``）的 mode 是
+    第二位置参；``Path.open(mode, ...)`` 的 mode 是第一位置参。两者不可混用，否则
+    ``path.open("rb")`` / ``io.open("a.bin", "rb")`` 会被误判成文本模式。
     """
-    if isinstance(call.func, ast.Attribute):
+    if isinstance(call.func, ast.Attribute) and not _is_builtin_open(call.func):
         if call.args:
             return call.args[0]
         return _keyword(call, "mode")
@@ -368,6 +381,13 @@ def _looks_like_path(node: ast.expr, path_names: set[str]) -> bool:
             _looks_like_path(node.left, path_names)
             or _looks_like_path(node.right, path_names)
         )
+    if isinstance(node, ast.JoinedStr):
+        # f-string 里插值路径 = 又一份"字符串化的路径"（E3/E4 同一识别面）。
+        return any(
+            isinstance(value, ast.FormattedValue)
+            and _looks_like_path(value.value, path_names)
+            for value in node.values
+        )
     return False
 
 
@@ -459,10 +479,29 @@ def _separator_literal(node: ast.expr) -> bool:
     )
 
 
+def _fstring_path_values(
+    node: ast.JoinedStr, path_names: set[str], safe_names: set[str]
+) -> list[ast.expr]:
+    """f-string 里被字符串化的路径表达式（未 POSIX 归一化的）。
+
+    ``f"{path}/x"`` 与 ``str(path) + "/x"`` 是同一件事；此前只认 ``str(...)``
+    会漏报（审计 2026-11-07 F4）。
+    """
+    return [
+        value.value
+        for value in node.values
+        if isinstance(value, ast.FormattedValue)
+        and _looks_like_path(value.value, path_names)
+        and not _is_posix_normalized(value.value, safe_names)
+    ]
+
+
 def _stringified_path(
     node: ast.expr, path_names: set[str], safe_names: set[str]
 ) -> bool:
-    """是否为 ``str(路径表达式)``，且该路径尚未显式 POSIX 归一化。"""
+    """是否为 ``str(路径表达式)`` 或插值路径的 f-string，且尚未显式 POSIX 归一化。"""
+    if isinstance(node, ast.JoinedStr):
+        return bool(_fstring_path_values(node, path_names, safe_names))
     if not (
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
@@ -487,13 +526,10 @@ def _scan_io_calls(
     findings: list[Finding] = []
     func_name = _dotted_name(call.func)
     tail = func_name.rsplit(".", 1)[-1] if func_name else ""
-    is_open = (
-        (isinstance(call.func, ast.Name) and call.func.id == "open")
-        or (
-            isinstance(call.func, ast.Attribute)
-            and call.func.attr == "open"
-            and _looks_like_path(call.func.value, path_names)
-        )
+    is_open = _is_builtin_open(call.func) or (
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr == "open"
+        and _looks_like_path(call.func.value, path_names)
     )
     if is_open and not _is_binary_open(call) and not _has_encoding(call):
         findings.append(Finding(
@@ -529,7 +565,7 @@ def _e3_comparison_findings(
     safe_names: set[str],
 ) -> list[Finding]:
     """E3：str(路径) 任一侧与含分隔符字面量比较。"""
-    message = "str(路径) 参与含分隔符字面量判断（假设固定分隔符）"
+    message = "路径字符串化（str()/f-string）参与含分隔符字面量判断（假设固定分隔符）"
     findings: list[Finding] = []
     if _stringified_path(left, path_names, safe_names) and _separator_literal(right):
         findings.append(Finding(rel, line, "E3", message))
@@ -650,7 +686,8 @@ def _scan_string_path_methods(
         return []
     return [Finding(
         rel, call.lineno, "E3",
-        f"str(路径).{call.func.attr}() 使用含分隔符字面量（假设 / 或 \\ 分隔）",
+        f"路径字符串化（str()/f-string）后 .{call.func.attr}() 使用含分隔符字面量"
+        "（假设 / 或 \\ 分隔）",
     )]
 
 
@@ -820,17 +857,23 @@ def _run_selftest() -> int:
     sample = '''
 from __future__ import annotations
 from pathlib import Path
+import io
 import subprocess
 
 def probe(path: Path, ch: str) -> None:
     open("a.txt").read()
+    io.open("a.txt").read()
     Path("a.txt").write_text("x")
     subprocess.run(["echo"], text=True)
     if str(path) == "a/b":
         print("path compare")
+    if f"{path}/x" == "a/b":
+        print("fstring compare")
     path_text = str(path)
     path_text.split("/")
+    f"{path}".split("/")
     raw = open("a.bin", "rb")
+    io.open("a.bin", "rb")
     if ch == "\\\\":
         print(raw)
 '''
@@ -852,7 +895,7 @@ def probe(path: Path, ch: str) -> None:
         )
         return 1
     print(
-        "[selftest] ✓ E1/E2/E3/E4 各自触发；"
+        "[selftest] ✓ E1/E2/E3/E4 各自触发（含 io.open / f-string 路径）；"
         "二进制 open 与字符级 ch == '\\\\' 未误报"
     )
     return 0

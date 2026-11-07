@@ -25,6 +25,12 @@ _project_root = os.path.dirname(os.path.abspath(__file__))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+# 控制台自护：进程入口统一在这里做一次（不止 `fragment` 子命令）。
+# 远端 Windows runner 默认 cp1252/cp936，中文诊断、图树符号（●/├─）直接 print
+# 会 UnicodeEncodeError；打包切面入口（packaging/entries/*）也 import 本模块，
+# 所以放在模块级而不是某个子命令里——任何入口只要 import main 就带上自护。
+ensure_utf8_stdio()
+
 
 def _load_commands() -> dict:
     """从语言包 tpc.toml 读 [commands] 段（指令 → 管线阶段定义）。
@@ -610,8 +616,6 @@ def _add_fragment_parser(sub) -> None:
 
 def _cmd_fragment(args: argparse.Namespace) -> None:
     """tpc fragment — 片段模式：岛式分片 → 真实管线 → 合成（water 原样）。"""
-    # 远端 Windows runner 默认 cp1252：中文 diff/摘要直接 print 会 UnicodeEncodeError。
-    ensure_utf8_stdio()
     from islands import print_diff, rewrite_file
 
     result = rewrite_file(args.file, args.rules_dir, args.write)
