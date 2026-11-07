@@ -1281,6 +1281,20 @@ _MUTATIONS: list[dict[str, str]] = [
 ]
 
 
+def _report_untracked() -> None:
+    """列出未跟踪文件（只提醒，不阻塞）——它们不在变异的还原路径上。"""
+    out = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=_ROOT, capture_output=True, text=True, encoding="utf-8",
+    ).stdout
+    loose = [ln for ln in out.splitlines() if ln.startswith("??")]
+    if not loose:
+        return
+    print(f"[note] 忽略 {len(loose)} 个未跟踪文件（不参与变异与还原）：")
+    for ln in loose[:5]:
+        print(f"    {ln}")
+
+
 def _ensure_clean_tree() -> bool:
     """要求**已跟踪文件**干净——变异会临时改源码，脏树下还原会掩盖未提交改动。
 
@@ -1303,15 +1317,7 @@ def _ensure_clean_tree() -> bool:
             print(f"    {ln}")
         print("    先提交或 stash，再跑本工具。")
         return False
-    untracked = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=all"],
-        cwd=_ROOT, capture_output=True, text=True, encoding="utf-8",
-    ).stdout
-    loose = [ln for ln in untracked.splitlines() if ln.startswith("??")]
-    if loose:
-        print(f"[note] 忽略 {len(loose)} 个未跟踪文件（不参与变异与还原）：")
-        for ln in loose[:5]:
-            print(f"    {ln}")
+    _report_untracked()
     return True
 
 
