@@ -1282,9 +1282,15 @@ _MUTATIONS: list[dict[str, str]] = [
 
 
 def _ensure_clean_tree() -> bool:
-    """要求工作区干净——变异会临时改源码，脏树下还原会掩盖未提交改动。"""
+    """要求**已跟踪文件**干净——变异会临时改源码，脏树下还原会掩盖未提交改动。
+
+    ⚠ 只把「已跟踪文件的修改」当阻塞项（`--untracked-files=no`）。实测（2026-11-07）：
+    一条无关的未跟踪文件（会话状态 `STATE.md`）就能让本探针整体不可跑，D5 因此从
+    「跑过了」退化成「跑不了」——**探针不可用与探针变红是两件事**，别让无关噪声
+    冒充"工作区不干净"。未跟踪文件只列出来提醒，不阻塞（它不在本工具的还原路径上）。
+    """
     proc = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain", "--untracked-files=no"],
         cwd=_ROOT, capture_output=True, text=True, encoding="utf-8",
     )
     if proc.returncode != 0:
@@ -1292,11 +1298,20 @@ def _ensure_clean_tree() -> bool:
         return False
     dirty = [ln for ln in proc.stdout.splitlines() if ln.strip()]
     if dirty:
-        print("[error] 工作区不干净，拒绝施加变异（会掩盖未提交改动）：")
+        print("[error] 已跟踪文件有未提交改动，拒绝施加变异（会掩盖未提交改动）：")
         for ln in dirty[:10]:
             print(f"    {ln}")
         print("    先提交或 stash，再跑本工具。")
         return False
+    untracked = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=_ROOT, capture_output=True, text=True, encoding="utf-8",
+    ).stdout
+    loose = [ln for ln in untracked.splitlines() if ln.startswith("??")]
+    if loose:
+        print(f"[note] 忽略 {len(loose)} 个未跟踪文件（不参与变异与还原）：")
+        for ln in loose[:5]:
+            print(f"    {ln}")
     return True
 
 
