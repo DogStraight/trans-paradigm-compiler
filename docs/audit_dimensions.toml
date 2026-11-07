@@ -35,7 +35,7 @@ proxies = "同一事实只有一处实现；新增机制不抬复杂度/重复�
 invalidated_if = "复杂度口径或 kept 账本口径改变（分数不再可比），或重构把重复搬进新文件"
 closure = "新增 0 项；同一事实只有一处（副本清零，或有 fail-closed 门禁保证漏了会响）"
 status = "closed"
-closed_evidence = "CLONE 3→2（_load_kept/_load_converged 合并为 _load_registry）；余 2 对经人判保持并记理由；structural_score --compare 与 feature_sites compare 已挂 CI（新增即红）"
+closed_evidence = "【2026-11-07 重闭】F1 已修并由 Lead 复现复核：_bifrost 拒空报表/非零退出/坏 JSON，_compare 见「基线 78 项 → 当前 0 项」返 rc=2 并打印拒绝理由（复跑：空 _Score 调 _compare → rc=2）。F7/F8 经外部证伪攻而未破（CLONE 判保持、能力 v2 派生）。原记录：structural_score 在 bifrost 报表为空串时把基线 78 项全部记作「消除」并 exit 0（复现：空 _Score 调 _compare → 消除 78 / rc=0）——ratchet 分不清「债还完了」与「量具死了」。修好 _bifrost 拒空 + _compare 对全量消失报警后重闭。此前 CLONE 3→2（_load_kept/_load_converged → _load_registry）与 2 对判保持仍成立（外部证伪 F7 未攻动）"
 
 [[dimension]]
 id = "D3"
@@ -121,12 +121,12 @@ origin = "agent"
 probe = "python tools/check_platform_encoding.py --strict"
 trigger = "出现一次只在 Windows/某 locale 下失效的门禁或测试"
 adhoc = "AST 扫 open()/read_text() 缺 encoding、str(path) 参与比较、反斜杠字面量判断"
-measured = "全仓 485 py：E1/E2/E3/E4 全 0 违规（E2 修 7 处缺 encoding）；排序面 12 处目录遍历未排序但全在 tests/tools/policy、引擎面 0；main.py:617 reconfigure(errors=) 判良性（流错误策略，非解码默认）；ad hoc 探针对 Path.open(\"rb\") 假阳已修正"
+measured = "全仓 485 py：E1/E2/E3/E4 静态面 0 违规（E2 修 7 处缺 encoding）。【2026-11-07 更正】此前写的「排序面引擎面 0」是错的：探针只扫 os.listdir/iterdir/glob，漏了 os.walk；实测 core/check_registry.discover_rule_files 用未排序 os.walk 却宣称「排序稳定」，诊断顺序随遍历序翻转（外部证伪 F3）。main.py:617 reconfigure(errors=) 判良性不变"
 proxies = "代码不依赖 locale 编码、路径分隔符、文件系统排序"
 invalidated_if = "开发/CI 统一到单一容器环境，跨平台差异不再暴露"
 closure = "open()/read_text() 无缺省编码；路径比较无 str(path) 拼接；无反斜杠字面量判断"
 status = "closed"
-closed_evidence = "check_platform_encoding.py 四码各自可触发（--selftest + Lead 独立样本）；全仓 0 违规且防假绿下限在位；CI 挂 --strict"
+closed_evidence = "【2026-11-07 重闭】F2 已修并由 Lead 复现：ensure_utf8_stdio 提到 main.py 模块级（:32），test_cli_tree_flag 在 cp936 / cp1252 / utf-8 三档各 1 passed；F3 discover_rule_files 返回已排序（复跑 sorted==True）；F4 E1 认 io.open、E3 认 f-string（Lead 自造样本各命中）；F5 单点门禁改全仓 denylist + SyntaxError fail-closed。原记录：①运行时面根本没覆盖：main.py 只在 _cmd_fragment 调 ensure_utf8_stdio，进程入口未调——cp936 下 test_cli_tree_flag 红、cp1252 下 main.py check --tree 直接 UnicodeEncodeError（Lead 独立复现）；②E1 漏 io.open 与 f-string 路径比较；③F3 排序面见 measured。修好并补「真跑引擎入口」的编码测试后重闭"
 
 # ============================================================================
 # 审计管线（槽位化）：可插拔，不是固定流程

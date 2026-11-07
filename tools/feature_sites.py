@@ -90,6 +90,24 @@ _ROLE_DOCS = "文档"
 SCATTER_ROLES = ("引擎侧登记", "行为基线")
 
 
+def _by_extension(rel: str) -> str | None:
+    """扩展名兜底角色：`.md` 一律是文档。
+
+    README/架构说明写在引擎目录里也只是文档，不是"引擎侧登记点"——外部证伪 F9 实测
+    `analyzer/README.md` 曾被记成引擎侧登记，虚高了登记面（scatter 只统计
+    `SCATTER_ROLES`，文档本不计欠账）。
+    """
+    return _ROLE_DOCS if rel.endswith(".md") else None
+
+
+def _tests_role(rel: str) -> str:
+    """`tests/` 下再分：测试脚本（本来就该多）vs 登记面/行为基线（算散点）。"""
+    name = rel.rsplit("/", 1)[-1]
+    if name.startswith("test_") or name == "conftest.py":
+        return "测试"
+    return "行为基线"
+
+
 def _role(rel: str) -> str:
     """相对路径 → 角色标签。
 
@@ -99,16 +117,17 @@ def _role(rel: str) -> str:
     才是"散点"（必须手工保持同步）。本工具初版把它们一并算作"测试"，导致
     W105 的散点数被低估到 3（真实是 20 个文件里的大半）。
     """
+    fixed = _by_extension(rel)
+    if fixed is not None:
+        return fixed
     for prefix, role in _ROLE_RULES:
-        if rel.startswith(prefix):
-            if role == "引擎侧登记" and rel.startswith("tools/") and "baseline" in rel:
-                return "行为基线"
-            if role == "测试":
-                name = rel.rsplit("/", 1)[-1]
-                if name.startswith("test_") or name == "conftest.py":
-                    return "测试"
-                return "行为基线"
-            return role
+        if not rel.startswith(prefix):
+            continue
+        if role == "引擎侧登记" and rel.startswith("tools/") and "baseline" in rel:
+            return "行为基线"
+        if role == "测试":
+            return _tests_role(rel)
+        return role
     return _ROLE_DOCS
 
 

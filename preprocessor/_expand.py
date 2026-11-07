@@ -428,8 +428,8 @@ def scan_directives(
     if out_macro_events is not None:
         out_macro_events.extend(ctx.get("_macro_events", []))
     if out_include_edges is not None:
-        # 单元图包含边（块 5）：`(source, target)` 二元组——**不带 kind**；kind 由引擎
-        # 按能力面 `unit_graph.edges` 统一映射成稳定名（语言包声明自己产出哪些边种类）。
+        # 单元图包含边（块 5）：`(source, target)` 二元组——**不带 kind**；kind 归语言包
+        # （`[[unit_graph.edges]] kind + from`），本阶段只是 `preprocessor.include_edges` 通道。
         out_include_edges.extend(ctx.get("_include_edges", []))
     # 宏体**不再预展开**（③）：`macro_defs` 保持原始体，替换文本由调用点用
     # `macro_expand.expand_text(..., hideset={name})` 现算 ⇒ 消除"扫描期预展开 +

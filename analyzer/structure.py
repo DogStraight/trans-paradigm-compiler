@@ -103,8 +103,8 @@ class FileResult:
     # single_empty, params, line, column}；line 已回源到**原始源行**（1-based）、
     # column 为 0-based 宏名起列。供 postpass 检查消费（`CTX_MACRO_INVOCATIONS`）。
     macro_invocations: list = field(default_factory=list)
-    # 单元图包含边（块 5/6）：`(本文件, 被包含文件)`——**不带 kind**；kind 由引擎按
-    # 能力面 `unit_graph.edges` 映射成稳定名（语言包声明产出哪些边种类）。
+    # 单元图包含边（块 5/6）：`(本文件, 被包含文件)`——**不带 kind**；kind 归语言包
+    # （`[[unit_graph.edges]] kind + from`），引擎只按 `from` 指定的产边通道取边。
     include_edges: list = field(default_factory=list)
 
 
