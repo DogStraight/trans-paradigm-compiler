@@ -70,7 +70,7 @@ proxies = "每个门禁在被违反时确实会红（不是只在干净树上通
 invalidated_if = "门禁改为外部服务/CI-only 校验，变异注入不再能触达"
 closure = "每个门禁至少一条变异能证明它变红；变异载荷与当前源码匹配"
 status = "closed"
-closed_evidence = "policy/ 下 7 个默认 gate 单元各有一条直接变异且实跑变红（126 条变异中 8 条指向 policy/）；静态守卫 378 passed"
+closed_evidence = "126 条变异逐条有红证据（Lead 复核）：101 条在 9b0132e 的干净 worktree 分片重跑里如期变红；21-42/103-105 由同 payload、同产品代码的 73dec99 全量跑覆盖（两提交间产品代码零改动，只改了变异清单两条）；此前哑掉的 78/119 重指真守卫后用 --only 逐条复验「测试如期变红」。**两次运行拼合，非单次全绿，如实记。**policy/ 下 7 个默认 gate 单元各有一条直接变异；静态守卫 378 passed。遗留（已记 retro）：工具无 per-mutation 超时；强杀会留变异残留"
 
 [[dimension]]
 id = "D6"
