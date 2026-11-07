@@ -65,3 +65,13 @@ observable = "对照本轮 diff：新增规则数 vs 删除/合并数；只增�
 verification = "procedural"
 manual_check = "在变更说明里逐条写明「新增 X 替代/合并 Y」或「旧规则不足的证据」；审查者核对被删项确实退场"
 known_pass = "2026-10-24：R6 手写前缀族→派生（删副本、留单一来源）；structural_kept 退场 4 条同理由豁免"
+
+[[invariant]]
+id = "INV-RATCHET-NOT-VANISH"
+statement = "ratchet 基线项集合非空而当前集合为空时必须 FAIL，不得解释为「欠账清零」"
+violation = "外部量具/扫描面失效导致当前集合为空，ratchet 打印「消除 N 项」并 exit 0"
+observable = "把当前结果换成空集合跑比对，必须 exit 2 且消息带「基线 N 项」；归零只能走 --save/--record"
+verification = "mechanized"
+gate = "tests/policy/test_ratchet_not_vanish.py::test_every_ratchet_is_wired_to_the_guard"
+violation_probe = "tests/policy/test_ratchet_not_vanish.py::test_structural_score_empty_score_exits_2"
+known_pass = "四处入口（structural_score / feature_sites / min_pack_probe / assert_strength）都调 tools/_ratchet.guard_not_vanished；空集合驱动时 exit 2（外部证伪 F1 的复现即反例）"

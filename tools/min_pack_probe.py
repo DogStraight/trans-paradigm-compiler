@@ -33,10 +33,12 @@
 用法::
 
     python tools/min_pack_probe.py                  # 跑并与基线比对（有回归 → exit 1）
+    python tools/min_pack_probe.py --compare        # 严格比对：基线缺失/口径不符/全量消失 → exit 2
     python tools/min_pack_probe.py --record         # 跑并写基线（需说明原因）
     python tools/min_pack_probe.py --target tests/engine
     python tools/min_pack_probe.py --pack grammar/c4
     python tools/min_pack_probe.py -- -x            # 透传 pytest 参数（`--` 之后）
+
 
 按需跑，**不进日常门禁**（分钟级）——见 tools/README.md。判据与实测清单见
 `docs/gaps/gap-language-penetration.md`。
@@ -45,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import _ratchet  # noqa: E402  # pyright: ignore[reportMissingImports]
 import os
 import subprocess
 import sys
@@ -217,6 +220,35 @@ def _serialize(extra: list[str]) -> list[str]:
     return extra if explicit else ["-n", "0", *extra]
 
 
+def _compare_against(baseline: dict, result: dict) -> int:
+    """与基线比对 → 退出码。
+
+    先过「全量消失」判据（`INV-RATCHET-NOT-VANISH`：基线有仍绿测试、本次一条都没有
+    ⇒ 疑量具/扫描面失效，返回 2 而不是"无回归"），再走原有回归/口径检查。
+    """
+    vanished = _ratchet.guard_not_vanished(
+        "min_pack_probe",
+        len(baseline.get("passed") or []),
+        len(result.get("passed") or []),
+    )
+    if vanished:
+        return vanished
+    diff = compare(baseline, result)
+    _report(result, diff)  # 先出数：口径不符时也要看得到规模
+    for key, what in (("pack", "探针包"), ("targets", "目标集")):
+        if baseline.get(key) != result.get(key):
+            print(
+                f"  [口径不一致] {what}：基线 {baseline.get(key)!r} "
+                f"vs 当前 {result.get(key)!r}——基线与该口径绑定，请重新 --record"
+            )
+            return 1
+    if diff["regressed"]:
+        print("  ✗ 存在回归：曾有引擎测试在此包下仍绿，现在不绿了")
+        return 1
+    print("  ✓ 无回归")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="最小语言包探针（行为面基线；gap 判据 1）",
@@ -227,11 +259,26 @@ def main(argv: list[str] | None = None) -> int:
         help=f"pytest 目标（可多次；默认 {' '.join(_TARGET_DEFAULT)}）",
     )
     ap.add_argument("--record", action="store_true", help="写基线（覆盖）")
+    ap.add_argument(
+        "--compare", action="store_true",
+        help="严格比对模式：基线缺失 / 探针口径不符 / 全量消失都 exit≠0（默认有基线就比）",
+    )
     ap.add_argument("--json", action="store_true", help="输出当前结果 JSON")
     ap.add_argument("--baseline", default=_BASELINE_PATH, help="基线文件路径")
     args, extra = ap.parse_known_args(argv)
     if extra and extra[0] == "--":
         extra = extra[1:]
+    if args.record and args.compare:
+        print("[min-pack-probe] --record 与 --compare 互斥", file=sys.stderr)
+        return 2
+
+    if args.compare and not os.path.isfile(os.path.join(_ROOT, args.baseline)):
+        # 先查基线再跑探针：探针是分钟级，缺基线时不该白跑一轮。
+        print(
+            f"[FAIL] --compare 需要基线：{args.baseline}（先跑 --record 建立基线）",
+            file=sys.stderr,
+        )
+        return 2
 
     targets = args.target or list(_TARGET_DEFAULT)
     result = run_probe(args.pack, targets, _serialize(list(extra)))
@@ -248,23 +295,17 @@ def main(argv: list[str] | None = None) -> int:
     baseline = load_baseline(args.baseline)
     if baseline is None:
         _report(result, None)
+        if args.compare:
+            print(
+                f"[FAIL] --compare 需要基线：{args.baseline}"
+                "（先跑 --record 建立基线）",
+                file=sys.stderr,
+            )
+            return 2
         print(f"  [基线不存在] 先跑 --record 建立基线（{args.baseline}）")
         return 0
 
-    diff = compare(baseline, result)
-    _report(result, diff)  # 先出数：口径不符时也要看得到规模
-    for key, what in (("pack", "探针包"), ("targets", "目标集")):
-        if baseline.get(key) != result.get(key):
-            print(
-                f"  [口径不一致] {what}：基线 {baseline.get(key)!r} "
-                f"vs 当前 {result.get(key)!r}——基线与该口径绑定，请重新 --record"
-            )
-            return 1
-    if diff["regressed"]:
-        print("  ✗ 存在回归：曾有引擎测试在此包下仍绿，现在不绿了")
-        return 1
-    print("  ✓ 无回归")
-    return 0
+    return _compare_against(baseline, result)
 
 
 if __name__ == "__main__":

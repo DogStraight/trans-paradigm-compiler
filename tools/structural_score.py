@@ -39,6 +39,8 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
+import _ratchet  # noqa: E402  # pyright: ignore[reportMissingImports]
+
 # 控制台 UTF-8 自护走单点 `core/console.py`（工具脚本 sys.path[0]=tools/，先把仓库根
 # 加进 sys.path 再 import）。行为：能重配则 utf-8 + backslashreplace，失败不阻断入口。
 _REPO_ROOT = str(pathlib.Path(__file__).resolve().parent.parent)
@@ -446,12 +448,7 @@ def _compare(root: pathlib.Path, score: _Score) -> int:
     print(f"  消除 {len(gone)} 项 / 新增 {len(added)} 项 / 变大 {len(grew)} 项")
     _print_diff(added, grew)
     if old and not new:
-        print(
-            f"[FAIL] 全量消失：基线有 {len(old)} 项、当前量具 0 项"
-            "——疑似报表/扫描面失效，拒绝当绿（真要归零先 --save 重录基线）",
-            file=sys.stderr,
-        )
-        return 2
+        return _ratchet.guard_not_vanished("structural_score", len(old), len(new))
     return 1 if (added or grew) else 0
 
 

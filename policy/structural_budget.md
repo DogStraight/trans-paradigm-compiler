@@ -174,6 +174,24 @@ R3 + R6）重跑 = **102 对**（≤40 tok 83 对），逐对按 A–G 归位：
   四条分派型/单一职责族 + 四个大面积低认知容器；再往下就是动语言事实（等于删语言支持）
   或做无收益的形式拆分（**收益递减**，已到停止线的经验位置）。
 
+## 七之二、ratchet 的「全量消失」判据（2026-11-07 作者批准）
+
+**判据**：基线项集合非空、当前集合为空 ⇒ **FAIL（exit 2）**，不得解释为「欠账清零」。
+真要归零，唯一合法路径是 `--save` / `--record` **显式重录基线**（留下审计痕迹）。
+
+**为什么**（外部证伪 F1 实测）：`tools/structural_score.py` 在 bifrost 报表为空时，把基线
+78 项全部记作「消除」并 **exit 0**。只要「当前集合为空 ⇒ 没有违规 ⇒ 绿」，量具/扫描面
+一坏，这个 ratchet 就变成装饰——而它恰好是"结构欠账不许涨"的唯一守卫。
+
+**实现**：`tools/_ratchet.py::guard_not_vanished`，**单一实现**，四处接入：
+`structural_score --compare`、`feature_sites compare`、`min_pack_probe`（默认比对）、
+`tests/policy/test_assert_strength.py`（另加一条"断言总数 ≥ 基线一半"的绝对量下限）。
+
+**与「空扫描面」判据的分工**：本条管**基线→当前**的对比型 ratchet；工具自身扫描面塌陷
+（扫到 0 个文件）由各工具自带下限兜（如 `check_platform_encoding.MIN_PY_FILES`）。
+
+**不变量**：`docs/invariants.toml` 的 `INV-RATCHET-NOT-VANISH`（mechanized，锚点可解析）。
+
 ## 八、与其它门禁的关系
 
 - **不进日常门禁**：需要外部二进制、分钟级；本口径只用于"结构性改动"的收益评估。

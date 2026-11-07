@@ -33,6 +33,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+import _ratchet  # noqa: E402  # pyright: ignore[reportMissingImports]
+
 
 ROOT = Path(__file__).resolve().parents[2]
 _SELF = Path(__file__).resolve()
@@ -40,6 +45,12 @@ BASELINE_PCT = 13.13
 TOLERANCE_PP = 0.50
 MIN_FILES = 250
 MIN_ASSERTS = 5000
+#: 绝对量 ratchet（INV-RATCHET-NOT-VANISH）：断言总数不许塌到基线的一半以下。
+#: `MIN_ASSERTS` 只防「扫到空集合」，防不住「扫描面悄悄缩水一半」——那种情况比例
+#: 可能照样漂亮（弱断言跟着一起消失），所以再加一条绝对量下限。
+#: 实测基线（2026-11-07）：279 文件 / 5294 assert / 弱 684 / 12.92%。
+BASELINE_ASSERTS = 5294
+ASSERT_FLOOR_RATIO = 0.50
 
 # 固定白名单：不按返回值猜类型，避免"谓词类型推断"引入新的脆弱面。
 # 前缀覆盖 is_*/has_* 这类常见布尔谓词 helper；未列出的自定义 helper
@@ -176,6 +187,18 @@ def test_repo_strict_weak_ratio_within_ratchet() -> None:
     stats = scan(ROOT)
     assert stats["parse_errors"] == 0
     assert stats["files"] >= MIN_FILES
+    # 「全量消失」判据先于绝对下限：塌到 0 时给的是「基线 N 项 → 当前 0 项」，
+    # 而不是 MIN_ASSERTS 的裸比较（消息要能指向是量具/扫描面坏了）。
+    assert _ratchet.guard_not_vanished(
+        "assert_strength", BASELINE_ASSERTS, stats["asserts"]
+    ) == 0, (
+        f"断言总数塌到 0（基线有 {BASELINE_ASSERTS} 项、当前 0 项）"
+        "——扫描面失效，比例再漂亮也不算绿"
+    )
+    assert stats["asserts"] >= BASELINE_ASSERTS * ASSERT_FLOOR_RATIO, (
+        f"断言总数 {stats['asserts']} 不足基线 {BASELINE_ASSERTS} 的 "
+        f"{ASSERT_FLOOR_RATIO:.0%}——扫描面缩水，比例再漂亮也不算绿"
+    )
     assert stats["asserts"] >= MIN_ASSERTS
     assert stats["weak"] > 0
     pct = _weak_pct(stats)

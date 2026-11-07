@@ -161,6 +161,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   pyright strict 0 errors。`format`/`lint` 等既有命令行为不变（片段模式独立入口）。
 
 ### Fixed
+- **ratchet「全量消失」判据升为不变量（INV-RATCHET-NOT-VANISH，作者 2026-11-07 批准）**：
+  单一实现 `tools/_ratchet.py::guard_not_vanished`——基线项集合非空、当前集合为空 ⇒
+  exit 2，消息点名「基线有 N 项、当前 0 项」；归零只许 `--save`/`--record` 显式重录基线。
+  四处接入：`structural_score --compare`、`feature_sites compare`、`min_pack_probe`
+  （新增 `--compare` 严格模式：缺基线即 exit 2，不白跑分钟级探针）、
+  `tests/policy/test_assert_strength.py`（另加绝对量下限：断言总数 ≥ 基线 5294 的 50%，
+  防扫描面悄悄缩水）。`docs/invariants.toml` 新增 mechanized 条目（gate/violation_probe
+  锚点可解析），`policy/structural_budget.md` 加「全量消失判据」节，`tools/README.md`
+  补 `--compare` 口径。验证见下条收尾：`tests/policy` 670 passed；`check_invariants`
+  6 条全解析；`feature_sites compare` ✓；四个入口各以空集合驱动 → exit 2/红
+  （`tests/policy/test_ratchet_not_vanish.py`）。
 - **外部证伪五件收口（审计 2026-11-07，D2/D9 重开项 F1–F5）**：
   · **F1 ratchet fail-closed**：`tools/structural_score.py` 的 `_bifrost` 拒空报表 / 非零
   退出码 / 坏 JSON（报表是量具输入，空串 ≠ 零命中——无命中的规范输出是 `No ... met`

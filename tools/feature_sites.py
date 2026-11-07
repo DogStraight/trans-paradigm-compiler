@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import _ratchet  # noqa: E402  # pyright: ignore[reportMissingImports]
 import re
 import sys
 import tomllib
@@ -386,32 +387,44 @@ def cmd_list(result: dict, verbose: bool) -> None:
                     print(f"        ~ {rel}")
 
 
+def _family_regressions(fam: str, old: dict | None, data: dict) -> int:
+    """单个功能族与基线比 → 回归计数（新族/散点增长/预算增长），逐条打印。"""
+    if old is None:
+        print(f"  [新族] {fam}")
+        return 1
+    bad = 0
+    old_inst, new_inst = old["instances"], data["instances"]
+    for inst in sorted(set(new_inst) - set(old_inst)):
+        print(f"  [新实例] {fam}:{inst}（散点 {new_inst[inst]['scatter_count']}）")
+    for inst in sorted(set(new_inst) & set(old_inst)):
+        o, n = old_inst[inst]["scatter_count"], new_inst[inst]["scatter_count"]
+        if n > o and not new_inst[inst]["kept"]:
+            print(f"  [散点增长] {fam}:{inst} {o} → {n}")
+            for rel in set(new_inst[inst]["scatter"]) - set(old_inst[inst]["scatter"]):
+                print(f"        + {rel}")
+            bad += 1
+    ob, nb = old["summary"]["budget"], data["summary"]["budget"]
+    if nb > ob:
+        print(f"  [预算增长] {fam}: {ob} → {nb}")
+        bad += 1
+    return bad
+
+
+def _instance_count(families: dict) -> int:
+    """各族 instances 总数——ratchet「全量消失」判据的分子/分母。"""
+    return sum(len(v.get("instances") or {}) for v in families.values())
+
+
 def cmd_compare(result: dict) -> int:
     if not BASELINE.exists():
         print("[feature-sites] 基线不存在——先 `--save`", file=sys.stderr)
         return 2
     base = json.loads(BASELINE.read_text(encoding="utf-8"))["families"]
-    bad = 0
-    for fam, data in result.items():
-        old = base.get(fam)
-        if old is None:
-            print(f"  [新族] {fam}")
-            bad += 1
-            continue
-        old_inst, new_inst = old["instances"], data["instances"]
-        for inst in sorted(set(new_inst) - set(old_inst)):
-            print(f"  [新实例] {fam}:{inst}（散点 {new_inst[inst]['scatter_count']}）")
-        for inst in sorted(set(new_inst) & set(old_inst)):
-            o, n = old_inst[inst]["scatter_count"], new_inst[inst]["scatter_count"]
-            if n > o and not new_inst[inst]["kept"]:
-                print(f"  [散点增长] {fam}:{inst} {o} → {n}")
-                for rel in set(new_inst[inst]["scatter"]) - set(old_inst[inst]["scatter"]):
-                    print(f"        + {rel}")
-                bad += 1
-        ob, nb = old["summary"]["budget"], data["summary"]["budget"]
-        if nb > ob:
-            print(f"  [预算增长] {fam}: {ob} → {nb}")
-            bad += 1
+    if vanished := _ratchet.guard_not_vanished(
+        "feature_sites", _instance_count(base), _instance_count(result)
+    ):
+        return vanished
+    bad = sum(_family_regressions(fam, base.get(fam), data) for fam, data in result.items())
     if bad:
         print(f"\n[feature-sites] ✗ {bad} 处散点增长（要么合并登记点，要么登记判保持理由）")
         return 1
