@@ -188,6 +188,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   新增 0/变大 0；`check_hardcode --strict-*` 绿。
 
 ### Changed
+- **文档单一真相化（作者 2026-11-07 指示）**：README / PROGRESS / ROADMAP 不再复述随轮
+  变动的数字（版本号、测试数、结构分、提交号），改为指向唯一来源——版本 =
+  `pyproject.toml` + `core/__init__.py`，刻度/收口状态 = `PROGRESS.md`，逐轮变更与证据 =
+  `CHANGELOG.md`，能力边界 = `docs/gaps/`。`docs/README.md` 新增「单一真相（更新规律）」
+  表 + 更新动作（改唯一来源 → 扫复述 → 改指向）；`tests/policy/test_doc_single_truth.py`
+  把"复述"拦成门禁（含模式自证与反向自检）。顺带修正 README 的 C 包陈旧数字（旧写
+  "27 条/25 解析"，与 `grammar/c/README.md` 现算的 42/40/2 分叉）。
 - **会话协作前置判据（2026-10-30）**：`policy/session-wire.md` 开头新增「先判：会话间对话 vs
   Teams」——按**上下文归属**判模式（对方上下文/目标 → 只能提问 + 给证据；我播种 → 交付物
   导向、可派活/终止），并写明混用代价；`AGENTS.md` 加一行指针，用户级

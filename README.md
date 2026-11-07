@@ -7,7 +7,6 @@ compiler frontend; context-sensitive grammar; language workbench; DSL extension;
 model-friendly configuration; forkable pipeline
 -->
 
-![version](https://img.shields.io/badge/version-0.1.2-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.11%2B-orange)
 ![status](https://img.shields.io/badge/status-experimental-yellow)
@@ -152,7 +151,7 @@ Requirements: Python 3.11+ (zero runtime dependencies).
 git clone https://github.com/DogStraight/trans-paradigm-compiler && cd trans-paradigm-compiler
 pip install -e ".[test]"     # editable install + test deps
 
-tpc --version                # 0.1.2
+tpc --version                # print version (single source: pyproject.toml + core/__init__.py)
 tpc format input.v           # format a Verilog file (stdout)
 tpc format input.v --fidelity keep_blank   # keep source blank lines
 tpc lint input.v             # pre-parse token lint (exit 1 on diagnostics)
@@ -177,11 +176,12 @@ diagnostics by code without touching the checkers.
 
 `tpc check` also returns a **dependency/unit graph** (`report["graph"]`: roots /
 nodes / edges / unit definitions) — multi-entry checks produce a multi-root
-forest, and `--tree` prints the same graph as text. Edge kinds are a registered
-declared by the language pack as `[[unit_graph.edges]] kind + from` (capability
-`unit_graph.edges.v2`); the engine keeps only a closed **edge-channel registry**.
-See [ADR-0027](./docs/decisions/0027-unit-graph-multi-root.md) and
-[ADR-0028](./docs/decisions/0028-elaboration-consumes-unit-graph.md).
+forest, and `--tree` prints the same graph as text. Edge kinds are **declared by
+the language pack** as `[[unit_graph.edges]] kind + from`; the engine keeps only a
+closed **edge-channel registry**. Declared surface, capability version and
+consumers: [ADR-0027](./docs/decisions/0027-unit-graph-multi-root.md) /
+[ADR-0028](./docs/decisions/0028-elaboration-consumes-unit-graph.md) and
+`core/engine_capabilities.py`.
 
 `tpc config dump` is the debugging entry point for "where does this config
 value come from" — it resolves the language pack and prints each key's source
@@ -232,9 +232,10 @@ their `[Rule.renderer.layout]`).
 **standard increment plugins** — `plugins/c11/`, `plugins/c17/`, `plugins/c23/`
 — whose `requires` chain (`c23` ⊇ `c17` ⊇ `c11` ⊇ core) makes "enable this
 combination = that standard's syntax surface" a **loadable configuration**
-rather than a source fork. Of the 27 tracked constructs on the C99 acceptance
-checklist, 25 parse into the AST; the two remaining gaps are
-`#include`/`#define` (preprocessing is tracked as its own stage).
+rather than a source fork. The C99 acceptance surface is measured by
+`python tools/c_acceptance.py`; current numbers and the per-item list live in
+[`grammar/c/README.md`](./grammar/c/README.md). Preprocessing directives such as
+`#include`/`#define` are tracked as their own stage, not as syntax gaps.
 
 Source-to-source printing is round-trip verified on real samples against seven
 criteria, including line coverage, idempotence, a full comment inventory and an
@@ -326,21 +327,17 @@ zero to a working language): [docs/language_walkthrough.md](./docs/language_walk
 
 ## Documentation
 
-| Document | Contents |
-|----------|----------|
-| [docs/engine_overview.md](./docs/engine_overview.md) | **Engine overview**: one-line walk of the pipeline — read before any subsystem change |
-| [docs/README.md](./docs/README.md) | Doc navigation & alignment conventions (`Doc:`/`Impl:`/`Test:`) |
-| [docs/MODEL_INDEX.md](./docs/MODEL_INDEX.md) | **Read before modifying**: knowledge-unit jump table → doc → impl → test |
-| [core/component_protocol.md](./core/component_protocol.md) | Plugin components / slots / primitives / inject |
-| [core/config_lifecycle.md](./core/config_lifecycle.md) | Config lifecycle (declare_cfg registration → load → read) |
-| [linter/linter_architecture.md](./linter/linter_architecture.md) | Pre-parse linter architecture |
-| [analyzer/semantic_checks.md](./analyzer/semantic_checks.md) | Semantic check slot design (two-layer rules + post-pass) |
-| [docs/pipeline_stages.md](./docs/pipeline_stages.md) | Stage contracts: data shapes, blocking semantics, cross-stage channels |
-| [docs/gaps/README.md](./docs/gaps/README.md) | Known limitations (component gap files) |
-| [docs/gaps/gap-incremental-parse.md](./docs/gaps/gap-incremental-parse.md) | Incremental re-parsing: fragment-level parse layer + honest boundaries |
-| [docs/decisions/0027-unit-graph-multi-root.md](./docs/decisions/0027-unit-graph-multi-root.md) | Dependency / unit graph: multi-entry multi-root forest, registered edge kinds |
-| [policy/release-checklist.md](./policy/release-checklist.md) | Release SOP |
-| [docs/language_walkthrough.md](./docs/language_walkthrough.md) | Build a language from zero (c4 as the worked example) |
+Start at the hub, then follow pointers — this README deliberately does **not**
+restate facts the docs own (see the single-source map in
+[docs/README.md](./docs/README.md)):
+
+- [docs/README.md](./docs/README.md) — doc navigation, placement rules, single-source map
+- [docs/engine_overview.md](./docs/engine_overview.md) — one-line walk of the pipeline; read before any subsystem change
+- [docs/MODEL_INDEX.md](./docs/MODEL_INDEX.md) — knowledge unit → doc → impl → test jump table
+- [docs/pipeline_stages.md](./docs/pipeline_stages.md) — stage contracts (data shapes, blocking semantics, channels)
+- [docs/gaps/README.md](./docs/gaps/README.md) — known limitations / capability boundaries (per-component gap files)
+- [docs/language_walkthrough.md](./docs/language_walkthrough.md) — build a language from zero (c4 worked example)
+- [policy/release-checklist.md](./policy/release-checklist.md) — release SOP
 
 ## Project structure
 
@@ -364,7 +361,7 @@ plugin scripts — no engine code required to add or modify a language (see
 ## Verification
 
 ```bash
-python -m pytest -m smoke                # fast regression layer (~33s, per-domain reps, see tests/README.md)
+python -m pytest -m smoke                # fast regression layer (per-domain reps; selection/timing in tests/README.md)
 python -m pytest tests/ -q                # unit tests (see tests/ for count)
 python -m pytest tests/ -q -n auto        # concurrent full regression (pytest-xdist, ~3×)
 python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
@@ -404,9 +401,11 @@ Python 3.11/3.12/3.13 × Windows/Ubuntu.
 
 ## Status
 
-**Experimental — Alpha, not yet published to PyPI.** Version 0.1.2
-(working tree: 0.1.4 release candidate — 12/12 scale closed; version bump and
-publish are pending).
+**Experimental — Alpha, not yet published to PyPI.** Facts are owned by single
+sources and only linked here: version = `pyproject.toml` +
+`core/__init__.py` (locked by `tests/engine/core/test_version.py`); progress,
+scale and release state = [PROGRESS.md](./PROGRESS.md); change history and per-round
+evidence = [CHANGELOG.md](./CHANGELOG.md); release steps = [policy/release-checklist.md](./policy/release-checklist.md).
 
 Verilog support targets IEEE 1364-2005 (Verilog-2005), with the
 synthesizable core in the main pack and simulation/library syntax in plugins
@@ -440,9 +439,9 @@ Summary:
 - **No IDE / LSP wiring, interpreter-bound throughput.** Incremental
   **re-parsing** exists as a library API (single file, fragment-level, parse
   layer only; cross-file semantic invalidation is v0.2), not as a watcher/LSP.
-  Measured on the real-corpus V files: 0.6–12 s per file (7 files ≈ 26.9 s);
-  fuzz throughput 12 iters/s single / 32 iters/s on 8 workers; verilator
-  benchmark consensus 53 (see `tests/README.md` for reproduction).
+  Measured numbers (per-file timings, fuzz throughput, benchmark consensus) are
+  owned by [CHANGELOG.md](./CHANGELOG.md) round entries and the baseline files
+  under `tools/baselines/`; reproduction commands are in `tests/README.md`.
 - **Deep semantics live in plugin code, not TOML** — config drives syntax,
   rendering, and shallow semantics; genuinely new semantic capabilities are
   engine primitives / plugin scripts.
@@ -471,7 +470,8 @@ revision, but if you find any statement that does not match the actual code,
 please open an issue with a correction — precise documentation is preferred
 over polished claims.
 
-> Last synced against the codebase: **2026-11-03** (unit graph / `--tree`,
-> incremental re-parsing boundaries, quick start, limitations, doc index).
+> Freshness is not tracked by a hand-maintained date: version is owned by
+> `pyproject.toml`, current progress by [PROGRESS.md](./PROGRESS.md), and every
+> behavioural change with its evidence by [CHANGELOG.md](./CHANGELOG.md).
 
 [Design docs](./docs/) · [Known limitations](./docs/gaps/README.md)

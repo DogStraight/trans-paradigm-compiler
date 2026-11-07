@@ -31,6 +31,30 @@
 > **原则：对齐工程化只服务于协作方文档；个人思考沉淀不套对齐约定**
 > ——避免把文档体系本身变成新的维护负担。
 
+## 单一真相（更新规律：改一处，其余指向）
+
+> 每轮的**状态/数字/结论**只允许落在一个文件里；其他文档只写指向、不复制。
+> 依据 C3「单一权威源原则」（`policy/doc-alignment.md`「删除判据」）；发现别处
+> 复述，按 A4（归属错→移动）/ B2（与权威源重复→删）改成指针。由
+> `tests/policy/test_doc_single_truth.py` 守（README / PROGRESS / ROADMAP 禁止
+> 复述版本号、测试数、结构分与提交号）。
+
+| 事实 | 唯一来源 | 其他位置 |
+|------|----------|----------|
+| 版本号 | `pyproject.toml` + `core/__init__.py`（`test_version.py` 锁定） | 只写"见 pyproject"，不写数字 |
+| 当前刻度 / 收口状态 / 下一轮入口 | `PROGRESS.md` | README、ROADMAP 指向 |
+| 逐轮变更 + 验证数字 / 提交号 | `CHANGELOG.md` | 其他文档指向，不复制数字 |
+| 未完成短期待办 | `TODO.md` | 指向 |
+| 长期 backlog | `ROADMAP.md` | 指向 |
+| 能力边界 / 缺口明细 | `gaps/gap-*.md`（登记表 `gaps/README.md`） | README 的 Known limitations 只列类别 |
+| 子系统怎么用 / 怎么拼 | 就近 `<pkg>/README.md` + `engine_overview.md` | 指向 |
+| 评测 / 基准数字与复现 | `tools/baselines/*` + `tests/README.md` / `tools/README.md` | 指向 |
+| 发布步骤 | `policy/release-checklist.md` | 指向 |
+| 文档导航 | 本档 + `MODEL_INDEX.md` | 指向 |
+
+> 更新动作因此固定为：**改唯一来源 → 扫其他位置有无复述 → 改成指向**；不再"每处
+> 各改一遍"。
+
 ## 当前文档索引
 
 - 架构：各子系统架构文档已就近子包（见下方注记；协作方"怎么拼"进 MODEL_INDEX）
@@ -44,7 +68,7 @@
 - 参考：`references.md`（外部调研/设计来源落档：静态检查器功能调研见其「静态检查器功能调研」节）
   （语法规则字段参考已就近 `grammar/grammar_rule_fields.md`，见 grammar/README）
 - 边界：`gaps/`（按部件的能力边界/缺口档案；只记当前仍成立的结论，过程/历史
-  在 git log + CHANGELOG）；README 的 Known limitations 是其顶层摘要
+  在 git log + CHANGELOG）；README 的 Known limitations 只列类别，数字/判据归 gap 档
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
 - 机制：core 配置生命周期 + 组件协议已就近 `core/config_lifecycle.md`、
   `core/component_protocol.md`（见 core/README）；语言无关结构推导层见
@@ -75,25 +99,13 @@
 
 - **决策（为什么）** → `decisions/`（ADR），**≤10 决策点**：只在决策成立时建档、
   完成即删（未立项设计输入不进 ADR）；删除前机制先落部件文档（历史 git log）。
-  现存流程型：`decisions/0022-engine-capability-audit.md`（刻度完成后的引擎能力面审查：
-  方法/判据/台账位置；台账在 `gaps/gap-engine-abstraction-audit.md`）。
-  案例型（决策 + 实现同轮落档）：`decisions/0023-tier-gated-grammar.md`（档位门控：
-  可选件 grammar 随 `enabled` 加载；替代 ADR-0021 原"暂缓"行）。
-  设计型（方向已定、**暂缓**）：`decisions/0024-two-phase-lint-prescan-retirement.md`
-  （退役 lexer 预扫描与 raw 管线：**已执行完毕**（#53–#57），见 ADR-0024；
-  取回入口见 `ROADMAP.md` P2.9）。
-  设计型（**未立项**）：`decisions/0025-discovery-rule-derivation.md`
-  （语句发现改为声明式形态推导：消除 C 花括号容器引发的 6+ 处引擎特例补丁，
-  恢复开闭原则；D1–D4 分期见该档）。
-  设计型（**已落地**）：`decisions/0026-fragment-mode-islands.md`
-  （片段模式 = 语法配置驱动的岛式分片：全域岛 / 零声明面 / 后验默认开；
-  落地 `islands/`，P0 记号原型与手写规则已删）。
-  设计型（**已落地**）：`decisions/0027-unit-graph-multi-root.md`
-  （unit graph = 多入口多根森林：边由发现/预处理阶段产、kind 是配置数据；
-  `tpc check` 多入参、`--json` 出 `graph`）。
-  设计型（**已落地**）：`decisions/0028-elaboration-consumes-unit-graph.md`
-  （精化只消费 unit graph：原子/定义索引/实例点都从图与服务面来；`inst_sites`
-  命名收口为 `CTX_INSTANTIATION_SITES`）。
+  **现存 ADR 导航**（只列文件名，内容/状态归各档，本档不复述）：
+  `decisions/0021-long-term-deferral-strategy.md`、
+  `decisions/0022-engine-capability-audit.md`、`decisions/0023-tier-gated-grammar.md`、
+  `decisions/0024-two-phase-lint-prescan-retirement.md`、
+  `decisions/0025-discovery-rule-derivation.md`、`decisions/0026-fragment-mode-islands.md`、
+  `decisions/0027-unit-graph-multi-root.md`、
+  `decisions/0028-elaboration-consumes-unit-graph.md`。
 - **长期暂缓项/触发条件（策略）** → `decisions/` 的**策略型 ADR**（"长期项不列待办" +
   「结论/为什么不做/触发条件」表，现存 `decisions/0021-long-term-deferral-strategy.md`）；
   **不进 TODO**——触发出现时按体量取回 TODO/ROADMAP，
@@ -109,10 +121,9 @@
 - **外部调研/设计来源** → `references.md`——**只调研记录**（格式：定位 →
   管线对比 → 亮点 → 可实现性）；tpc 自身执行/落地/评测**不落**此。
 - **能力缺口/已知边界** → `gaps/gap-*.md`（+ `gaps/README.md` 登记表）。
-- **主线进度刻度** → 根目录 `PROGRESS.md`（到下一个版本的剩余刻度 + 退出判据状态；
-  只记状态不记过程，主线完成即整档删除或改写为下一主线）。
-- **执行记录/修复结果** → 代码 + 测试断言 + CHANGELOG（"为什么/推翻了什么"的
-  结论层可留 ADR）。规则行为预期 → 测试断言，文档不重复。
+- **主线进度刻度 / 执行记录** → 见上「单一真相」表：刻度与收口状态归
+  `PROGRESS.md`，逐轮变更与证据数字归 `CHANGELOG.md`；其他文档不复述
+  （行为预期 → 测试断言，文档不重复）。
 - **已删/过时内容** → git log 追，不留兼容垫片；删除先证后删（判据全表见
   `policy/doc-alignment.md`「删除判据」）。
 - **讨论草稿/未成型中间产物** → 根目录 `_drafts/`（暂存区：**不进 git**、门禁
