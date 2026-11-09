@@ -89,10 +89,16 @@ def test_allowlist_entries_still_hit():
 
 
 def test_scan_scope_covers_dirs_outside_legacy_list():
-    """F5 回归：旧固定清单外的目录（`packaging/`、根级入口）也在扫描面内。"""
+    """F5 回归：旧固定清单外的目录（`packaging/`、根级入口）也在扫描面内。
+
+    ⚠ 用**受版本控制**的文件断言（`packaging/build_pipeline.py`）：
+    `packaging/entries/` 是 `build_pipeline.py` 生成、被 gitignore 的目录，
+    在干净 checkout（CI/新 clone/worktree）里不存在——拿它当锚点会让门禁在
+    干净树必红（2026-11-09 发布前复现）。
+    """
     scanned = {p.relative_to(_ROOT).as_posix() for p in _scan_paths()}
     assert "main.py" in scanned
-    assert "packaging/entries/tpc_entry.py" in scanned
+    assert "packaging/build_pipeline.py" in scanned
 
 
 def test_copy_outside_legacy_dirs_is_caught(tmp_path: Path):

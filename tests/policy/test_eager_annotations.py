@@ -27,8 +27,10 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent.parent
 
+#: `.scratch` 要跳：发布前准备会在 `.scratch/release-prep/venv/` 里建虚拟环境装依赖，
+#: 那是**第三方代码**，不该被本仓门禁评判（实测 2026-11-07：一次发布准备就让本门禁红）。
 _SKIP_DIRS = {"_drafts", "dist", "build", "coverage_html", "__pycache__", ".git",
-              ".venv", "node_modules"}
+              ".venv", "node_modules", ".scratch", ".agents", "site-packages"}
 
 
 def _iter_py():

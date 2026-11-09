@@ -24,6 +24,8 @@ import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
+import _scan  # noqa: E402  # pyright: ignore[reportMissingImports]
+
 ROOT = Path(__file__).resolve().parent.parent
 MIN_PY_FILES = 200
 SKIP_DIRS = frozenset({
@@ -55,17 +57,6 @@ def _record(rel: str, reason: str) -> None:
         SKIPPED_INPUTS.append((rel, reason))
 
 
-def _iter_py_files(roots: list[Path]) -> list[Path]:
-    out: list[Path] = []
-    for root in roots:
-        if not root.exists():
-            _record(str(root), "输入根不存在")
-            continue
-        for path in sorted(root.rglob("*.py")):
-            if any(part in SKIP_DIRS for part in path.parts):
-                continue
-            out.append(path)
-    return out
 
 
 def _normalize(body: ast.AST) -> tuple[str, ...]:
@@ -136,7 +127,10 @@ def scan(roots: list[Path], min_ratio: float, min_tokens: int) -> list[Pair]:
     """扫描并返回相似函数对（按相似度降序）。"""
     del SKIPPED_INPUTS[:]
     units: list[Unit] = []
-    for path in _iter_py_files(roots):
+    for path in _scan.iter_py_files(
+        roots, root=ROOT, skip_dirs=SKIP_DIRS,
+        sink=SKIPPED_INPUTS, follow_files=False,
+    ):
         units.extend(_units(path))
     big = [u for u in units if len(u.tokens) >= min_tokens]
     pairs: list[Pair] = []

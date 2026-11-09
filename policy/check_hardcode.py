@@ -27,6 +27,7 @@ Doc: AGENTS.md
 
 from __future__ import annotations
 
+
 import argparse
 import ast
 import io
@@ -37,6 +38,10 @@ import tokenize
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+# 同目录公共壳：脚本以 `python policy/x.py` 运行或按文件路径 import 时都要能找到。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _gate_io  # noqa: E402  # pyright: ignore[reportMissingImports]
 from typing import Iterator, Sequence
 
 import os as _os
@@ -503,15 +508,6 @@ def collect_findings(root: Path) -> CheckReport:
     )
 
 
-def _print_findings(title: str, findings: Sequence[Finding]) -> None:
-    if not findings:
-        print(f"  {title}: 0")
-        return
-    print(f"  {title}: {len(findings)}")
-    for f in findings:
-        loc = f"{f.path}:{f.line}"
-        suffix = f" — {f.detail}" if f.detail else ""
-        print(f"      {loc}: {f.message}{suffix}")
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -557,20 +553,15 @@ def _print_rule_reports(report: CheckReport, gate: set[str], quiet: bool) -> Non
         res = report.results[rule_id]
         if not quiet:
             print(f"── 规则 {rule_id} [{_rule_label(rule_id, gate)}]")
-        _print_findings(f"{rule_id} 发现", res.violations)
+        _gate_io.print_findings(f"{rule_id} 发现", res.violations)
         if res.skipped and not quiet:
-            _print_findings(f"{rule_id} allowlist 跳过", res.skipped)
+            _gate_io.print_findings(f"{rule_id} allowlist 跳过", res.skipped)
 
 
 def _report_parse_failures(strict: bool) -> int:
     """解析失败可见通道 → 返回是否应判失败（1/0）。"""
-    if not PARSE_FAILURES:
+    if not _gate_io.report_input_gaps(PARSE_FAILURES, strict_label="--strict-parse"):
         return 0
-    print(f"[告警] {len(PARSE_FAILURES)} 处文件未能解析，**未纳入检查**：")
-    for path, reason in PARSE_FAILURES[:10]:
-        print(f"  {path}: {reason}")
-    if len(PARSE_FAILURES) > 10:
-        print(f"  ...另有 {len(PARSE_FAILURES) - 10} 处")
     return 1 if strict else 0
 
 

@@ -44,6 +44,8 @@ for _stream in (sys.stdout, sys.stderr):
             pass
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))  # 公共扫描壳
+import _scan  # noqa: E402  # pyright: ignore[reportMissingImports]
 MIN_PY_FILES = 200
 CODES = ("H1", "H2")
 NOQA_RE = re.compile(r"noqa:\s*BLE001\s*(?:—|-|:)\s*(?P<reason>\S.*)$")
@@ -84,21 +86,6 @@ def _record_skipped(rel: str, reason: str) -> None:
         SKIPPED_INPUTS.append((rel, reason))
 
 
-def _iter_py_files(roots: list[Path]) -> list[Path]:
-    out: list[Path] = []
-    for root in roots:
-        if not root.exists():
-            _record_skipped(str(root), "输入根不存在")
-            continue
-        if root.is_file() and root.suffix == ".py":
-            out.append(root)
-            continue
-        for path in sorted(root.rglob("*.py")):
-            rel = path.relative_to(ROOT).parts if ROOT in path.parents else path.parts
-            if any(part in SKIP_DIRS for part in rel):
-                continue
-            out.append(path)
-    return out
 
 
 def _noqa_reason(line: str) -> str | None:
@@ -163,7 +150,9 @@ def scan_paths(roots: list[Path]) -> Report:
     """扫描给定路径，返回报告（不打印、不 exit）。"""
     del SKIPPED_INPUTS[:]
     findings: list[Finding] = []
-    files = _iter_py_files(roots)
+    files = _scan.iter_py_files(
+        roots, root=ROOT, skip_dirs=SKIP_DIRS, sink=SKIPPED_INPUTS,
+    )
     report = Report(scanned_files=len(files))
     for path in files:
         rel = path.relative_to(ROOT).as_posix() if ROOT in path.parents else str(path)

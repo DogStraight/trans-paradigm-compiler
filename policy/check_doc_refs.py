@@ -44,11 +44,16 @@ Doc: policy/doc-alignment.md
 
 from __future__ import annotations
 
+
 import argparse
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+# 同目录公共壳：脚本以 `python policy/x.py` 运行或按文件路径 import 时都要能找到。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _gate_io  # noqa: E402  # pyright: ignore[reportMissingImports]
 from typing import Iterator, Sequence
 
 import os as _os
@@ -471,25 +476,11 @@ def _collect_d2_targets(root: Path) -> set[str]:
 
 def _report_input_gaps(strict: bool) -> int:
     """输入面缺失可见通道 → 返回是否应判失败（1/0）。"""
-    if not _INPUT_GAPS:
+    if not _gate_io.report_input_gaps(_INPUT_GAPS, strict_label="--strict-input"):
         return 0
-    print(f"[告警] {len(_INPUT_GAPS)} 处输入面缺失，**未纳入检查**：")
-    for path, reason in _INPUT_GAPS[:10]:
-        print(f"  {path}: {reason}")
-    if len(_INPUT_GAPS) > 10:
-        print(f"  ...另有 {len(_INPUT_GAPS) - 10} 处")
     return 1 if strict else 0
 
 
-def _print_findings(title: str, findings: Sequence[Finding]) -> None:
-    if not findings:
-        print(f"  {title}: 0")
-        return
-    print(f"  {title}: {len(findings)}")
-    for f in findings:
-        loc = f"{f.path}:{f.line}"
-        suffix = f" — {f.detail}" if f.detail else ""
-        print(f"      {loc}: {f.message}{suffix}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -519,7 +510,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         label = "gate" if rule_id in gate else "info"
         if not args.quiet:
             print(f"── 规则 {rule_id} [{label}]")
-        _print_findings(f"{rule_id} 发现", res.violations)
+        _gate_io.print_findings(f"{rule_id} 发现", res.violations)
 
     if _report_input_gaps(args.strict_input):
         print("[FAIL] 存在输入面缺失（--strict-input）")

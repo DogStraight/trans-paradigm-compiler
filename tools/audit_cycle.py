@@ -99,14 +99,23 @@ def _print_rows(dims: list[dict], results: list[dict]) -> None:
         print(f"         closure: {dim.get('closure', '—')[:100]}")
 
 
-def _write_ledger(path: Path, results: list[dict], judgement: str = "") -> None:
-    row = {
-        "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "judgement": judgement,   # 探针有效性复核（人判，不可自动生成）
-        "results": results,
-    }
+def _append_row(path: Path, payload: dict) -> None:
+    """往 JSONL 账本追加一行（ledger 与 retro 共用；**单一实现**）。
+
+    `newline="\n"` 是必须的：Windows 上按默认 newline 写会把 LF 翻成 CRLF，
+    而本仓行尾门禁（`tests/policy/test_eol_normalized.py`）要求工作区一律 LF。
+    """
     with path.open("a", encoding="utf-8", newline="\n") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def _write_ledger(path: Path, results: list[dict], judgement: str = "") -> None:
+    """本轮结果 + 人判结论 → JSONL 账本（一行一轮）。"""
+    _append_row(path, {
+        "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "judgement": judgement,
+        "results": results,
+    })
     print(f"已写入账本: {path}")
 
 
@@ -133,9 +142,7 @@ RETRO = ROOT / "docs" / "audit-retro.jsonl"
 
 def _write_retro(note: str) -> None:
     """retro 槽：记录制度改进候选（**只记录，不立即改制度**）。"""
-    row = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "retro": note}
-    with RETRO.open("a", encoding="utf-8", newline="\n") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    _append_row(RETRO, {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "retro": note})
     print(f"已写入自省账本: {RETRO}")
 
 

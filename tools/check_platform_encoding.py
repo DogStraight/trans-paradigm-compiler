@@ -52,6 +52,8 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+import _scan  # noqa: E402  # pyright: ignore[reportMissingImports]
 from typing import Callable, Mapping, Sequence
 
 # 控制台 UTF-8 自护走单点 `core/console.py`（工具脚本 sys.path[0]=tools/，先把仓库根
@@ -170,21 +172,6 @@ def _candidates_from_root(path: Path) -> list[Path]:
     return []
 
 
-def _iter_py_files(inputs: Sequence[Path]) -> list[Path]:
-    """展开输入路径中的 .py 文件，排除构建/草稿/缓存目录。"""
-    out: list[Path] = []
-    seen: set[str] = set()
-    for raw in inputs:
-        for candidate in _candidates_from_root(raw.resolve()):
-            if any(part in _EXCLUDED_PARTS for part in candidate.parts):
-                continue
-            key = candidate.resolve().as_posix()
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(candidate)
-    out.sort(key=lambda p: _display_path(p))
-    return out
 
 
 def _dotted_name(node: ast.expr) -> str | None:
@@ -752,7 +739,10 @@ def scan_paths(
 ) -> ScanReport:
     """扫描输入路径；不施加最低文件数限制（供测试/内嵌调用）。"""
     del SKIPPED_INPUTS[:]
-    files = _iter_py_files(inputs)
+    files = _scan.iter_py_files(
+        list(inputs), root=ROOT, skip_dirs=_EXCLUDED_PARTS,
+        sink=SKIPPED_INPUTS, label=_display_path,
+    )
     findings: list[Finding] = []
     for path in files:
         rel = _display_path(path)
