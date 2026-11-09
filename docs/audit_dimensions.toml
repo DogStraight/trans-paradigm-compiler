@@ -128,6 +128,18 @@ closure = "open()/read_text() 无缺省编码；路径比较无 str(path) 拼接
 status = "closed"
 closed_evidence = "【2026-11-07 重闭】F2 已修并由 Lead 复现：ensure_utf8_stdio 提到 main.py 模块级（:32），test_cli_tree_flag 在 cp936 / cp1252 / utf-8 三档各 1 passed；F3 discover_rule_files 返回已排序（复跑 sorted==True）；F4 E1 认 io.open、E3 认 f-string（Lead 自造样本各命中）；F5 单点门禁改全仓 denylist + SyntaxError fail-closed。原记录：①运行时面根本没覆盖：main.py 只在 _cmd_fragment 调 ensure_utf8_stdio，进程入口未调——cp936 下 test_cli_tree_flag 红、cp1252 下 main.py check --tree 直接 UnicodeEncodeError（Lead 独立复现）；②E1 漏 io.open 与 f-string 路径比较；③F3 排序面见 measured。修好并补「真跑引擎入口」的编码测试后重闭"
 
+[[dimension]]
+id = "D10"
+name = "逐部件冗余代码（最小形式）"
+origin = "user"
+probe = "python tools/scan_redundant_code.py --strict"
+proxies = "每个部件在**不破坏抽象分层**的前提下取最小形式：零引用定义、未使用形参、纯转发包装、同义重复都已消除或判保持"
+invalidated_if = "抽象分层调整（部件边界变化）后，原判保持项需要重判"
+closure = "机械三类（零引用/未使用参数/纯转发）为零或逐条判保持；同义重复与过度分层经人判并留证"
+status = "open"
+adhoc = "2026-11-07 首轮：linter 18 文件 / parser 12 文件全读式机械扫，产出 11 条候选（R2 4 / R3 7）"
+measured = "机械候选 11 条：未使用形参 4（checker.validate/matcher._no_progress_ok/lookahead._try_parse/block_parser.parse_sentence）、纯转发 7（grammar_slicer._collect_first_start_tokens + pratt 六个谓词）"
+
 # ============================================================================
 # 审计管线（槽位化）：可插拔，不是固定流程
 # ============================================================================
