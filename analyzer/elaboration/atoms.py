@@ -33,6 +33,11 @@ class _SessionLike(Protocol):
         """本次运行已发现的文件（路径 → FileResult）。"""
         ...
 
+    @property
+    def module_index(self) -> Mapping[str, Any]:
+        """单元名 → 单元条目（有 `node` / `file`；图定义索引取节点用）。"""
+        ...
+
     def rule(self, key: str) -> str:
         """规则名类声明项（如单元声明规则）。"""
         ...

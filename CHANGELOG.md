@@ -161,6 +161,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   pyright strict 0 errors。`format`/`lint` 等既有命令行为不变（片段模式独立入口）。
 
 ### Fixed
+- **发布前静态面/干净树收口（2026-11-09，发布排练发现）**：① `pyright --project
+  pyrightconfig.strict.json`（钉 1.1.413）在发布排练里报错——`analyzer/elaboration/atoms.py`
+  的 `_SessionLike` 协议缺 `module_index`（图定义索引取节点用）、`tools/feature_sites.py`
+  的 `_load_registry` 注解写 `pathlib.Path` 但只 `from pathlib import Path` → 补协议属性 /
+  改 `Path`。② `tests/policy/test_console_single_point.py` 的扫描面断言锚在
+  **gitignore 的生成目录** `packaging/entries/`（`build_pipeline.py` 生成、CI/新 clone 不存在）
+  ⇒ 干净 checkout 必红；改用受版本控制的 `packaging/build_pipeline.py`。
+  验证：干净 worktree 全量 **4550 passed / 18 skipped**、覆盖率 **91.06%**（≥80）；
+  `pytest -m smoke` 574 passed（乱序）；hardcode/docrefs/invariants/exception-hygiene/
+  structural/feature_sites/platform/edge/fuzz/CLI 逐条 CI 口径 PASS。
 - **D5 两条「哑变异」重指（审计 2026-11-07 全量 126 条抽查后）**：变异 78（`_expand.py`
   宏时间线过滤 `if macro_events:`）关掉后 C 侧测试仍绿——守卫已下沉到
   `tests/engine/preprocessor/test_macro_timeline.py`（C 语言级由 T1 定义序语义兜住，

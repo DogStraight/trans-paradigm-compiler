@@ -329,7 +329,7 @@ def scan(families: list[str] | None = None) -> dict:
     return result
 
 
-def _load_registry(path: pathlib.Path, key: str) -> dict[str, dict]:
+def _load_registry(path: Path, key: str) -> dict[str, dict]:
     """登记表读取：`{key: {instance: {...}}}` 取出内层映射；文件缺失视为空表。"""
     if not path.exists():
         return {}
