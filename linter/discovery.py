@@ -162,10 +162,6 @@ class Discovery:
                 break
             t = tokens[i]
 
-            if t.type == "newline":
-                i += 1
-                continue
-
             # 括号内容：先尝试语句分类——`{` 拼接可作赋值 lvalue（{a,b} = expr; ，
             # BlockingAssign 的 first 含 bracket.l_curly_bracket，由 keyword_map
             # 触发），命中即按语句发现；否则整体跳过括号区间（端口/参数列表等）。

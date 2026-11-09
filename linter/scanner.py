@@ -197,25 +197,21 @@ class LinterScanner:
         self._macro_prefix, _ = _load_config(rules_dir)
 
         # ── 动态收集 block 起止符 ─────────────────
-        _openers, _closers, self._block_pairs, _ = self._build_block_delimiters(rules)
+        _openers, _closers, self._block_pairs = self._build_block_delimiters(rules)
 
         # 括号配对单一来源：lexer.bracket_map（规则侧 bracket bound 已移除，
         # 括号由 [bracket].pairs 统一定义）。括号同时加入 block 起止符集，
         # 使 BoundaryChecker 的栈式配对与 matcher 的括号上下文检查正常生效。
         _raw_pairs = ConfigRegistry._loaded.get("lexer.bracket_map", {}).get("pairs", [])
         _bracket_pairs: dict[str, set[str]] = {}
-        # 深度守卫（资格判定 ③ 的**作用域**面）用：`{`/`}` 的 token 型。按**字符**
-        # 定位配对（同 `core/utils.square_bracket_types` 判据：字符是词法数据，
-        # 不依赖配对命名）。语言包未声明该配对 ⇒ None，守卫空转（不误判）。
-        self._depth_pair: tuple[str, str] | None = None
+        # 按**字符**定位配对（同 `core/utils.square_bracket_types` 判据：字符是
+        # 词法数据，不依赖配对命名）。
         for _open_char, _close_char, _name in _raw_pairs:
             _lt = bracket_left(_name)
             _rt = bracket_right(_name)
             _openers.add(_lt)
             _closers.add(_rt)
             _bracket_pairs.setdefault(_rt, set()).add(_lt)
-            if _open_char == "{":
-                self._depth_pair = (_lt, _rt)
 
         self._block_openers = frozenset(_openers)
         self._block_closers = frozenset(_closers)
@@ -265,17 +261,16 @@ class LinterScanner:
     @staticmethod
     def _build_block_delimiters(
         rules: dict,
-    ) -> tuple[set[str], set[str], dict[str, set[str]], dict[str, str]]:
+    ) -> tuple[set[str], set[str], dict[str, set[str]]]:
         """从语法规则的 bound 字段收集起止符集合及配对映射。
 
-        Returns: (openers, closers, closer_to_openers, opener_to_rule)
+        Returns: (openers, closers, closer_to_openers)
+
             closer_to_openers — 每个 closer token 对应的有效 opener token 集合。
-            opener_to_rule    — 每个 opener token 对应的规则名称（用于骨架上上文）。
         """
         openers: set[str] = set()
         closers: set[str] = set()
         closer_to_openers: dict[str, set[str]] = {}
-        opener_to_rule: dict[str, str] = {}
         for name, rule in rules.items():
             if not isinstance(rule, GrammarRule):
                 continue
@@ -285,14 +280,12 @@ class LinterScanner:
                 continue
             if bs:
                 openers.add(bs)
-                # 第一个声明该 block 的规则胜出
-                if bs not in opener_to_rule:
-                    opener_to_rule[bs] = name
             if be:
                 closers.add(be)
             if bs and be:
                 closer_to_openers.setdefault(be, set()).add(bs)
-        return openers, closers, closer_to_openers, opener_to_rule
+
+        return openers, closers, closer_to_openers
 
     def scan(
         self,

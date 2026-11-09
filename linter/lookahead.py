@@ -56,18 +56,11 @@ def _square_bracket_lr() -> tuple[str, str]:
     return _SQUARE_LR
 
 
-def _first_of(feat: dict | None, tree: dict) -> set[str]:
-    """单个 feature 的起始 token 集。"""
-    if feat is None:
-        return set()
-    return _collect_first_start_tokens(feat, tree)
-
-
 def _rule_first(name: str, tree: dict) -> set[str]:
     info = tree.get(name)
     if not info or not info.get("prods"):
         return set()
-    return _first_of(info["prods"][0], tree)
+    return _collect_first_start_tokens(info["prods"][0], tree)
 
 
 
@@ -805,7 +798,3 @@ class LookaheadTable:
                 return pos  # 越界（未闭合）→ 保守
             j += 1
         return pos
-
-    def is_statement(self, rule: str) -> bool:
-        info = self._tree.get(rule, {})
-        return bool(info.get("is_statement"))

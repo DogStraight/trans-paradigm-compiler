@@ -70,10 +70,6 @@ class CheckerRegistry:
     def add(self, checker: Checker) -> None:
         self._checkers.append(checker)
 
-    @property
-    def checkers(self) -> list[Checker]:
-        return self._checkers
-
     def __len__(self) -> int:
         return len(self._checkers)
 

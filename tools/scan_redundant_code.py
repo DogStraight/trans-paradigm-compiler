@@ -78,6 +78,21 @@ def _passthrough_target(node: ast.AST, args: list[ast.arg]) -> str | None:
     return getattr(func, "id", None) or getattr(func, "attr", None)
 
 
+def _too_narrow(files: list[Path], *, whole_repo: bool) -> bool:
+    """扫描面是否窄到不可信（下限只在全仓扫描时生效）。"""
+    if whole_repo and len(files) < MIN_PY_FILES:
+        print(f"[FAIL] 扫描面不足：{len(files)} 文件 < 下限 {MIN_PY_FILES}")
+        return True
+    return False
+
+
+def _is_dead_definition(name: str) -> bool:
+    """私有且非协议方法、全仓仅定义处命中 → 判零引用。"""
+    if not name.startswith("_") or (name.startswith("__") and name.endswith("__")):
+        return False
+    return _git_grep_hits(name) <= 1
+
+
 def scan_file(path: Path) -> list[Finding]:
     """单文件 → 候选列表。"""
     try:
@@ -93,9 +108,8 @@ def scan_file(path: Path) -> list[Finding]:
             continue
         args = list(node.args.args) + list(node.args.kwonlyargs)
         name = node.name
-        if name.startswith("_") and not (name.startswith("__") and name.endswith("__")):
-            if _git_grep_hits(name) <= 1:
-                out.append(Finding(rel, node.lineno, "R1", name, "零引用（全仓仅定义处）"))
+        if _is_dead_definition(name):
+            out.append(Finding(rel, node.lineno, "R1", name, "零引用（全仓仅定义处）"))
         unused = _unused_args(node, args)
         if unused:
             out.append(Finding(rel, node.lineno, "R2", name, f"未使用形参 {unused}"))
@@ -105,13 +119,8 @@ def scan_file(path: Path) -> list[Finding]:
     return out
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="scan_redundant_code", description=__doc__.splitlines()[0])
-    ap.add_argument("--paths", default=None, help="逗号分隔的部件目录（默认 linter,parser）")
-    ap.add_argument("--json", type=Path, default=None)
-    ap.add_argument("--strict", action="store_true", help="发现即 exit 1")
-    args = ap.parse_args(argv)
-    roots = [Path(p) for p in (args.paths or "linter,parser").split(",")]
+def _collect_files(roots: list[Path]) -> list[Path]:
+    """各部件目录下的 `.py` 文件（跳过 `SKIP_DIRS`；缺失根走可见缺口）。"""
     files: list[Path] = []
     for root in roots:
         if not root.exists():
@@ -119,18 +128,32 @@ def main(argv: list[str] | None = None) -> int:
             continue
         files.extend(p for p in sorted(root.rglob("*.py"))
                      if not any(part in SKIP_DIRS for part in p.parts))
-    findings: list[Finding] = []
-    for path in files:
-        findings.extend(scan_file(path))
+    return files
+
+
+def _print_report(files: list[Path], findings: list[Finding]) -> None:
+    """逐条打印候选 + 汇总行。"""
     for f in findings:
         print(f"  {f.path}:{f.line} {f.code} {f.name}: {f.detail}")
     print(f"\n[scan_redundant_code] {len(files)} 文件 / {len(findings)} 条候选"
           f"（R1 零引用 / R2 未使用参数 / R3 纯转发）")
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="scan_redundant_code", description=__doc__.splitlines()[0])
+    ap.add_argument("--paths", default=None, help="逗号分隔的部件目录（默认 linter,parser）")
+    ap.add_argument("--json", type=Path, default=None)
+    ap.add_argument("--strict", action="store_true", help="发现即 exit 1")
+    args = ap.parse_args(argv)
+    files = _collect_files([Path(p) for p in (args.paths or "linter,parser").split(",")])
+    findings = [f for path in files for f in scan_file(path)]
+    _print_report(files, findings)
     if args.json:
         args.json.write_text(json.dumps([f.__dict__ for f in findings], ensure_ascii=False, indent=2),
                              encoding="utf-8")
-    if len(files) < MIN_PY_FILES:
-        print(f"[FAIL] 扫描面不足：{len(files)} 文件 < 下限 {MIN_PY_FILES}")
+    # 下限只在**全仓扫描**时生效：`--paths linter` 这类单部件扫描天然文件少，
+    # 用全仓下限会把"扫得对"误判成"扫得少"（实测：linter 18 个文件 -> exit 2）。
+    if _too_narrow(files, whole_repo=args.paths is None):
         return 2
     return 1 if (args.strict and findings) else 0
 
