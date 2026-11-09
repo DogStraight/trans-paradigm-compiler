@@ -17,6 +17,7 @@
 | 怀疑门禁失灵（门禁还在不在握着东西） | `check_gate_efficacy.py` |
 | 找冗余文件/草稿残留/悬空引用 | `scan_redundant.py` |
 | 找同构重复的测试用例 | `scan_test_redundancy.py` |
+| 找「短重复」：十几行的整段复制（含工具自己） | `scan_short_dupes.py` |
 | 查某语言包还差哪些构造没被接受 / 没渲染 | `c_acceptance.py` / `render_coverage.py` |
 | 查引擎里还有没有语言知识渗透 | `lang_penetration.py` |
 | 判断某个测试是不是"靠语言包声明才成立" | `min_pack_probe.py` |
@@ -51,6 +52,7 @@
 
 - `audit_cycle.py` — 按维度注册表跑探针、落账（`--ledger`）、记人判结论（`--judgement`）与制度改进候选（`--retro`）。**只收集，不裁决**。
 - `scan_redundant.py` — 冗余残留扫描：草稿/临时物、gitignored 大目录、**指向草稿区的悬空引用**。默认 dry-run；`--clean <kind> --yes` 才真删。见 `policy/doc-alignment.md`「删除判据」。
+- `scan_short_dupes.py` — **短重复扫描**：函数体 token 相似度（默认 0.90 / 60 tok），扫描面**含 tools/ 与 policy/ 自身**——`structural_score` 的 CLONE 有 token 阈值，十几行整段复制落在盲区，实测工具层因此长出 1.00 相似度的两份 `_print_findings`。只报告。
 - `scan_test_redundancy.py` — 测试同构冗余扫描（只报告）：同文件/同类内结构相同的测试组 → 参数化候选；标注是否被基线锚定。见 `AGENTS.md`「测试门禁 + 测后决策」。
 - `structural_score.py` — 结构欠账分 S（复杂度/规模/重复三分量取超额量）；`--save` 写基线、`--compare` 新增即回归。见 `policy/structural_budget.md`。
 - `feature_sites.py` — **功能散点计量**：按功能分族枚举实例，扫出"提及它的文件"并归类；`--save`/`--compare`。判保持记 `baselines/feature_sites_kept.json`、已收敛记 `baselines/feature_sites_converged.json`。见 `docs/gaps/gap-feature-scatter.md`。
