@@ -1,6 +1,6 @@
 # 真实 C 语料归属与许可（real_c_ref）
 
-本目录是 C 包真实语料门禁（`PROGRESS.md` 退出判据 5）的语料：来源、版本与许可如下。
+本目录是 C 包真实语料门禁（收口记录见 `CHANGELOG.md` #52）的语料：来源、版本与许可如下。
 所有源文件**保留原始版权/许可头**（cJSON 的 MIT 全文在 `ref/cJSON.c`、`ref/cJSON.h` 头注；
 zlib license 全文在 `ref/zlib.h` 头注），本文件只记来源与版本。
 

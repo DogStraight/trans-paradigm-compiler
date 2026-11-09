@@ -4,7 +4,7 @@
 - 关联：ROADMAP P2.6（宽泛条目侧链接本文件）
 - 参照：`docs/references.md`「静态检查器功能调研」（检查器功能矩阵 + 规则引擎架构）、
   同档「Verilog 静态检查工具群」（Veryl/svlint 深调研）
-- 前置：P1.9 稳定规则 ID + 机器可读输出（诊断模型）——**已满足**（`main.py::_cmd_check`
+- 前置：稳定规则 ID + 机器可读输出（诊断模型）——**已满足**（`main.py::_cmd_check`
   有 `--json` + 稳定诊断码 + suppress 注释；声明式规则表 + `tests/policy/test_rule_coverage.py`
   守可达性）。本档不受前置阻塞，属多周特性，留在 ROADMAP P2.6 未入队列
 
@@ -45,11 +45,11 @@ pylance 式体验就需外部工具接入 + 输出归一。
   （命令 + 输出解析，JSON 输出/稳定规则 ID 收口，防版本耦合）与 `[checker.scenarios]`
   （tpc 自管场景：format_fidelity / transform_equivalence / 语法资产一致性）。
 - 诊断归一化：外部 checker 输出（miette/JSON/文本）→ tpc 统一诊断模型。
-- 依赖前置：P1.9 稳定规则 ID + JSON 输出（第一步纯增量、零外部依赖）。
+- 依赖前置：稳定规则 ID + JSON 输出（第一步纯增量、零外部依赖）。
 - 验证路径：`grammar/veryl/plugins/checker/` 做 veryl 本体验证 → 再推广 verible/slang。
   引擎只做通用场景执行器（延续"语言知识不进代码"）。
 
 ## 关联条目
 
-- ROADMAP P2.6（本缺口，backlog；前置 P1.9 已满足）
+- ROADMAP P2.6（本缺口，backlog；前置已满足）
 - `docs/references.md`：Veryl / svlint / 静态检查工具群深调研（参照源）

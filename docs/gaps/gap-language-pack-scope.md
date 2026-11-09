@@ -184,7 +184,7 @@ render → 与源比对，七条：
 
 ## 关联条目
 
-- ROADMAP「SystemVerilog 语言包（远期 backlog）」/「C 语言包」（预处理阶段 4 / 切片 1b）
+- ROADMAP「SystemVerilog 语言包（远期 backlog）」/「C 语言包」（注入机制 ③/④）
 - `grammar/yaml/`（6/7 的消费方）、`grammar/c/`（接受域 / 档位 / 渲染现状的消费方）
 - 门禁：`tools/c_acceptance.py`、`tools/render_coverage.py`、
   `tests/languages/c/test_c_render_fidelity.py`、`tests/languages/c/test_c_standard_tiers.py`

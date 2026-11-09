@@ -1,9 +1,9 @@
-# Gap — C 语义基座（符号表 / 作用域 / 声明顺序）（ROADMAP「C 语义层切片 1b」）
+# Gap — C 语义基座（符号表 / 作用域 / 声明顺序）（C 包符号基座；已收口）
 
 - 状态：**已收口（2026-10-23 T2，#53–#57）**——pre_scan / linter 内部 warning / raw 承载 /
   P4 理解提升全部删除；符号判定 = parser `_ScopeStack`（#49）+ analyze 期 `c_symbols`。
   下文 P1→P4 叙述为历史设计记录，现行口径见 `CHANGELOG.md` #49–#57 与 ADR-0024
-- 关联：`ROADMAP.md`「C 语义层切片 1b」（与 C 包阶段 3 共用前置；阶段 3 已交付，残片见 `TODO.md`「五、搁置」）；
+- 关联：`CHANGELOG.md` #49–#57（历史交付记录）；残片见 `TODO.md`；
   `docs/gaps/gap-semantic-elaboration-boundaries.md`（两套 scope 并存）；`grammar/c/**`
 - 参照：`docs/references.md`「C 语言文法参照」；GCC `gcc/c/c-parser.h`；
   clang `clang/lib/Parse/ParseTentative.cpp`；tree-sitter-c `grammar.js`
@@ -29,7 +29,7 @@
    `@TypeName` 含 `@TypedefName`（`grammar/c/00_expressions.toml:339-350`），
    而 `@TypedefName` 是"标识符作类型"的语法占位（`grammar/c/02_types.toml:178-194`）——
    实测 `unsigned n = sizeof(myint);`（全文无任何 typedef）同样进 `SizeofTypeExpr` + `TypeName`。
-   属刻意宽进（`ROADMAP.md` 切片 1b「待决 ④」），需要符号表才能收窄。
+   属刻意宽进（原切片 1b「待决 ④」，见本档），需要符号表才能收窄。
 4. **引擎侧语义钩子已接线但空转，且两套 scope 机制并存**：
    - `parser/block_parser.py:27-32` 已把 `scope_stack.lookup` 作为 `scope_lookup_fn` 传给
      `get_candidate_rules`（`parser/rule_selector.py:141-168`）——**但**
@@ -37,7 +37,7 @@
      符号 store 恒空、`lookup` 恒返回 `None`。`parse_sentence`（`block_parser.py:37-44`）
      与 atom 路径（`parser/parser_core.py:196-215`）都**不记录"还有别的候选也成立"**。
    - 词法预扫描 `lexer/pre_scan.py` **已于 T2b 删除**（ADR-0024）。
-    ⚠ **2026-10-22**：方向 = 两阶段 lint（符号判定后移 analyze），落地后删；作者拍板**暂缓为专项整治**（ADR-0024 / ROADMAP P2.9）。
+    ⚠ **2026-10-22**：方向 = 两阶段 lint（符号判定后移 analyze），落地后删；作者拍板**暂缓为专项整治**（ADR-0024）。
    - analyzer 侧另有**完整**的 `analyzer/scope.py::Scope/Symbol`（post-parse，声明驱动
      `[*.analyzer.scope/symbol]`）——C 包未声明，且与 parser 侧 `_ScopeStack` **无共享**。
 
@@ -157,7 +157,7 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
   raw 直出（先例 `_verbatim_text`）。它能立刻把"整函数截断丢内容"变成"完整保留"，且不碰
   契约面。
 
-**分片实施顺序**（每片独立可验证；细节计划见 `ROADMAP.md`「C 语义层切片 1b」）：
+**分片实施顺序**（每片独立可验证；历史分片计划见 `CHANGELOG.md` #49–#57）：
 **P1** C 包声明式符号收集产物（作用域 + 声明序 + **分期标注**，纯包侧）→
 **P2** linter 歧义路径收敛判定 + **内部 warning**（引擎侧通道，机制调研中）→
 **P3** parser 歧义位点 raw、暂缓建树（内部机制）→
@@ -174,7 +174,7 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 
 ## 关联条目
 
-- `ROADMAP.md`「C 语义层切片 1b」（含判据 ①-⑤ 与待决 ①-④）+ C 包阶段 3（已交付，残片见 `TODO.md`「五、搁置」）
+- 本档判据 ①-⑤ 与待决 ①-④；历史交付记录见 `CHANGELOG.md` #49–#57；残片见 `TODO.md`
 - 两套 scope 并存的工程事实：`docs/gaps/gap-semantic-elaboration-boundaries.md`
 - C 包接受域现状（含 `(myint)x` 行）：`docs/gaps/gap-language-pack-scope.md`
 - 保真判据：`tests/languages/c/test_c_render_fidelity.py`；接受面盘点：`tools/c_acceptance.py`

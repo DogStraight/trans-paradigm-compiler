@@ -1,8 +1,8 @@
-# Gap — C 真实语料接入与误报基线（ROADMAP「C 语言包」阶段 5 剩余 / PROGRESS 退出判据 5）
+# Gap — C 真实语料接入与误报基线（C 包真实语料门禁；已收口，证据见 CHANGELOG #52）
 
 - 状态：**已收口**（#43 调查 → #44/#45/#49/#51 前置 → #52 门禁落地）：7/7 文件 parse_ok、**0 诊断**；
   基线/采集器/policy 门禁入库；残余 = 解析回溯性能（cJSON ~50s，门禁 ~110s；TODO 三）
-- 关联：`ROADMAP.md`「C 语言包」阶段 5；`PROGRESS.md` 退出判据 4/5；`tests/e2e/eval_diag_baseline.py`（verilog 先例）
+- 关联：`CHANGELOG.md` #52 收口记录；`tests/e2e/eval_diag_baseline.py`（verilog 先例）
 - 参照：verilog 真实语料 `tests/e2e/samples/real/`（`CREDITS.md` + 工程分组 + 基线 JSON + `tests/policy/test_diag_baseline.py`）
 
 ## 目标
@@ -193,4 +193,4 @@ sanity 才可达；在此之前只能按门禁方案 B 过渡或等前置。
 - `docs/gaps/gap-language-pack-scope.md`（C 包接受域现状 / 门禁清单）
 - `docs/gaps/gap-parser-linter-approximation.md`（linter 近似的同族缺口）
 - `tests/e2e/eval_diag_baseline.py`、`tests/policy/test_diag_baseline.py`（verilog 先例）
-- `ROADMAP.md`「C 语言包」阶段 5、`PROGRESS.md` 退出判据 5
+- `CHANGELOG.md` #52（本档为历史方案与判据记录，现状见门禁测试）
