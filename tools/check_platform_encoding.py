@@ -159,21 +159,6 @@ _EXCLUDED_PARTS = frozenset({
 })
 
 
-def _candidates_from_root(path: Path) -> list[Path]:
-    """输入根（文件或目录）→ 待查 .py 候选；缺失输入走可见通道。"""
-    if not path.exists():
-        _record_skipped_input(_display_path(path), "输入根不存在")
-        return []
-    if not path.is_file():
-        return sorted(path.rglob("*.py"))
-    if path.suffix == ".py":
-        return [path]
-    _record_skipped_input(_display_path(path), "输入不是 .py 文件")
-    return []
-
-
-
-
 def _dotted_name(node: ast.expr) -> str | None:
     """取 Name/Attribute 的点分名（``os.path.join``）；其它表达式返回 None。"""
     if isinstance(node, ast.Name):

@@ -167,8 +167,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   的 `_load_registry` 注解写 `pathlib.Path` 但只 `from pathlib import Path` → 补协议属性 /
   改 `Path`。② `tests/policy/test_console_single_point.py` 的扫描面断言锚在
   **gitignore 的生成目录** `packaging/entries/`（`build_pipeline.py` 生成、CI/新 clone 不存在）
-  ⇒ 干净 checkout 必红；改用受版本控制的 `packaging/build_pipeline.py`。
-  验证：干净 worktree 全量 **4550 passed / 18 skipped**、覆盖率 **91.06%**（≥80）；
+  ⇒ 干净 checkout 必红；改用受版本控制的 `packaging/build_pipeline.py`。③ 工具层收口后
+  的 pyright 残余：`tools/scan_short_dupes.py` 未用 `sys` import + `__doc__` 可能为 None
+  直接 `.splitlines()`；`tools/check_platform_encoding.py` 抽 `_scan` 壳后
+  `_candidates_from_root` 成死函数（删除）；`tests/policy/test_short_dupes_selfhit.py`
+  以模块方式导入工具时缺 `tools/` sys.path 引导（补引导，否则干净树/CI 必红）。
+  验证：`pyright --project pyrightconfig.strict.json`（钉 1.1.413）**0 errors**；
+  干净 worktree 全量 **4550 passed / 18 skipped**、覆盖率 **91.06%**（≥80）；
   `pytest -m smoke` 574 passed（乱序）；hardcode/docrefs/invariants/exception-hygiene/
   structural/feature_sites/platform/edge/fuzz/CLI 逐条 CI 口径 PASS。
 - **D5 两条「哑变异」重指（审计 2026-11-07 全量 126 条抽查后）**：变异 78（`_expand.py`

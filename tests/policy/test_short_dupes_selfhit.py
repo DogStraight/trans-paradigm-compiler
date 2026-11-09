@@ -22,6 +22,11 @@ _TOOL = ROOT / "tools" / "scan_short_dupes.py"
 
 
 def _tool():
+    # 工具脚本 `python tools/scan_short_dupes.py` 依赖 sys.path[0]=tools/ 来找同级
+    # `_scan`；以模块方式导入时必须显式补同一条引导，否则 import _scan 失败。
+    tools_dir = str(_TOOL.parent)
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
     spec = importlib.util.spec_from_file_location("ssd_under_test", _TOOL)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

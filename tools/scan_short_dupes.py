@@ -19,7 +19,6 @@ import ast
 import difflib
 import io
 import json
-import sys
 import tokenize
 from dataclasses import dataclass
 from pathlib import Path
@@ -144,7 +143,10 @@ def scan(roots: list[Path], min_ratio: float, min_tokens: int) -> list[Pair]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="scan_short_dupes", description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        prog="scan_short_dupes",
+        description=(__doc__ or "scan_short_dupes").splitlines()[0],
+    )
     ap.add_argument("--paths", default=None, help="逗号分隔的扫描根（默认仓库根）")
     ap.add_argument("--min-ratio", type=float, default=0.90)
     ap.add_argument("--min-tokens", type=int, default=60)
