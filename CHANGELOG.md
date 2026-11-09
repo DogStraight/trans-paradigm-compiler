@@ -175,10 +175,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ④ `ci_rehearsal`（全程模拟 cp1252 runner）实测 `feature_sites compare` **FAIL**：
   该工具缺控制台自护，打印 `✓` 在 cp1252 下 UnicodeEncodeError（门禁假红）→ 补
   `core/console.py::ensure_utf8_stdio()` 引导（与其它工具入口同姿势）。
-  验证：`pyright --project pyrightconfig.strict.json`（钉 1.1.413）**0 errors**；
-  干净 worktree 全量 **4550 passed / 18 skipped**、覆盖率 **91.06%**（≥80）；
-  `pytest -m smoke` 574 passed（乱序）；hardcode/docrefs/invariants/exception-hygiene/
-  structural/feature_sites/platform/edge/fuzz/CLI 逐条 CI 口径 PASS。
+  验证（最终树 `6663733`）：`ci_rehearsal --skip-wheel` **整体 PASS**（13/13 步：
+  主回归+coverage / 乱序 smoke / hardcode / docrefs / invariants / exception-hygiene /
+  structural / feature_sites / platform / pyright / edge / fuzz / CLI），`--only wheel`
+  亦 PASS；`pyright --project pyrightconfig.strict.json`（钉 1.1.413）**0 errors**；
+  全量 **4561 passed / 7 skipped**、覆盖率 **91.06%**（≥80）；e2e **FAIL 0**
+  （102 项）；lint recall 33 hit / 0 fp；check accuracy fp 0 / parse_err 0；sdist+wheel
+  构建成功（grammar TOML **148** = 磁盘 verilog 80 / c 50 / c4 11 / yaml 7），
+  独立 venv 安装后 version/format/lint/check（仓库外 cwd）全绿。
 - **D5 两条「哑变异」重指（审计 2026-11-07 全量 126 条抽查后）**：变异 78（`_expand.py`
   宏时间线过滤 `if macro_events:`）关掉后 C 侧测试仍绿——守卫已下沉到
   `tests/engine/preprocessor/test_macro_timeline.py`（C 语言级由 T1 定义序语义兜住，
