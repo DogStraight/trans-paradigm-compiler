@@ -38,6 +38,16 @@ from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 控制台 UTF-8 自护走单点 `core/console.py`（工具脚本 sys.path[0]=tools/，先把仓库根
+# 加进 sys.path 再 import）。cp1252 runner 下打印 `✓`/中文不再崩——发布排练实测：
+# 缺这条时 `compare` 在远端 Windows 编码下 UnicodeEncodeError（门禁假红）。
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from core.console import ensure_utf8_stdio  # noqa: E402 — 路径引导之后才可 import
+
+ensure_utf8_stdio()
+
 BASELINE = ROOT / "tools" / "baselines" / "feature_sites_baseline.json"
 KEPT = ROOT / "tools" / "baselines" / "feature_sites_kept.json"
 # 已收敛的登记点（判据：**不再靠人手记着同步**——或由单一来源派生，或由门禁校验；

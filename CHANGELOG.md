@@ -172,6 +172,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   直接 `.splitlines()`；`tools/check_platform_encoding.py` 抽 `_scan` 壳后
   `_candidates_from_root` 成死函数（删除）；`tests/policy/test_short_dupes_selfhit.py`
   以模块方式导入工具时缺 `tools/` sys.path 引导（补引导，否则干净树/CI 必红）。
+  ④ `ci_rehearsal`（全程模拟 cp1252 runner）实测 `feature_sites compare` **FAIL**：
+  该工具缺控制台自护，打印 `✓` 在 cp1252 下 UnicodeEncodeError（门禁假红）→ 补
+  `core/console.py::ensure_utf8_stdio()` 引导（与其它工具入口同姿势）。
   验证：`pyright --project pyrightconfig.strict.json`（钉 1.1.413）**0 errors**；
   干净 worktree 全量 **4550 passed / 18 skipped**、覆盖率 **91.06%**（≥80）；
   `pytest -m smoke` 574 passed（乱序）；hardcode/docrefs/invariants/exception-hygiene/
