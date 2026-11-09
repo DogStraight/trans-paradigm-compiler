@@ -343,7 +343,7 @@ class LinterScanner:
 
         try:
             tokens = self.lexer.tokenize(lex_source)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — lexer 无法处理输入时转诊断而非崩溃冒泡
             # 通用防御：lexer 无法处理输入（不支持的字符/行尾风格/BOM 等）时
             # 转诊断而非崩溃冒泡——否则调用方（CLI/编辑器集成）直接异常。
             # 不硬编码具体格式（CRLF/BOM 等由 lexer 侧支持），此处只对

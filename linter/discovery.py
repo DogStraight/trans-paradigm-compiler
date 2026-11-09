@@ -490,7 +490,7 @@ class Discovery:
             if matcher is None:  # 未装载匹配器：与既有 except 同义地放弃该元素
                 return None
             return matcher.match(tokens, j, feat, trial, end, strict=True)
-        except Exception:
+        except Exception:  # noqa: BLE001 — 启发式发现失败返回 None（语法错由检查阶段报）
             return None
 
     def _locate_stmt_body(
@@ -545,7 +545,7 @@ class Discovery:
                 trial: list = []
                 try:
                     j = matcher.match_rule(tokens, i, prods, trial, end)
-                except Exception:
+                except Exception:  # noqa: BLE001 — 同容器扫描的防御兜底，失败不冒泡
                     j = i
                 if j > i and not trial:
                     return max(j, self._stmt_tail_end(tokens, i, rule, end))
@@ -667,7 +667,7 @@ class Discovery:
                 trial: list = []
                 try:
                     j = matcher.match_rule(tokens, i + 1, prods, trial, end_idx)
-                except Exception:
+                except Exception:  # noqa: BLE001 — 错误恢复近似：匹配失败保持 i+1，语法错由检查阶段报
                     # 错误恢复近似：匹配无法完成 → 块体起点保持 i+1（不抛给调用方，
                     # 语法错由检查阶段报；同 `_container_end` 的取舍）。
                     j = i + 1

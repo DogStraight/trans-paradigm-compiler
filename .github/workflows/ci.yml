@@ -60,6 +60,8 @@ jobs:
           # check_invariants：不变量清单门禁——docs/invariants.toml 的锚点
           #   （policy 规则 id / 测试函数 / 变异序号）必须可解析，防清单腐烂
           python policy/check_invariants.py
+          # 异常卫生：宽异常必须写理由、禁裸 except（模型最高频的静默缺陷）
+          python policy/check_exception_hygiene.py --strict
 
       - name: Structural / scatter ratchet (D2 门禁)
         # 结构欠账分与功能散点：**新增即回归**（不是"总分下降就算过"——那样会把

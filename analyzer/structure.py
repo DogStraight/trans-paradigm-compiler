@@ -210,7 +210,7 @@ class StructureCtx:
         """把 AST 子树渲染回文本（宽度表达式/连接信号等）。"""
         try:
             return self.ensure_shared()["renderer"].render(node).strip()
-        except Exception:
+        except Exception:  # noqa: BLE001 — 渲染失败按空串（不可判），不阻断检查
             # 渲染失败 → 空串：调用方（条件/宽度提取）按"拿不到文本 = 不可判"
             # 保守处理，不影响正确性；此处不报错是设计（非静默错乱）。
             return ""

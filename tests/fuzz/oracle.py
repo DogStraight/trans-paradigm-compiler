@@ -127,7 +127,7 @@ def token_seq(text: str, lexer):
     """非 trivia token 序列；不可 token 化 → None（由调用方判"哪一侧坏"）。"""
     try:
         toks = lexer.tokenize(text)
-    except Exception:
+    except Exception:  # noqa: BLE001 — oracle 取 token 失败返回 None（不判）
         return None
     return [(t.type, t.content) for t in toks if t.type not in TRIVIA_TOKEN_TYPES]
 
@@ -153,7 +153,7 @@ def evaluate_format(
     violations: list[Violation] = []
     try:
         r = format_source(src, rules_dir, ext_dirs)
-    except Exception as exc:  # 崩溃 = 违反
+    except Exception as exc:  # noqa: BLE001 — 崩溃本身就是要记的 violation，不是吞掉
         return [Violation(CRASH, f"{label}: {type(exc).__name__}: {exc}")]
 
     if not r.get("success"):
@@ -185,7 +185,7 @@ def evaluate_format(
 
     try:
         r2 = format_source(out, rules_dir, ext_dirs)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — 二次格式化崩溃记为 IDEM_CRASH violation
         violations.append(Violation(IDEM_CRASH, f"{label}: 二次格式化崩溃: {exc}"))
         return violations
     out2 = r2.get("output") or ""
@@ -211,7 +211,7 @@ def expectation_of(src: str, rules_dir: str, ext_dirs: list[str] | None = None) 
     """
     try:
         r = format_source(src, rules_dir, ext_dirs)
-    except Exception:
+    except Exception:  # noqa: BLE001 — 取结果失败按 unfixed 记，属 oracle 判定口径
         return "unfixed"
     if r.get("success"):
         return "clean"

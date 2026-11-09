@@ -744,7 +744,7 @@ class LookaheadTable:
         try:
             with matcher.probe_mode():
                 j = matcher.match_rule(tokens, j, prods, trial, limit)
-        except Exception:
+        except Exception:  # noqa: BLE001 — L2 前瞻失败记 trace 后跳过该规则
             self._trace_out(f"  L2 {name} EXC (skipped)")
             return None
         errs = len(trial)

@@ -122,6 +122,32 @@
 
 > 这五问产出**可复跑反例**才算数；散文结论只能算线索（见上方证据分级）。
 
+### 6.2 模型高频缺陷：已机械化 vs 只能靠审查提示
+
+**已进入 `policy/`（有可执行判据）**
+
+| 缺陷 | 判据 |
+|---|---|
+| 吞异常（`except Exception: pass`） | `policy/check_exception_hygiene.py`：宽异常必须写理由、禁裸 `except:` |
+| 门禁量具死了仍报绿 | `INV-RATCHET-NOT-VANISH`（`tools/_ratchet.py`，四处接入） |
+| 门禁被改弱/变异失效 | `tools/check_gate_efficacy.py`（126 条变异，每条要能红） |
+| 平台/编码假设 | `tools/check_platform_encoding.py`（E1–E4）+ `tests/policy/test_eol_normalized.py` |
+| 语言知识写进引擎 | `policy/check_hardcode.py` R1–R6 + `tools/lang_penetration.py` |
+| 重复实现 / 结构欠账 | `tools/structural_score.py` + `tools/feature_sites.py`（新增即红） |
+
+**只能靠审查提示（无静态判据，写进每轮检查清单）**
+
+1. **Oracle 自证**：期望值是不是从实现跑出来粘进去的？——要问"这个 expected 来自哪份规格/语料"。
+2. **测试抄实现**：测试里出现与实现相同的常量表/分支链 → 至少一处断言必须来自外部数据。
+3. **注释语义不符**：具体措辞（排序稳定/幂等/只读）有 `check_claim_*` 之外的**语义级**漂移，只能人读。
+4. **估算冒充测量**：阈值有没有出处？`tools/threshold_sweep.py` 只出表，"够不够"仍要人判。
+5. **静默默认链**：`raw.get(k, {})` / `getattr(x, k, None)` 一层层加，配置写错不报错。
+6. **过拟合测试**：为过某个用例加特判（按测试文件名/样例内容分支）。
+7. **无界缓存**：模块级 memo 只增不减。
+8. **并发/重入**：模块级可变状态、单例、可重入假设。
+9. **忽略返回值**：`subprocess` 不看 returncode、布尔结果被丢。
+10. **过度包装**：只做转发的适配层，删掉调用方照样正确。
+
 ## 7. 制度自身不闭合（只本版有闭合目标）
 
 制度是管线，不是定稿：槽位可插拔、维度可增删、改进走 `retro` 账本累积后再动。

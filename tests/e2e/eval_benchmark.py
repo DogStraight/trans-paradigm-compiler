@@ -367,7 +367,7 @@ def _run_slang(files: list[str]) -> tuple[list[dict], list[str]]:
     if start != -1 and end > start:
         try:
             arr = _json.loads(out[start:end + 1])
-        except Exception:
+        except Exception:  # noqa: BLE001 — 评测脚本：解析失败记为 error 条目继续
             errors.append("JSON parse fail: %s" % out[start:start + 200])
     for item in arr:
         if not isinstance(item, dict):

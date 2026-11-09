@@ -1080,7 +1080,7 @@ class ConfigRegistry:
                 else:
                     loaded[name] = {}
                     sources[name] = {"missing": True, "file": file_spec}
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — 已按配置错统一 fail-fast，此处补上下文后上抛
                 # 其他异常（缺段/结构不符等）：文件存在但配置结构有问题，属于
                 # 配置声明错误——required=False 也不应静默，统一 fail-fast。
                 loc = cls._decl_loc(base_key, file_spec, section)

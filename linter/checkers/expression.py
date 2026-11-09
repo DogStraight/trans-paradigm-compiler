@@ -174,7 +174,7 @@ class ExpressionChecker:
                     code="phase-expr",
                 )
             ], 1
-        except Exception:
+        except Exception:  # noqa: BLE001 — 取 token 失败返回空结果，检查器按不可判处理
             t = tokens[idx]
             return [
                 LintDiagnostic(

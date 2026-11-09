@@ -345,7 +345,7 @@ def analyze_production_features(production: str) -> dict[str, Any] | None:
     """
     try:
         return _build_feature_tree(production, {})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — 包成 GrammarError 后上抛（不吞）
         raise GrammarError(f"分析产生式失败 {production}: {str(e)}") from e
 
 
@@ -502,5 +502,5 @@ if __name__ == "__main__":
             print(f"产生式: {prod}")
             print(f"AST: {ast}")
             print(_SEPARATOR)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — 调试路径打印失败后继续（非生产路径）
             print(f"失败: {prod} -> {e}")

@@ -152,7 +152,7 @@ def mutate_source(src: str, rng: random.Random, token_map: dict[str, str],
     lexer = Lexer(rules_dir=rules_dir, ext_dirs=list(ext_dirs or []))
     try:
         toks = lexer.tokenize(src)
-    except Exception:
+    except Exception:  # noqa: BLE001 — 语料无法 token 化时返回原文（生成器不判正确性）
         # 语料自身无法 token 化 → 本次变异不适用，直接返回原文（生成器不判定
         # 正确性，不会造成"静默通过"：这条用例会被当成未变异的原例跑）。
         return src

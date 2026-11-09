@@ -398,7 +398,7 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         self._record_fail_site(context, rule=rule.name, reason=f"pratt: {e}")
         self._log_state(f"Pratt 解析: 不适合作为表达式 - {e}")
         return None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — pratt 解析失败记失败点后继续，最终由上层报错
         self._record_fail_site(context, rule=rule.name, reason=f"pratt: {e}")
         self._log_state(f"Pratt 解析失败: {e}")
         self._warn(f"Pratt 表达式解析失败: {e}")
@@ -989,7 +989,7 @@ class Parser:
             # ParseError 已在抛出处打印了详细上下文
             self._dump_failure_report(context, reason="ParseError")
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — 解析异常记日志与失败报告后收敛
             self._log_info(f"解析异常: {exc} | token={context.token_pointer}")
             self._dump_failure_report(context, reason=f"exception: {exc}")
             raise

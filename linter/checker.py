@@ -89,7 +89,7 @@ class CheckerRegistry:
         for checker in self._checkers:
             try:
                 errors += checker.validate(tokens)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — 取 token 失败时降级到默认位置，诊断仍产出
                 t = tokens[0] if tokens else None
                 pos = token_pos(t) if t else Position(0, 0)
                 errors.append(

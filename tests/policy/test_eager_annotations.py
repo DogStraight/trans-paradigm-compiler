@@ -126,7 +126,7 @@ def _violations() -> list[str]:
                 eval(expr, {"__builtins__": __builtins__}, {n: None for n in names})
             except NameError as exc:
                 bad.append(f"{rel}:{lineno} 注解引用未定义名字：{expr}  →  {exc}")
-            except Exception:
+            except Exception:  # noqa: BLE001 — 其它异常（属性不存在等）不属本门禁
                 continue  # 其它异常（属性不存在等）不属本门禁
     return bad
 

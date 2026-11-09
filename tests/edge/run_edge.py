@@ -118,7 +118,7 @@ def main() -> None:
             src = f.read()
         try:
             r = _fmt(src, args.pack)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — 边界语料：崩溃记为 failure 后继续跑其余用例
             failures.append(f"[CRASH] clean/{name}: {type(exc).__name__}: {exc}")
             print(f"  FAIL {name}: crash")
             continue
@@ -136,7 +136,7 @@ def main() -> None:
             src = f.read()
         try:
             r = _fmt(src, args.pack)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — 边界语料：崩溃记为 failure 后继续跑其余用例
             failures.append(f"[CRASH] reject/{name}: {type(exc).__name__}: {exc}")
             print(f"  FAIL {name}: crash")
             continue
