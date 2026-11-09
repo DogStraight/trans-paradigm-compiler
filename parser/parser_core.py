@@ -63,8 +63,6 @@ class ParseContext:
         # 当前规则匹配的起始 token 下标（match_productions 入口登记）——
         # 供「注释前 token 是否属本规则匹配范围」判据用（表达式注释让位闸门）
         self.production_start_ptr = 0
-        self.exc_type = None
-        self.exc_tb = None
 
         # 语义路径跟踪
         self.sibling_counter: dict[str, int] = {}  # 规则名 → 自然序
@@ -521,7 +519,6 @@ class Parser:
             rule_selector: 预构建的 RuleSelector。传入时跳过内部创建。
         """
         self._init_flags(verbose, silent)
-        self._load_brackets()
         self._init_rules(rules)
         self._init_logging(log_file)
         self.statement_rule_names = [
@@ -656,12 +653,6 @@ class Parser:
             if isinstance(val, str) and val:
                 return val
         return ""
-
-    def _load_brackets(self) -> None:
-        """加载括号映射（配置驱动，命名逻辑集中在 core/utils.py）。"""
-        from core.utils import get_bracket_map
-
-        self._bracket_map, self._inverse_bracket_map = get_bracket_map()
 
     def _init_rules(self, rules: dict[str, GrammarRule] | None) -> None:
         """规则加载：外部注入优先，回退内部自动加载（不可得 → fail-fast）。"""
@@ -835,10 +826,6 @@ class Parser:
             with open(log_path, mode, encoding="utf-8") as f:
                 f.write(f"{indent}[{action}]\n")
 
-    def _log_info(self, action: str, context: ParseContext | None = None) -> None:
-        """INFO 级日志：始终输出"""
-        self._log_state(action, level=self.LOG_INFO, context=context)
-
     def _warn(self, message: str, context: ParseContext | None = None) -> None:
         """WARN 级日志：由 _log_state 统一输出到日志文件和 stderr"""
         self._log_state(f"WARN: {message}", level=self.LOG_WARN, context=context)
@@ -990,7 +977,8 @@ class Parser:
             self._dump_failure_report(context, reason="ParseError")
             raise
         except Exception as exc:  # noqa: BLE001 — 解析异常记日志与失败报告后收敛
-            self._log_info(f"解析异常: {exc} | token={context.token_pointer}")
+            self._log_state(f"解析异常: {exc} | token={context.token_pointer}",
+                            level=self.LOG_INFO, context=context)
             self._dump_failure_report(context, reason=f"exception: {exc}")
             raise
 

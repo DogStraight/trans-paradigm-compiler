@@ -144,7 +144,6 @@ class RuleSelector:
         self.grammar_rules = grammar_rules
         self.statement_rule_names = statement_rule_names
         self.start_token_map: dict[str, list[str]] = {}
-        self._names_to_rules: dict[str, GrammarRule] | None = None
 
         self.start_token_map = _build_start_token_map_names(
             grammar_rules, statement_rule_names

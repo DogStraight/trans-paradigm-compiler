@@ -113,10 +113,6 @@ def is_operator(token) -> bool:
     return _check("operator", token)
 
 
-def _is_none(token) -> bool:
-    return _check("none", token)
-
-
 def install_token_classifier(categories: dict) -> None:
     """从 [token_category] 配置安装分类函数，替换模块级 is_* 的行为"""
     if not categories:
@@ -443,7 +439,7 @@ def _parse_prefix(ctx: "_PrattCtx", tokens: list[Token], idx: int) -> tuple[Node
         return node, idx + 1
     if is_operator(token) and token.content in ctx.prefix_attrs:
         return _parse_prefix_operator(ctx, tokens, idx, token)
-    if _is_none(token):
+    if token is None:
         return Node("NoneLiteral"), idx + 1
     raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
 
