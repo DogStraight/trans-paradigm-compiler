@@ -70,12 +70,16 @@
 | D7 | 测试断言强度 | 审计 | todo（出现"全绿没拦住"即补） |
 | D8 | 基线/账本腐化 | 审计 | `tests/policy/test_structural_kept.py` |
 | D9 | 跨平台与编码假设 | 审计 | todo（出现平台相关失效即补） |
+| D10 | 逐部件冗余代码（最小形式） | 审计 | `tools/scan_redundant_code.py` |
 
 每个维度必须声明三样（门禁强制）：
 
 - `proxies`：这个探针**代理的是哪条性质**（不是它输出什么）
 - `invalidated_if`：**什么变化会让这个代理失效**
 - `closure`：关没关怎么判
+
+还活着的遗留项不另设台账：写在该维度的 `pending`（一句话 + 判据），
+关闭时并入 `closed_evidence` 并删掉 `pending`——不允许两处各说一套。
 
 ## 5. 一轮怎么走
 
