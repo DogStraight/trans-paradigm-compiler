@@ -249,6 +249,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   反向演练 ghost 条目必红、探针被绕过 exit 2）。
   · **接线**：`ci_rehearsal` 新增 "ratchet: scan_redundant_code --strict" 步骤（15 步），
   `.github/workflows/ci.yml` 同步；`tools/README.md` 增工具条目与基线登记行。
+  工具补 `core.console.ensure_utf8_stdio()` 自护（cp1252 runner 下中文输出曾
+  UnicodeEncodeError 假红——发布排练实测，与其他工具同单点）。
   · 验证：`scan_redundant_code --strict` **exit 0**（8/8 在基线）；parser+linter **450
   passed**；`scan_short_dupes` 无新增；结构 S 829（新增 0/变大 0）。
 - **FIRST/nullable 沉降为单一实现（D10 尾项，作者 2026-11-09 批准）**：`parser/follow.py`

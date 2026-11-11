@@ -23,11 +23,22 @@ import argparse
 import ast
 import json
 import subprocess
+import sys
 import _ratchet  # noqa: E402  # pyright: ignore[reportMissingImports]
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 控制台 UTF-8 自护走单点 `core/console.py`（工具脚本 sys.path[0]=tools/，先把仓库根
+# 加进 sys.path 再 import）。cp1252 runner 下中文候选/结论不再 UnicodeEncodeError
+# ——否则门禁在远端 Windows 编码下是假红（发布排练实测）。
+_REPO_ROOT = str(ROOT)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from core.console import ensure_utf8_stdio  # noqa: E402 — 路径引导之后才可 import
+
+ensure_utf8_stdio()
+
 MIN_PY_FILES = 20
 BASELINE = ROOT / "tools" / "baselines" / "redundant_code_kept.json"
 SKIP_DIRS = frozenset({
