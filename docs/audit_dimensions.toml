@@ -136,10 +136,10 @@ probe = "python tools/scan_redundant_code.py --strict"
 proxies = "每个部件在**不破坏抽象分层**的前提下取最小形式：零引用定义、未使用形参、纯转发包装、同义重复都已消除或判保持"
 invalidated_if = "抽象分层调整（部件边界变化）后，原判保持项需要重判"
 closure = "机械三类（零引用/未使用参数/纯转发）为零或逐条判保持；同义重复与过度分层经人判并留证"
-status = "open"
+status = "closed"
 adhoc = "2026-11-07 首轮：linter 18 文件 / parser 12 文件全读式机械扫，产出 11 条候选（R2 4 / R3 7）"
 measured = "机械候选 11 条：未使用形参 4（checker.validate/matcher._no_progress_ok/lookahead._try_parse/block_parser.parse_sentence）、纯转发 7（grammar_slicer._collect_first_start_tokens + pratt 六个谓词）"
-pending = "2026-11-11 复核通过（4 判据由 review 独立复现：四语言包快照逐字节一致 + 扰动演练变红 + 单实现 grep 仅 core + core 无反向 import）；10 条探针候选已逐条裁定：8 保持（Protocol 契约/变异载荷/口径名/公开谓词面）、2 条真死参删除（parse_sentence.block_end_token、_try_parse.context）；等 kept 基线 + CI 接线落地即置 closed"
+closed_evidence = "【2026-11-11 闭合（方案 A，作者选）】探针 python tools/scan_redundant_code.py --strict 现 exit 0：8 条刻意保持项进 tools/baselines/redundant_code_kept.json（每条带 reason/evidence，键 <relpath>::R#:符号）；2 条真死形参已删——parser/block_parser.parse_sentence.block_end_token（函数体内 0 次引用，且 docstring 承诺了未实现的行为）、linter/lookahead._try_parse.context（4 处调用点+1 测试在传、函数体从不读）。反向演练：塞假条目 ⇒ rc=1 基线失效；基线非空而当前 0 条 ⇒ rc=2（_ratchet.guard_not_vanished）——见 tests/policy/test_redundant_code_kept.py（5 passed）。探针已接线 ci_rehearsal 与 .github/workflows/ci.yml（此前从未进过 CI）。\n同轮 D10 尾项（FIRST/nullable 三实现收成 core/first_set.py）由 review 独立复核：自写 dump（单语言单进程、只走生产入口）四语言包 {first,nullable,FOLLOW,linter 两口径} 与 before 逐字节一致；扰动演练（关 optional 可空）快照变红；定义唯一性 grep 仅 core/first_set.py；core 无反向 import；238 行（超 140 启发式，因含两条公开入口，未混入 FOLLOW）。\n回归（review 复跑）：parser+linter+kept 455 passed、languages 1788、smoke 574、policy 690、结构 S 829（新增 0/变大 0）、mutation 34 如期红、hardcode/doc_refs/exception-hygiene 绿、全仓 LF。未独立复跑：pyright（本机无二进制，按 main-loop 工件 1.1.413 0 errors）与 ci_rehearsal 全 15 步（按 main-loop 工件，其接线已核对）。"
 
 # ============================================================================
 # 审计管线（槽位化）：可插拔，不是固定流程
