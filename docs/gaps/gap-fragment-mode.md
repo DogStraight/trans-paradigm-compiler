@@ -97,7 +97,7 @@ islands 模块的数据源。
 |---|---|---|---|
 | 语法加载 | `parser/__init__.py::setup_grammar` | 语言包 TOML 规则 | `GrammarRule` 表（`is_block`/`is_statement` 为规则自声明；`block_start`/`block_end` 由 production 首尾字面 token 推导） |
 | 切片树 | `linter/grammar_slicer.py::build_slice_tree` | 规则表 | `{rule: {prods, is_block, is_statement, block_start, block_end}}`（linter 内部推导组件，islands 直接消费） |
-| FIRST 集 | `linter/first_set.py::first_tokens` | feature 树 | 每规则起始 token 集（保守/可空两种语义） |
+| FIRST 集 | `core/first_set.py::first_tokens`（linter 侧 re-export） | feature 树 | 每规则起始 token 集（保守/可空两种语义） |
 | 前瞻分类 | `linter/lookahead.py::LookaheadTable` | 切片树 + 匹配器 | token → 候选规则（A 类 keyword_map / B 类标识符+前缀路径） |
 | 结构发现 | `linter/discovery.py::Discovery` | 切片树 + 块/括号起止符 + `[discovery]` 声明 | **岛信息**：`DiscoveredNode(rule, start, end, children)` 树 + 未识别区间 |
 | 语言事实声明 | `linter/discovery_shape.py` + `base/_discovery.toml` | 语言包 `[discovery]` 段 | 容器/延续/属性对/子句分隔符（语义意图，声明而非猜；ADR-0025） |
@@ -126,9 +126,10 @@ islands/
 
 **已拍板（作者 2026-10-30，两项）**：
 
-1. **推导层归属 → 留在 linter 内部**：`grammar_slicer / first_set / lookahead /
-   discovery / discovery_shape` 不设独立顶层包（曾短暂抽离为 `structure/`，按作者决定
-   并回）；它们是 linter 的内部组件，`islands/` 直接消费其推导 API。
+1. **推导层归属 → 留在 linter 内部**：`grammar_slicer / lookahead / discovery /
+   discovery_shape` 不设独立顶层包（曾短暂抽离为 `structure/`，按作者决定并回）；
+   它们是 linter 的内部组件，`islands/` 直接消费其推导 API。**例外**：FIRST/nullable
+   是引擎通用算法（无语言知识），D10 尾项已下沉 `core/first_set.py`。
 2. **声明面 → 不建**：不设 `[[island_rules]]`、不设 `island_rewriter` 能力位——片段模式
    下语法配置推导出的语法单元默认就是岛（见「P1 契约」）。
    若只想让某部分语法有效 → 单开语法包（作者定），不做记号/范围可选模式。

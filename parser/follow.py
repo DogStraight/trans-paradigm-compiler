@@ -18,10 +18,18 @@ FOLLOW 是派生数据——check_end_case 的硬性依据（token ∉ FOLLOW �
 FOLLOW 成员两种形式：
   精确 token 类型（"id"、"keyword.if"）
   前缀 token 家族（"symbol.base."——以 "." 结尾，匹配整个家族）
+FIRST/nullable 的**实现**在 `core/first_set.py`（单一来源，D10 尾项）；本模块保留
+FOLLOW 方程与引擎角色注入（读 is_statement/is_atom/inline/pratt，属上层知识）。
 Doc: docs/language_walkthrough.md（规则形态分类）
 """
 
 from core.define import GrammarRule
+from core.first_set import (
+    _elem_first,
+    _elem_nullable,
+    _seq_first_nullable,
+    rule_first_nullable,
+)
 from .rule_selector import analyze_production_features
 
 
@@ -59,148 +67,50 @@ def _elem_calls(elem: dict) -> list[str]:
     return names
 
 
-def _elem_first(elem: dict, first_map: dict, nullable_map: dict) -> set[str]:
-    """元素树的 FIRST（不含 ε；ε 由 nullable_map 表达）。"""
-    typ = elem.get("type")
-    if typ == "token":
-        tt = elem.get("token_type")
-        return {tt} if tt else set()
-    if typ == "call":
-        return set(first_map.get(elem.get("name"), ()))
-    if typ == "seq":
-        out: set[str] = set()
-        for item in elem.get("items", []):
-            out |= _elem_first(item, first_map, nullable_map)
-            if not _elem_nullable(item, nullable_map):
-                break
-        return out
-    if typ == "choice":
-        out = set()
-        for alt in elem.get("alternatives", []):
-            out |= _elem_first(alt, first_map, nullable_map)
-        return out
-    if typ in ("repeat", "plus", "optional"):
-        return _elem_first(elem.get("elem", {}), first_map, nullable_map)
-    return set()
+def _first_view(
+    rules: dict[str, GrammarRule], trees: dict[str, list[dict]]
+) -> dict[str, dict]:
+    """规则视图（`core.first_set` 输入）：prods + block_start（只对 is_block 填）。
 
-
-def _elem_nullable(elem: dict, nullable_map: dict) -> bool:
-    """元素树是否可空。"""
-    typ = elem.get("type")
-    if typ == "token":
-        return False
-    if typ == "call":
-        return nullable_map.get(elem.get("name"), False)
-    if typ == "seq":
-        return all(
-            _elem_nullable(i, nullable_map) for i in elem.get("items", [])
-        )
-    if typ == "choice":
-        return any(
-            _elem_nullable(a, nullable_map) for a in elem.get("alternatives", [])
-        )
-    if typ in ("repeat", "optional"):
-        return True
-    if typ == "plus":
-        return _elem_nullable(elem.get("elem", {}), nullable_map)
-    return False
-
-
-def _compute_first_nullable(
-    names: set[str],
-    trees: dict[str, list[dict]],
-    rules: dict[str, GrammarRule],
-    operator_members: list[str] | None = None,
-) -> tuple[dict[str, set[str]], dict[str, bool]]:
-    """FIRST / nullable 不动点迭代（处理递归引用）。
-
-    块规则的 FIRST 特判：is_block 规则剥离后 prods 是"内容部分"（起止符由
-    块路径单独消费），其作为 @call 引用/语句候选时的首 token 是 block_start
-    （如 BeginEnd 剥离后 prods=[] 但 FIRST 应为 {keyword.begin}）。
+    block_start 是否参与种子由构造方决定：parser 侧只给 `is_block` 规则填，
+    与旧 `_has_block_start` 语义一致（linter 侧 `_slice_entry` 原样提供）。
     """
-    first_map, nullable_map = _seed_first(names, rules, operator_members)
-    changed = True
-    while changed:
-        changed = False
-        for name in names:
-            if _has_block_start(rules, name):
-                continue  # 有 block_start 的块规则：FIRST 已种子化，跳过迭代覆盖
-            f, nullable = _seq_first_nullable(trees[name], first_map, nullable_map)
-            f |= first_map[name]  # 保留种子（block_start / pratt 运算符注入）
-            if _update_first_nullable(first_map, nullable_map, name, f, nullable):
-                changed = True
-    return first_map, nullable_map
+    view: dict[str, dict] = {}
+    for name, prods in trees.items():
+        rule = rules[name]
+        block_start = ""
+        if getattr(rule, "is_block", False):
+            block_start = getattr(rule, "block_start", "") or ""
+        view[name] = {"prods": prods, "block_start": block_start}
+    return view
 
 
-def _seed_first(
-    names: set[str],
+def _first_seeds(
+    names: set[str], rules: dict[str, GrammarRule], operator_members: list[str] | None
+) -> dict[str, set[str]] | None:
+    """pratt 运算符家族种子（只有 parser 侧传；见 `core.first_set` 的 `seeds`）。"""
+    if not operator_members:
+        return None
+    seeds = {
+        name: set(operator_members)
+        for name in names
+        if getattr(rules[name], "pratt", False)
+    }
+    return seeds or None
+
+
+def _first_nullable(
     rules: dict[str, GrammarRule],
     operator_members: list[str] | None,
+    trees: dict[str, list[dict]] | None = None,
 ) -> tuple[dict[str, set[str]], dict[str, bool]]:
-    """FIRST / nullable 初始表：块规则 block_start 种子 + pratt 运算符种子。
-
-    - block_start 种子（确定性事实，不参与迭代）：块规则剥离后 prods 是内容
-      部分，但它作为 @call/语句候选时的首 token 是 block_start。
-    - pratt 规则种子：内置前缀运算符（`|` `~` `!` `+` `-` `^` `&` 等）不在
-      任何 production 里（由 pratt 解析器处理），但它们是合法的表达式起始——
-      如 case item 以 `|{...}:` 开头的 reduction OR。注入**整个运算符家族**
-      （家族级无法按 content 区分前缀/中缀，过度包含是 fail-open 方向）。
-    """
-    first_map: dict[str, set[str]] = {n: set() for n in names}
-    nullable_map: dict[str, bool] = {n: False for n in names}
-    for n in names:
-        rule = rules.get(n)
-        if rule is None:
-            continue
-        bs = getattr(rule, "block_start", "") or ""
-        if getattr(rule, "is_block", False) and bs:
-            first_map[n] = {bs}
-        if operator_members and getattr(rule, "pratt", False):
-            first_map[n] |= set(operator_members)
-    return first_map, nullable_map
-
-
-def _has_block_start(rules: dict[str, GrammarRule], name: str) -> bool:
-    """该规则是否带 block_start（FIRST 已种子化）。"""
-    rule = rules.get(name)
-    if rule is None or not getattr(rule, "is_block", False):
-        return False
-    return bool(getattr(rule, "block_start", ""))
-
-
-def _seq_first_nullable(
-    elems: list[dict], first_map: dict[str, set[str]], nullable_map: dict[str, bool]
-) -> tuple[set[str], bool]:
-    """序列的 `(FIRST 并集, 是否整体可空)`。
-
-    遇第一个不可空元素即停——其后元素既不在 FIRST 里，也不影响可空性。
-    """
-    first: set[str] = set()
-    nullable = True
-    for elem in elems:
-        first |= _elem_first(elem, first_map, nullable_map)
-        if not _elem_nullable(elem, nullable_map):
-            nullable = False
-            break
-    return first, nullable
-
-
-def _update_first_nullable(
-    first_map: dict[str, set[str]],
-    nullable_map: dict[str, bool],
-    name: str,
-    f: set[str],
-    nullable: bool,
-) -> bool:
-    """写回 FIRST/nullable；返回是否有变化（不动点终止条件）。"""
-    changed = False
-    if f != first_map[name]:
-        first_map[name] = f
-        changed = True
-    if nullable != nullable_map[name]:
-        nullable_map[name] = nullable
-        changed = True
-    return changed
+    """规则 FIRST + nullable 不动点（实现见 `core/first_set.py`，单一来源）。"""
+    names = set(rules)
+    if trees is None:
+        trees = _rule_trees_map(names, rules)
+    return rule_first_nullable(
+        _first_view(rules, trees), _first_seeds(names, rules, operator_members)
+    )
 
 
 def _propagate_seq(
@@ -342,9 +252,7 @@ def compute_first_map(
 
     与 `compute_follows` 同一套不动点实现；语言知识仍来自规则声明/运算符分类。
     """
-    names = set(rules)
-    trees = _rule_trees_map(names, rules)
-    return _compute_first_nullable(names, trees, rules, operator_members)
+    return _first_nullable(rules, operator_members)
 
 
 def compute_follows(
@@ -370,9 +278,7 @@ def compute_follows(
     _t = _trace_printer(trace)
     names = set(rules)
     trees = _rule_trees_map(names, rules)
-    first_map, nullable_map = _compute_first_nullable(
-        names, trees, rules, operator_members
-    )
+    first_map, nullable_map = _first_nullable(rules, operator_members, trees)
 
     follows: dict[str, set[str]] = {n: set() for n in names}
 

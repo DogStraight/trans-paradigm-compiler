@@ -232,6 +232,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   新增 0/变大 0；`check_hardcode --strict-*` 绿。
 
 ### Changed
+- **FIRST/nullable 沉降为单一实现（D10 尾项，作者 2026-11-09 批准）**：`parser/follow.py`
+  的规则级不动点与 `linter/first_set.py` 的元素树递归（同一组方程、同一套元素树）合并为
+  `core/first_set.py` 单一实现：`first_tokens`（`nullable` 两口径）+ `rule_first_nullable`
+  （不动点）；FOLLOW 方程与角色注入（is_statement/is_atom/inline/pratt）留在 parser。
+  linter 侧退化为 re-export（`grammar_slicer`/`matcher` import 面不变）；新增守卫测试
+  `tests/policy/test_first_set_single_impl.py`（定义唯一性 + 接线 + 无 upward import）。
+  · 判据：四语言包 {first,nullable,follow} 快照**前后逐字节相等**（sha256 一致，含 linter
+  两口径）；把 core 的 optional 可空判定关掉后快照必变（反向演练，证明快照非恒等输出）；
+  `scan_short_dupes` 对该对 0 命中。
+  · 回归：parser+linter **454 passed**、`tests/languages` **1788 passed**、smoke **574
+  passed**、结构 S **829**（新增 0 / 变大 0）。
 - **文档单一真相化（作者 2026-11-07 指示）**：README / PROGRESS / ROADMAP 不再复述随轮
   变动的数字（版本号、测试数、结构分、提交号），改为指向唯一来源——版本 =
   `pyproject.toml` + `core/__init__.py`，刻度/收口状态 = `PROGRESS.md`，逐轮变更与证据 =

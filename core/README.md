@@ -10,6 +10,7 @@
 | `plugin_loader.py` | 插件加载与管理（capabilities / pass 声明 / postpass 收集） |
 | `check_registry.py` | `[[checks]]` 声明式检查规则表（加载/校验/用户配置） |
 | `token_protocol.py` | 引擎级 token 类型命名协议（单一事实源） |
+| `first_set.py` | **FIRST/nullable 单一实现**（`nullable` 开关两口径；parser FOLLOW 与 linter 前缀判别共用；D10 尾项下沉） |
 | `_protocol.py` | 组件系统协议常量（统一 magic string） |
 | `errors.py` | 统一异常层级 |
 | `debug_report.py` | 失败现场报告工具（parser/linter 共用） |
