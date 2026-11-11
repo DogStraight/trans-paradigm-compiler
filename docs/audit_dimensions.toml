@@ -139,7 +139,7 @@ closure = "机械三类（零引用/未使用参数/纯转发）为零或逐条�
 status = "open"
 adhoc = "2026-11-07 首轮：linter 18 文件 / parser 12 文件全读式机械扫，产出 11 条候选（R2 4 / R3 7）"
 measured = "机械候选 11 条：未使用形参 4（checker.validate/matcher._no_progress_ok/lookahead._try_parse/block_parser.parse_sentence）、纯转发 7（grammar_slicer._collect_first_start_tokens + pratt 六个谓词）"
-pending = "2026-11-09 尾项：FIRST/nullable 三份实现收成 core/first_set.py（parser/follow.py 140 行 + linter/first_set.py 76 行 + rule_selector 54 行）；已按作者批准发布给 main-loop，判据 = 四语言包 {first,nullable,follow} 快照零差异"
+pending = "2026-11-11 复核通过（4 判据由 review 独立复现：四语言包快照逐字节一致 + 扰动演练变红 + 单实现 grep 仅 core + core 无反向 import）；10 条探针候选已逐条裁定：8 保持（Protocol 契约/变异载荷/口径名/公开谓词面）、2 条真死参删除（parse_sentence.block_end_token、_try_parse.context）；等 kept 基线 + CI 接线落地即置 closed"
 
 # ============================================================================
 # 审计管线（槽位化）：可插拔，不是固定流程
