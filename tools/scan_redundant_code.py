@@ -16,7 +16,6 @@ import argparse
 import ast
 import json
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -140,7 +139,10 @@ def _print_report(files: list[Path], findings: list[Finding]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="scan_redundant_code", description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        prog="scan_redundant_code",
+        description=(__doc__ or "scan_redundant_code").splitlines()[0],
+    )
     ap.add_argument("--paths", default=None, help="逗号分隔的部件目录（默认 linter,parser）")
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--strict", action="store_true", help="发现即 exit 1")

@@ -271,7 +271,7 @@ class LinterScanner:
         openers: set[str] = set()
         closers: set[str] = set()
         closer_to_openers: dict[str, set[str]] = {}
-        for name, rule in rules.items():
+        for rule in rules.values():
             if not isinstance(rule, GrammarRule):
                 continue
             bs = getattr(rule, "block_start", "") or ""

@@ -20,6 +20,7 @@
 FOLLOW 方程**不在本模块**：它读 `is_statement`/`is_atom`/`inline`/`pratt` 等引擎
 角色，属 parser 上层知识；`parser/follow.py` 保留 FOLLOW，用本模块的
 `_elem_first` / `_elem_nullable` / `_seq_first_nullable` 基元做传播。
+Doc: linter/linter_architecture.md（FIRST/nullable 两口径）
 """
 from __future__ import annotations
 

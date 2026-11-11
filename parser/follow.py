@@ -26,7 +26,6 @@ Doc: docs/language_walkthrough.md（规则形态分类）
 from core.define import GrammarRule
 from core.first_set import (
     _elem_first,
-    _elem_nullable,
     _seq_first_nullable,
     rule_first_nullable,
 )
