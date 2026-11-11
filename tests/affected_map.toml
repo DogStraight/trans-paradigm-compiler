@@ -1,0 +1,61 @@
+# affected_map.toml — 动态测试入口的**显式映射表**（可审计工件）。
+#
+# 用途：`tools/affected_tests.py` 按「改了什么」选测试子集，做日常快反馈。
+# 纪律（审查侧 2026-11-11 定，见 .scratch/audit/dynamic-test-entry-review.md）：
+#   - 未知即全量：未映射路径 / 策略层一律全量，绝不静默跳过；
+#   - 本表是唯一映射来源：改表能在 git diff 里看见"谁把 tests/X 从映射里删了"；
+#   - 选择器**不决定** CI/发布跑什么——CI 与 ci_rehearsal 永远全量；CI 只检查本表健康。
+#
+# 结构：
+#   full_prefixes  命中即全量（策略层/跨切面/基础设施）
+#   suffixes       后缀命中 → runs（纯文档只跑文档门禁）
+#   [[rule]]       prefix → runs（`{lang}` 由 grammar/<lang>/ 的目录名展开）
+#   self_tests     改动 tests/ 下的 test_*.py → 只跑该文件本身
+# runs 是 **python argv**（解释器由工具补）：`["-m","pytest",...]` 或脚本路径。
+
+full_prefixes = [
+  "core/",
+  "analyzer/",
+  "pipeline/",
+  "policy/",
+  "tools/",
+  "tests/policy/",
+  "main.py",
+  "pyproject.toml",
+  "tests/conftest.py",
+]
+
+[[suffix_rule]]
+name = "docs"
+suffixes = [".md"]
+runs = [
+  ["-m", "pytest", "tests/policy/test_doc_sync.py", "tests/policy/test_planning_doc_budget.py", "tests/policy/test_doc_single_truth.py", "-q"],
+  ["policy/check_doc_refs.py", "--strict-input"],
+]
+
+[[rule]]
+name = "parser"
+prefixes = ["parser/"]
+runs = [["-m", "pytest", "tests/engine/parser", "-q"]]
+
+[[rule]]
+name = "linter"
+prefixes = ["linter/"]
+runs = [
+  ["-m", "pytest", "tests/engine/linter", "-q"],
+  ["tests/e2e/eval_lint_accuracy.py"],
+]
+
+[[rule]]
+name = "grammar"
+prefixes = ["grammar/"]
+runs = [
+  ["-m", "pytest", "tests/languages/{lang}", "-q"],
+  ["-m", "pytest", "-m", "smoke", "-q"],
+]
+
+[[rule]]
+name = "tests-self"
+prefixes = ["tests/"]
+self_tests = true
+runs = []

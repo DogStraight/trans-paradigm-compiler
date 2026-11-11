@@ -19,6 +19,7 @@
 | 找同构重复的测试用例 | `scan_test_redundancy.py` |
 | 找「短重复」：十几行的整段复制（含工具自己） | `scan_short_dupes.py` |
 | 找逐部件冗余代码（零引用 / 未使用形参 / 纯转发） | `scan_redundant_code.py` |
+| 按改动选测试（日常快反馈；不决定 CI/发布） | `affected_tests.py` |
 | 查某语言包还差哪些构造没被接受 / 没渲染 | `c_acceptance.py` / `render_coverage.py` |
 | 查引擎里还有没有语言知识渗透 | `lang_penetration.py` |
 | 判断某个测试是不是"靠语言包声明才成立" | `min_pack_probe.py` |
@@ -56,6 +57,7 @@
 - `scan_short_dupes.py` — **短重复扫描**：函数体 token 相似度（默认 0.90 / 60 tok），扫描面**含 tools/ 与 policy/ 自身**——`structural_score` 的 CLONE 有 token 阈值，十几行整段复制落在盲区，实测工具层因此长出 1.00 相似度的两份 `_print_findings`。只报告。
 - `scan_test_redundancy.py` — 测试同构冗余扫描（只报告）：同文件/同类内结构相同的测试组 → 参数化候选；标注是否被基线锚定。见 `AGENTS.md`「测试门禁 + 测后决策」。
 - `scan_redundant_code.py` — **逐部件冗余代码扫描**（R1 零引用 / R2 未使用形参 / R3 纯转发；`linter,parser`）：逐条"删不删"由人判，**刻意保持项进 kept 基线** `baselines/redundant_code_kept.json`（键 `<relpath>::R码:符号`，值须有理由）。判定：新候选 / 基线条目消失 ⇒ exit 1；基线非空而当前 0 条 ⇒ exit 2（`_ratchet` 全量消失判据）。已接入 `ci_rehearsal` 与 CI。
+- `affected_tests.py` — **动态测试入口**（日常快反馈档，2026-11-11 审查侧定）：按 `git diff HEAD` + 未跟踪文件对照 `tests/affected_map.toml` 选测试子集；无变化（HEAD+工作区+未跟踪+pytest 版本指纹一致）直接复用上次 exit code。**未知即全量**（未映射路径 / 策略层 core·analyzer·pipeline·policy·tools·tests/policy 一律回退全量），全量档永不缓存；每次打印并落账 `.scratch/gate/select.log`（selected/skipped/reasons）。**不决定** CI/发布：CI 与 `ci_rehearsal` 永远全量，CI 只跑 `--audit-map` 查映射表健康（路径存在 / 条目非空 / 目标存在）。用法：`python tools/affected_tests.py`（快反馈）/ `--dry-run` / `--full` / `--audit-map` / `--simulate-changed`。判据：`tests/policy/test_affected_map.py`。
 - `structural_score.py` — 结构欠账分 S（复杂度/规模/重复三分量取超额量）；`--save` 写基线、`--compare` 新增即回归。见 `policy/structural_budget.md`。
 - `feature_sites.py` — **功能散点计量**：按功能分族枚举实例，扫出"提及它的文件"并归类；`--save`/`--compare`。判保持记 `baselines/feature_sites_kept.json`、已收敛记 `baselines/feature_sites_converged.json`。见 `docs/gaps/gap-feature-scatter.md`。
 - `config_sites.py` — **配置同步点位**：`list` 清单 / `check` 漂移哨兵 / `rename` 逐项替换。见 `policy/engine_config_sync.md`。

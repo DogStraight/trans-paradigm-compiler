@@ -232,6 +232,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   新增 0/变大 0；`check_hardcode --strict-*` 绿。
 
 ### Changed
+- **动态测试入口（按改动选测，日常快反馈档；审查侧 2026-11-11 定 P1）**：新增
+  `tools/affected_tests.py` + 显式映射表 `tests/affected_map.toml`（可审计工件：改表出现在
+  git diff 里，而非 pytest 插件式隐式魔法）。按 `git diff HEAD` + 未跟踪文件映射到测试子集：
+  parser → `tests/engine/parser`；linter → `tests/engine/linter` + `eval_lint_accuracy`；
+  `grammar/<lang>/` → `tests/languages/<lang>` + smoke；`tests/` 下的 `test_*.py` → 只跑该文件；
+  纯 `*.md` → 文档门禁（doc_refs/doc_sync/预算/单一真相）；**未知即全量**（未映射路径与
+  策略层 core/analyzer/pipeline/policy/tools/tests/policy 一律回退全量）。
+  · 缓存：指纹 = HEAD + 工作区脏状态 + 改动文件内容 + pytest 版本；无变化直接复用上次
+  exit code，**全量档永不缓存**。每次打印并落账 `.scratch/gate/select.log`（selected/skipped/
+  reasons）；跳过 `tests/` 条目无理由即红。
+  · 边界（审查侧裁定）：只服务日常快反馈，**不决定** CI/发布——CI 与 `ci_rehearsal` 永远全量，
+  CI 只新增 `--audit-map` 映射表健康检查（路径存在/条目非空/目标存在）。
+  · 判据：`tests/policy/test_affected_map.py` **17 passed**（未知即全量、策略层全量、语言包映射、
+  未知语言包全量、文档门禁、测试自身、缓存模式隔离、跳过记账、反向演练 mapping 违规即报）。
+  文档：`tools/README.md`、`policy/collaboration.md`「分层验证」补指针。
+  · 验证（只跑靶向，不跑全量）：`--audit-map` **OK**；文档/接线门禁 **50 passed**
+  （含 `test_ci_rehearsal` 的 16 步镜像）；pyright **0 errors**；`check_hardcode --strict-*` 绿；
+  结构 S **829**（新增 0 / 变大 0）；`scan_short_dupes` 对新文件 0 对。
 - **D10 闭合：10 条候选逐条裁定 + kept 基线（方案 A，作者 2026-11-11 定）**：
   · **2 条真死参删除**：`parser/block_parser.py::parse_sentence(block_end_token)`
   （形参函数体内 0 引用，docstring 还承诺了不存在的行为，一并改正）；

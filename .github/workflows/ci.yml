@@ -76,6 +76,12 @@ jobs:
         run: |
           python tools/scan_redundant_code.py --strict
 
+      - name: Affected-test map health (动态入口映射表)
+        # 只检查 tests/affected_map.toml 的健康（路径存在 / 条目非空 / 目标存在）。
+        # CI 跑什么永远由本 workflow 决定——动态入口只服务日常快反馈，不决定门禁。
+        run: |
+          python tools/affected_tests.py --audit-map
+
       - name: Cross-platform text I/O gate (D9 门禁)
         # --strict：输入面缺失（扫描根不存在）升为 gate；工具内含防假绿下限
         #   （扫描面 <100 个 .py 直接失败），空集合不许当绿。
