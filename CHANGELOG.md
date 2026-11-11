@@ -232,6 +232,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   新增 0/变大 0；`check_hardcode --strict-*` 绿。
 
 ### Changed
+- **D10 闭合：10 条候选逐条裁定 + kept 基线（方案 A，作者 2026-11-11 定）**：
+  · **2 条真死参删除**：`parser/block_parser.py::parse_sentence(block_end_token)`
+  （形参函数体内 0 引用，docstring 还承诺了不存在的行为，一并改正）；
+  `linter/lookahead.py::_try_parse(*, context)`——该形参自 T2b 起**全链已死**（收敛证据
+  字段删除后无人读），只删末端会新增 5 条 R2 假阳性，故同步清掉 `classify` /
+  `_resolve_ident` / `_level1_scan` / `_level1_decide` / `_fallback_l2` 的 context 形参
+  （6 函数），`discovery` 3 处调用去参；`classify` 签名变更（唯一调用方 discovery）。
+  · **8 条刻意保持项进 kept 基线** `tools/baselines/redundant_code_kept.json`
+  （键 `<relpath>::R码:符号`，每条有 reason/evidence/owner）：`Checker.validate` 是
+  Protocol 契约、`_no_progress_ok` 形参是变异载荷载体、`_collect_first_start_tokens`
+  是"强制起始"口径名、pratt `is_*` 是公开谓词面。
+  · `scan_redundant_code.py` 加 `--baseline`（默认即上述文件）三条判定：新候选 ⇒ exit 1、
+  基线条目消失 ⇒ exit 1（修好须同提交删条目）、基线非空而当前 0 条 ⇒ `_ratchet` exit 2；
+  无基线时保持旧行为。新增 `tests/policy/test_redundant_code_kept.py`（基线=现实、理由非空、
+  反向演练 ghost 条目必红、探针被绕过 exit 2）。
+  · **接线**：`ci_rehearsal` 新增 "ratchet: scan_redundant_code --strict" 步骤（15 步），
+  `.github/workflows/ci.yml` 同步；`tools/README.md` 增工具条目与基线登记行。
+  · 验证：`scan_redundant_code --strict` **exit 0**（8/8 在基线）；parser+linter **450
+  passed**；`scan_short_dupes` 无新增；结构 S 829（新增 0/变大 0）。
 - **FIRST/nullable 沉降为单一实现（D10 尾项，作者 2026-11-09 批准）**：`parser/follow.py`
   的规则级不动点与 `linter/first_set.py` 的元素树递归（同一组方程、同一套元素树）合并为
   `core/first_set.py` 单一实现：`first_tokens`（`nullable` 两口径）+ `rule_first_nullable`

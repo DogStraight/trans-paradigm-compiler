@@ -8,7 +8,14 @@
 - R3 **纯转发包装**：函数体只有 `return other(same args)`，且无校验/转换/日志等额外语义
 
 只报告，不裁决：**"删不删"由人判**（含"抽象分层不许破坏"这条更高优先的约束）。
-`--strict` 时发现即 exit 1。
+
+**kept 基线（D10 闭合，2026-11-11 作者选 A）**：逐条裁定后"刻意保持"的候选进
+`tools/baselines/redundant_code_kept.json`（键 `<relpath>::<R1|R2|R3>:<符号>`，值须有
+非空 `reason`）。判定三条（缺一条就退化成"红着没人看"）：
+  1. 出现 baseline 外的新候选 ⇒ exit 1（防回归）；
+  2. baseline 条目消失 ⇒ exit 1（若已修好，同一次提交删条目——基线须等于现实）；
+  3. baseline 非空而当前 0 条 ⇒ `_ratchet.guard_not_vanished` ⇒ exit 2（防探针被绕过）。
+不带基线（文件缺失且未显式 `--baseline`）时保持旧行为：`--strict` 发现即 exit 1。
 """
 from __future__ import annotations
 
@@ -16,11 +23,13 @@ import argparse
 import ast
 import json
 import subprocess
+import _ratchet  # noqa: E402  # pyright: ignore[reportMissingImports]
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MIN_PY_FILES = 20
+BASELINE = ROOT / "tools" / "baselines" / "redundant_code_kept.json"
 SKIP_DIRS = frozenset({
     ".git", "dist", "build", "_drafts", ".scratch", ".agents", "__pycache__",
     ".venv", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules",
@@ -119,9 +128,16 @@ def scan_file(path: Path) -> list[Finding]:
 
 
 def _collect_files(roots: list[Path]) -> list[Path]:
-    """各部件目录下的 `.py` 文件（跳过 `SKIP_DIRS`；缺失根走可见缺口）。"""
+    """各部件目录下的 `.py` 文件（跳过 `SKIP_DIRS`；缺失根走可见缺口）。
+
+    相对根先解析到仓库根：基线键用 **POSIX 相对路径**（`<relpath>::R2:sym`），
+    若这里保留相对路径，`scan_file` 会退化成 `str(path)`（Windows 反斜杠），
+    键形随平台漂移、基线永远对不上。
+    """
     files: list[Path] = []
     for root in roots:
+        if not root.is_absolute():
+            root = ROOT / root
         if not root.exists():
             _record(str(root), "输入根不存在")
             continue
@@ -138,6 +154,37 @@ def _print_report(files: list[Path], findings: list[Finding]) -> None:
           f"（R1 零引用 / R2 未使用参数 / R3 纯转发）")
 
 
+def _finding_key(finding: Finding) -> str:
+    """基线键：`<relpath>::<R码>:<符号>`（与 D10 裁定表一一对应）。"""
+    return f"{finding.path}::{finding.code}:{finding.name}"
+
+
+def _load_kept(path: Path) -> dict[str, dict]:
+    """kept 基线 → {键: {reason, evidence, owner}}；文件缺失视为无基线。"""
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {k: v for k, v in (data.get("items") or {}).items() if isinstance(v, dict)}
+
+
+def _compare_kept(findings: list[Finding], kept: dict[str, dict]) -> int:
+    """基线三条判定（见模块 docstring）；返回退出码。"""
+    current = sorted({_finding_key(f) for f in findings})
+    base = set(kept)
+    new = [key for key in current if key not in base]
+    stale = sorted(base - set(current))
+    if base and not current:
+        return _ratchet.guard_not_vanished("scan_redundant_code", len(base), 0)
+    for key in new:
+        print(f"  [新增候选] {key} —— 真阳性请修；刻意保持请加 baseline 条目+理由")
+    for key in stale:
+        print(f"  [基线失效] {key} —— 若已修好，请在同一提交删掉该条目（基线须等于现实）")
+    if new or stale:
+        return 1
+    print(f"[PASS] 候选 {len(current)} 条与 kept 基线一致（{len(base)} 条）")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="scan_redundant_code",
@@ -145,7 +192,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--paths", default=None, help="逗号分隔的部件目录（默认 linter,parser）")
     ap.add_argument("--json", type=Path, default=None)
-    ap.add_argument("--strict", action="store_true", help="发现即 exit 1")
+    ap.add_argument(
+        "--baseline", type=Path, default=None,
+        help=f"kept 基线（默认 {BASELINE.relative_to(ROOT).as_posix()}；文件缺失=无基线）",
+    )
+    ap.add_argument("--strict", action="store_true", help="无基线时：发现即 exit 1")
     args = ap.parse_args(argv)
     files = _collect_files([Path(p) for p in (args.paths or "linter,parser").split(",")])
     findings = [f for path in files for f in scan_file(path)]
@@ -157,6 +208,10 @@ def main(argv: list[str] | None = None) -> int:
     # 用全仓下限会把"扫得对"误判成"扫得少"（实测：linter 18 个文件 -> exit 2）。
     if _too_narrow(files, whole_repo=args.paths is None):
         return 2
+    baseline = args.baseline if args.baseline is not None else BASELINE
+    kept = _load_kept(baseline)
+    if kept:
+        return _compare_kept(findings, kept)
     return 1 if (args.strict and findings) else 0
 
 

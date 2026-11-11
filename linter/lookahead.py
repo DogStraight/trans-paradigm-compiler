@@ -32,7 +32,6 @@ from core.define import Token
 from core.utils import square_bracket_types
 from core.token_protocol import TRIVIA_TOKEN_TYPES, split_token_types
 
-from .checker import CTX_TOP
 
 # trivia token 集合（引擎 token 协议，单一事实源 core/token_protocol.py）
 _TRIVIA = TRIVIA_TOKEN_TYPES
@@ -330,7 +329,7 @@ class LookaheadTable:
         self.keyword_map: dict[str, list[dict]] = {}
         # B 类：标识符触发的候选（单一全局集合，不按上下文分组——上下文分组
         # 是冗余的：所有块内上下文共享同一组 B 类候选，靠 Level 1 前瞻/Level 2
-        # 试解析精确筛选，context 参数不参与筛选）
+        # 试解析精确筛选）
         self.ident_candidates: list[dict] = []
         self._build()
 
@@ -439,7 +438,7 @@ class LookaheadTable:
         if self._trace:
             print(f"[lint-trace] {msg}", file=sys.stderr)
 
-    def classify(self, tokens: list[Token], i: int, context: str = CTX_TOP) -> list[str] | None:
+    def classify(self, tokens: list[Token], i: int) -> list[str] | None:
         """统一两级消歧：A/B 类候选都走同一套管线。
 
         Level 1（变长前瞻）：首 token 相同逐 token 预视缩小候选，直到唯一。
@@ -450,8 +449,6 @@ class LookaheadTable:
             []         = 有语句起点特征但无任何已知规则匹配（拼错关键字/残缺
                          结构头）——discovery 据此报"未识别语句"，不静默吞错。
 
-        `context` 只用于 Level 2 的**内部收敛判定**，
-        不改变候选/返回值——用户可见面与传入值无关。
         """
         tok_type = tokens[i].type
         # 收集候选 entries（A 类 keyword_map / B 类 ident_candidates，结构一致）
@@ -472,7 +469,7 @@ class LookaheadTable:
             f"classify pos={i} tok={tok_type} entries={[e['name'] for e in entries]}"
         )
         result = self._resolve_ident(
-            tokens, i, entries, is_keyword=tok_type in self.keyword_map, context=context
+            tokens, i, entries, is_keyword=tok_type in self.keyword_map
         )
         self._trace_out(f"classify pos={i} tok={tok_type} -> {result}")
         return result
@@ -484,7 +481,6 @@ class LookaheadTable:
         entries: list[dict],
         *,
         is_keyword: bool = False,
-        context: str = CTX_TOP,
     ) -> list[str] | None:
         """Level 1：变长前瞻逐 token 淘汰候选，直到唯一且完整路径验证。
 
@@ -501,7 +497,7 @@ class LookaheadTable:
         # 淘汰，循环内提前决策）与循环后决策（按 seen/l2_only/path 存活状态
         # 分表）分离，替代原单函数 ~110 行的分支串。
         early = self._level1_scan(
-            tokens, i, n, limit, entries, l2_only, path_entries, seen, context
+            tokens, i, n, limit, entries, l2_only, path_entries, seen
         )
         if early is not None:
             return early  # 循环内已决策（fallback L2 / 唯一命中）
@@ -515,7 +511,6 @@ class LookaheadTable:
             path_entries,
             seen,
             is_keyword,
-            context,
         )
 
     def _level1_scan(
@@ -528,7 +523,6 @@ class LookaheadTable:
         l2_only: list[dict],
         path_entries: list[dict],
         seen: list[str],
-        context: str = CTX_TOP,
     ) -> list[str] | None:
         """Level 1 变长前瞻扫描：逐 token 淘汰候选。
 
@@ -554,7 +548,7 @@ class LookaheadTable:
                 + (f" dropped={dropped}" if dropped else "")
             )
             if not path_entries and not l2_only:
-                return self._fallback_l2(tokens, i, entries, limit, n, context)
+                return self._fallback_l2(tokens, i, entries, limit, n)
             if _is_unique_path_hit(path_entries, seen, l2_only):
                 self._trace_out(f"  L1 -> unique path hit {path_entries[0]['name']}")
                 return [path_entries[0]["name"]]
@@ -584,7 +578,6 @@ class LookaheadTable:
         entries: list[dict],
         limit: int,
         n: int,
-        context: str = CTX_TOP,
     ) -> list[str] | None:
         """Level 1 判别路径被挡 → Level 2 对原始候选完整 production 试解析。
 
@@ -594,7 +587,7 @@ class LookaheadTable:
         门禁基线）。
         """
         self._trace_out("  L1 -> all path candidates dropped, fallback L2")
-        return self._try_parse(tokens, i, entries, min(limit + 1, n), context=context)
+        return self._try_parse(tokens, i, entries, min(limit + 1, n))
 
     def _level1_decide(
         self,
@@ -607,7 +600,6 @@ class LookaheadTable:
         path_entries: list[dict],
         seen: list[str],
         is_keyword: bool,
-        context: str = CTX_TOP,
     ) -> list[str] | None:
         """Level 1 循环后决策（C2 重构）：按 seen/l2_only/path 存活状态分表。
 
@@ -628,7 +620,7 @@ class LookaheadTable:
                     "  L1 -> no discriminant token (keyword), L2 allow_partial"
                 )
                 return self._try_parse(
-                    tokens, i, entries, t_limit, allow_partial=True, context=context
+                    tokens, i, entries, t_limit, allow_partial=True
                 )
             self._trace_out("  L1 -> no discriminant token (bare id) -> None")
             return None
@@ -654,7 +646,6 @@ class LookaheadTable:
                 entries,
                 t_limit,
                 allow_partial=is_keyword,
-                context=context,
             )
         if len(path_entries) == 1:
             self._trace_out(
@@ -669,7 +660,7 @@ class LookaheadTable:
         # 是"有语句特征但结构残缺"，未识别诊断比精确诊断更贴近根因
         # （e09/e17 门禁基线）。仅 l2_only 分支（静态前缀无法判别的候选，
         # 如 wire 声明的 WireDecl/NetDecl 双候选）允许部分匹配报精确诊断。
-        return self._try_parse(tokens, i, path_entries, t_limit, context=context)
+        return self._try_parse(tokens, i, path_entries, t_limit)
 
     def _try_parse(
         self,
@@ -679,7 +670,6 @@ class LookaheadTable:
         limit: int,
         *,
         allow_partial: bool = False,
-        context: str = CTX_TOP,
     ) -> list[str] | None:
         """Level 2：对每个候选完整 production 试解析，取错误最少且消费最多者。
 

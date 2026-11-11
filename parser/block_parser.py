@@ -14,13 +14,11 @@ from ._constants import (
     NEWLINE_TOKEN_TYPE,
 )
 
-def parse_sentence(
-    self, context: ParseContext, block_end_token: str | None = None
-) -> Node | None:
+def parse_sentence(self, context: ParseContext) -> Node | None:
     """解析一条语句：根据当前 token 选择候选规则并尝试匹配。
 
-    `block_end_token`：所在块体的结束符（`parse_block_body` 传入）——raw 暂缓建树的
-    区间**不得**吞掉它（块结束符归父块）。
+    块结束符不属于语句区间：`parse_block_body` 在 `parse_sentence` 返回 None 时
+    直接收尾，不把结束符交给语句规则（raw 暂缓建树通道已随 T2c 退役）。
     """
     if not context.has_more_tokens():
         return None
@@ -229,7 +227,7 @@ def parse_block_body(
         if current.type == end_token:
             break
 
-        stmt_node = parse_sentence(self, context, end_token)
+        stmt_node = parse_sentence(self, context)
         if stmt_node is None:
             _stop_on_sentence_failure(self, context, end_token)
             break

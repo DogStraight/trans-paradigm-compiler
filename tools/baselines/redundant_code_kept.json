@@ -1,0 +1,45 @@
+{
+  "owner": "D10",
+  "items": {
+    "linter/checker.py::R2:validate": {
+      "reason": "Protocol 契约：`@runtime_checkable class Checker(Protocol)` 的 `validate(tokens)` 是接口签名，实现类必须同名同参；删掉形参会让协议与实现签名对不上（R2 假阳性，不是冗余）。",
+      "evidence": "linter/checker.py 的 Checker Protocol；各 checker 实现类签名兼容由 linter 测试覆盖",
+      "owner": "D10"
+    },
+    "linter/checkers/matcher.py::R2:_no_progress_ok": {
+      "reason": "两个形参是**门禁变异覆盖点的载体**：`tools/check_gate_efficacy.py` 的变异体把判据换回 `len(sub_errs) == before`；删参数等于丢掉这条门禁有效性证据。",
+      "evidence": "tools/check_gate_efficacy.py 中 `_no_progress_ok` 变异；`--only` 可单独复验 kill",
+      "owner": "D10"
+    },
+    "linter/grammar_slicer.py::R3:_collect_first_start_tokens": {
+      "reason": "不是纯转发：名字承担「强制起始」口径（`nullable=False`）。历史 bug 正是两个口径混名；删了这层会把 nullable=False 散回调用点。",
+      "evidence": "linter/lookahead.py 与 tests 按名 import；D10 FIRST 单实现后仍保留口径名",
+      "owner": "D10"
+    },
+    "parser/pratt_parser.py::R3:is_number": {
+      "reason": "公开谓词面：`install_token_classifier` 消费；`_check` 是实现，`is_number` 是 API（语言包/文档引用）。",
+      "evidence": "parser/pratt_parser.py 的 install_token_classifier；policy/check_hardcode.py 白名单引用同族 is_bool",
+      "owner": "D10"
+    },
+    "parser/pratt_parser.py::R3:is_string": {
+      "reason": "公开谓词面：`install_token_classifier` 消费；`_check` 是实现，`is_string` 是 API。",
+      "evidence": "parser/pratt_parser.py 的 install_token_classifier",
+      "owner": "D10"
+    },
+    "parser/pratt_parser.py::R3:is_bool": {
+      "reason": "公开谓词面：`install_token_classifier` 消费；且 `policy/check_hardcode.py` 的硬编码白名单直接引用 `is_bool`。",
+      "evidence": "parser/pratt_parser.py 的 install_token_classifier；policy/check_hardcode.py 白名单",
+      "owner": "D10"
+    },
+    "parser/pratt_parser.py::R3:is_identifier": {
+      "reason": "公开谓词面：`install_token_classifier` 消费；`_check` 是实现，`is_identifier` 是 API。",
+      "evidence": "parser/pratt_parser.py 的 install_token_classifier",
+      "owner": "D10"
+    },
+    "parser/pratt_parser.py::R3:is_operator": {
+      "reason": "公开谓词面：`install_token_classifier` 消费；`_check` 是实现，`is_operator` 是 API。",
+      "evidence": "parser/pratt_parser.py 的 install_token_classifier",
+      "owner": "D10"
+    }
+  }
+}

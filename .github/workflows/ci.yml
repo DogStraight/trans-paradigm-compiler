@@ -70,6 +70,12 @@ jobs:
           python tools/structural_score.py --compare
           python tools/feature_sites.py compare
 
+      - name: Redundant-code ratchet (D10 kept 基线)
+        # 逐部件冗余代码扫描：新候选 / 基线条目消失都算回归；基线非空而当前 0 条
+        # （探针被绕过）exit 2。裁定与理由见 tools/baselines/redundant_code_kept.json。
+        run: |
+          python tools/scan_redundant_code.py --strict
+
       - name: Cross-platform text I/O gate (D9 门禁)
         # --strict：输入面缺失（扫描根不存在）升为 gate；工具内含防假绿下限
         #   （扫描面 <100 个 .py 直接失败），空集合不许当绿。

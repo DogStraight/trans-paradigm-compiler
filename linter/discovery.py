@@ -212,7 +212,7 @@ class Discovery:
         # checker 需匹配跨行 body、边界难定而误报。
         if self._shape.is_prefix_pair(t.type, self._next_type(tokens, i + 1, end) or ""):
             return self._skip_balanced(tokens, i, end)
-        candidates = self._lookahead.classify(tokens, i, context)
+        candidates = self._lookahead.classify(tokens, i)
         # 块规则（有 block_end）：括号开启符同时是块开启符（scanner 把括号并入
         # block 起止符集），故此处**必须转块分支**注册块节点并递归 body。此前
         # 落进下面的"整体跳过括号区间"，块内语句既不解析也不诊断（静默漏检）；
@@ -250,7 +250,7 @@ class Discovery:
 
         块头 production 不匹配 → 未识别块诊断；块结束符缺失 → 只跳过关键字。        Returns: 下一个扫描位置（必定 > i）。
         """
-        candidates = self._lookahead.classify(tokens, i, context)
+        candidates = self._lookahead.classify(tokens, i)
         end_idx = i + 1
         if candidates is None:
             return end_idx
@@ -304,7 +304,7 @@ class Discovery:
         只注册区间不深入（表达式黑盒）。
         Returns: 下一个扫描位置（必定 > i）。
         """
-        candidates = self._lookahead.classify(tokens, i, context)
+        candidates = self._lookahead.classify(tokens, i)
         if candidates is None:
             return i + 1
         if not candidates:
