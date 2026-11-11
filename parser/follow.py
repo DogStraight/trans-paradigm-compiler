@@ -98,20 +98,6 @@ def _first_seeds(
     return seeds or None
 
 
-def _first_nullable(
-    rules: dict[str, GrammarRule],
-    operator_members: list[str] | None,
-    trees: dict[str, list[dict]] | None = None,
-) -> tuple[dict[str, set[str]], dict[str, bool]]:
-    """规则 FIRST + nullable 不动点（实现见 `core/first_set.py`，单一来源）。"""
-    names = set(rules)
-    if trees is None:
-        trees = _rule_trees_map(names, rules)
-    return rule_first_nullable(
-        _first_view(rules, trees), _first_seeds(names, rules, operator_members)
-    )
-
-
 def _propagate_seq(
     follows: dict[str, set[str]],
     elems: list[dict],
@@ -245,13 +231,21 @@ def _merge_follow(
 
 
 def compute_first_map(
-    rules: dict[str, GrammarRule], operator_members: list[str] | None = None
+    rules: dict[str, GrammarRule],
+    operator_members: list[str] | None = None,
+    trees: dict[str, list[dict]] | None = None,
 ) -> tuple[dict[str, set[str]], dict[str, bool]]:
     """规则 FIRST + nullable（引擎通用；供 try_plain_rule 早拒等）。
 
-    与 `compute_follows` 同一套不动点实现；语言知识仍来自规则声明/运算符分类。
+    实现见 `core/first_set.py`（单一来源）；语言知识仍来自规则声明/运算符分类。
+    `trees` 可传入已构建的 production 树（`compute_follows` 复用，避免重复解析）。
     """
-    return _first_nullable(rules, operator_members)
+    names = set(rules)
+    if trees is None:
+        trees = _rule_trees_map(names, rules)
+    return rule_first_nullable(
+        _first_view(rules, trees), _first_seeds(names, rules, operator_members)
+    )
 
 
 def compute_follows(
@@ -277,7 +271,7 @@ def compute_follows(
     _t = _trace_printer(trace)
     names = set(rules)
     trees = _rule_trees_map(names, rules)
-    first_map, nullable_map = _first_nullable(rules, operator_members, trees)
+    first_map, nullable_map = compute_first_map(rules, operator_members, trees)
 
     follows: dict[str, set[str]] = {n: set() for n in names}
 
