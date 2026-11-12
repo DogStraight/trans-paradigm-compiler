@@ -1,7 +1,8 @@
 # Gap — C 真实语料接入与误报基线（C 包真实语料门禁；已收口，证据见 CHANGELOG #52）
 
 - 状态：**已收口**（#43 调查 → #44/#45/#49/#51 前置 → #52 门禁落地）：7/7 文件 parse_ok、**0 诊断**；
-  基线/采集器/policy 门禁入库；残余 = 解析回溯性能（cJSON ~50s，门禁 ~110s；TODO 三）
+  基线/采集器/policy 门禁入库；残余 = 解析回溯性能（cJSON ~50s，门禁 ~110s）——
+  0.1.5 块 1 纳入基线量化；优化（atom FIRST 预过滤，须带宏/占位兜底）归 0.1.6 候选
 - 关联：`CHANGELOG.md` #52 收口记录；`tests/e2e/eval_diag_baseline.py`（verilog 先例）
 - 参照：verilog 真实语料 `tests/e2e/samples/real/`（`CREDITS.md` + 工程分组 + 基线 JSON + `tests/policy/test_diag_baseline.py`）
 
@@ -131,7 +132,7 @@ cJSON 不变（其函数体 `(cJSON*)` 强转是 G4 主体）。G1/G2/G3 无残�
   （T1 后真实语料零诊断）；增长即失败，减少放行。
 - **门禁**：`tests/policy/test_diag_baseline_c.py`——语料清单齐全 + **每文件 parse_ok**
   （结构层截断会置 False，不是 #43 期的"部分 AST 也 True"口径）+ 增长即失败 + `total` 自洽。
-  单次采集 ≈110s（cJSON 解析回溯成本，见 TODO 三；确定性由 `dict(sorted())` 采集面无集合序暴露）。
+  单次采集 ≈110s（cJSON 解析回溯成本，0.1.5 块 1 基线量化；确定性由 `dict(sorted())` 采集面无集合序暴露）。
 - **前置修复（#52 补）**：① include 子扫描继承**包含点宏环境**（`predefined=_active_defs`）
   ⇒ include guard 跨 include 可见，zlib `z_stream_s`/`gz_header_s` TAG001 二次定义消失；
   ② linter 表达式**注释回退**（pratt 遇宏体尾注释停在 comment/抛错时，用缓存滤注释视图

@@ -9,7 +9,7 @@
 ## 当前主线（0.1.5 刻度已立：性能与工具化收口）
 
 > 主线 2（0.1.4：工具化 + 高性能 12 块）已 **12/12 收口并发布**（tag `v0.1.4` 与
-> `dev` 已推送；PyPI 未上传）。**0.1.5 刻度 = 7 块（作者 2026-11-12 按调研立），
+> `dev` 已推送；PyPI 未上传）。**0.1.5 刻度 = 9 块（含 gap 纳入调查，作者 2026-11-12 立），
 > 见 `PROGRESS.md`**；依据 = `docs/gaps/gap-semantic-performance.md`（check 耗时
 > elaborate 主导、PyO3 暂缓）。本档只留中长期方向与 backlog，不复述状态与数字；
 > 发布按 `policy/release-checklist.md`。

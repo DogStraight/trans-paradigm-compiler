@@ -1,7 +1,7 @@
 # Gap — 语言知识渗透（引擎里实现了语言语义）
 
-- 状态：未闭环（词法/结构面已清；语义面已随精化基座重构迁出，**残余两项**在 `TODO.md`）
-- 关联：`TODO.md`（插件侧 AST-first 改写 / 引擎侧未声明的取值形态假设）；
+- 状态：未闭环（词法/结构面已清；语义面已随精化基座重构迁出，**残余两项**见下与 ADR-0021 #7）
+- 关联：`ROADMAP.md` P3 / 0.1.5 块 2（插件侧 AST-first 改写顺带；引擎侧取值形态假设留框架级）；
   `core/component_protocol.md`（精化器能力位与设计原则）
 - 参照：`docs/references.md` 语言工作台条目（Spoofax / Xtext / MPS / rascal）
 
@@ -77,9 +77,10 @@
 
 ## 关联条目
 
-- `TODO.md` 残余两项：**插件侧 AST-first 改写**（`_graph.py` 正则判"简单信号名"、
-  `render_subtree` 渲染后字符串比较）、**引擎侧未声明的取值形态假设**（`[structure.fields]`
-  只声明字段名，引擎仍假设取值在 `Node.content`）
+- 残余两项：**插件侧 AST-first 改写**（`_graph.py` 正则判"简单信号名"、`render_subtree`
+  渲染后字符串比较）→ **0.1.5 块 2 顺带**（ADR-0021 #7 触发 = 该子系统再动；判据②/③）；
+  **引擎侧未声明的取值形态假设**（`[structure.fields]` 只声明字段名，引擎仍假设取值在
+  `Node.content`）→ 框架级，0.1.6+ 再议
 - `core/component_protocol.md` §1b（精化器能力位）+ `analyzer/elaboration/README.md`（引擎侧职责）
 - 门禁/探针：`policy/check_hardcode.py`、`tools/config_sites.py check`、
   `tools/lang_penetration.py`、`tools/min_pack_probe.py`（基线 `tools/baselines/min_pack_baseline.json`）

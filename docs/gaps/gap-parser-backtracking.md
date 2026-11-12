@@ -1,7 +1,7 @@
 # Gap — parser 回溯成本与 atom 位置级 memo（主线 2 块 2）
 
 - 状态：**块 2 收口（#68/#69，2026-10-23）**：atom 位置 memo + 规则级 FIRST 早拒；cJSON **57.6s → 2.98s（median）**、C 语料门禁 **20.3–23.0s**；A/B 0/144、全量 4377/14、7/7 0 诊断、pyright 0。
-- 关联：`PROGRESS.md` 块 2；`TODO.md`「C 真实语料解析回溯成本」；`tests/e2e/eval_diag_baseline_c.py`
+- 关联：`PROGRESS.md` 块 2；0.1.5 块 1（C 语料解析耗时基线）/ `gap-semantic-performance.md`；`tests/e2e/eval_diag_baseline_c.py`
 - 参照：`docs/gaps/gap-parser-linter-approximation.md`（parser 无错误恢复为刻意接受）；linter packrat 记忆化先例
 
 ## 现状实测（当前 HEAD）
