@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 > 未发布变更（下一版）。
 
 ### Added
+- **0.1.5 刻度（7 块，2026-11-12 按调研立）**：1 性能基线 + 常驻测试面；2 语义层优化①
+  （端口源单遍索引）；3 语义层优化②（渲染 memo + 树遍历）；4 增量 check 切片 0
+  （warm + 解析层增量 + 全量语义）；5 C 注释归属 2 项；6 renderer layout schema 校验；
+  7 0.1.5 收口。判据（"改前红"）与止损逐块落
+  `docs/gaps/gap-semantic-performance.md`「0.1.5 刻度映射」；`PROGRESS.md` 换刻度表、
+  `ROADMAP.md` 当前主线同步；无代码变更。
 - **0.1.5 调研（测量轮，2026-11-12）**：实测 check 耗时结构——tv80（22,604 tokens）parse
   22.6% / elaborate **60.6%** / analyze 9.1%，合计 30.25s；picorv32 parse 39.0% /
   elaborate 42.0% / analyze 19.1%，合计 14.15s；format（tv80 CLI 14.59s）中 parse 约

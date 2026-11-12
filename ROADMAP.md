@@ -6,12 +6,13 @@
 > `tests/policy/test_planning_doc_budget.py` 守。
 > P 编号沿用拆分前的原始编号（与 git 历史、交叉引用对应），不重新编号。
 
-## 当前主线（主线 2 已收口 → 0.1.5 待排期）
+## 当前主线（0.1.5 刻度已立：性能与工具化收口）
 
-> 主线 2（0.1.4：工具化 + 高性能 12 块，作者 2026-10-23 定调）已 12/12 收口并处于
-> **发布前状态**（版本增量见 `CHANGELOG.md`「版本增量」；刻度/收口状态见
-> `PROGRESS.md`）。下一主线（0.1.5）候选 = 本档 backlog（P3.4/P3.5、P2 工程化项），
-> 待作者排期；发布按 `policy/release-checklist.md`，尚未 tag/推送/上传。
+> 主线 2（0.1.4：工具化 + 高性能 12 块）已 **12/12 收口并发布**（tag `v0.1.4` 与
+> `dev` 已推送；PyPI 未上传）。**0.1.5 刻度 = 7 块（作者 2026-11-12 按调研立），
+> 见 `PROGRESS.md`**；依据 = `docs/gaps/gap-semantic-performance.md`（check 耗时
+> elaborate 主导、PyO3 暂缓）。本档只留中长期方向与 backlog，不复述状态与数字；
+> 发布按 `policy/release-checklist.md`。
 >
 > **刻度/收口状态只看 `PROGRESS.md`；变更与逐轮证据只看 `CHANGELOG.md`。**
 > 本档只留中长期方向与 backlog，不复述状态与数字。
