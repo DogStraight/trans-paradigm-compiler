@@ -70,6 +70,13 @@ format（tv80，CLI 含进程启动）：**14.59s** ≈ 宏展开 0.82 + 词法 
 - 与增量关系：编辑路径已有解析层增量（tv80 语句级 67x），PyO3 的增量收益主要落在**冷启动
   全量** format/check，不替代 P3.4。
 
+## 0.1.5 块 1 落地（性能基线）
+
+候选 5 已实施：`tests/perf/run_perf.py` + `tools/baselines/perf_baseline.json`（4 场景、
+校准归一化 ratio、CV≤10% 才可录基线、场景增删/劣化 >10% 红、基线缺失 exit 2）；
+nightly 入口 `--compare`。口径/命令见 `tests/perf/README.md`；本档 2026-11-12 的实测数字
+已作为初始基线落盘（机器元信息在基线 JSON 内）。
+
 ## 不做 / 否掉
 
 - 不做"为 PyO3 而 PyO3"：无实测瓶颈点就重写 = 把风险换成维护成本。

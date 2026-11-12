@@ -32,6 +32,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `gap-semantic-performance`、C 语料门禁脚本的 `Doc:` 反向引用。
 
 ### Added
+- **0.1.5 块 1（性能基线 + 常驻测试面）**：新增 `tests/perf/run_perf.py`（4 场景：
+  `tv80_check` / `picorv32_check` / `tv80_format` / `crc32_check`；每场景 1 预热 + 3 取中位，
+  以**校准微基准归一化的 ratio** 立基线 ⇒ 跨机器可比）、`tools/baselines/perf_baseline.json`
+  （machine/python 元信息 + tolerance 10% + CV 上限 10%）、`tests/perf/README.md`、
+  `tests/policy/test_perf_baseline.py`；nightly 增 `--compare` 入口（PR CI 不加，避免计时噪声）。
+  实测基线（本机，2026-11-12）：`tv80_check` 28.11s / ratio 96.94 / CV 0.01；
+  `picorv32_check` 14.11s / 48.66 / 0.01；`tv80_format` 9.95s / 34.32 / 0.04；
+  `crc32_check` 3.33s / 11.50 / 0.02；`--compare` **连续两次 PASS**（变化 ≤5.5%）。
+  校准口径修正（首次录制暴露）：逐场景重测校准会把"循环冷/热"混进 ratio（同轮场景 ratio
+  漂移 30–50%）；改为**整轮只测一次**（2 次预热 + 5 次中位）后，跨 run 变化 ≤5.5%。
+  判据：场景增删 / ratio 劣化 >10% ⇒ exit 1；基线缺失/结构不合法 ⇒ exit 2；`--save` 时
+  CV >10% 拒绝录制（先稳定再立基线）。
 - **0.1.5 刻度（9 块，2026-11-12 按调研 + gap 纳入调查立）**：1 性能基线 + 常驻测试面
   （含 C 真实语料解析耗时）；2 语义层优化①（端口源单遍索引 + L1 残余①顺带）；
   3 语义层优化②（渲染 memo + 树遍历）；4 增量 check 切片 0（warm+解析增量+全量语义）；

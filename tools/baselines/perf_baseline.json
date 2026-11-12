@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "recorded_at": "2026-11-12T11:48:59+00:00",
+ "tolerance": 0.1,
+ "cv_limit": 0.1,
+ "reps": 3,
+ "calibration_iters": 3000000,
+ "machine": {
+  "python": "3.14.5",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "cpu": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel"
+ },
+ "scenarios": {
+  "tv80_check": {
+   "seconds": 28.113,
+   "ratio": 96.94,
+   "cv": 0.006,
+   "source_bytes": 169628
+  },
+  "picorv32_check": {
+   "seconds": 14.112,
+   "ratio": 48.66,
+   "cv": 0.006,
+   "source_bytes": 94663
+  },
+  "tv80_format": {
+   "seconds": 9.953,
+   "ratio": 34.32,
+   "cv": 0.038,
+   "source_bytes": 169628
+  },
+  "crc32_check": {
+   "seconds": 3.334,
+   "ratio": 11.5,
+   "cv": 0.023,
+   "source_bytes": 29735
+  }
+ }
+}
