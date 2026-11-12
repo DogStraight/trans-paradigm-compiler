@@ -84,7 +84,8 @@
 
 > 动机：验证是"验证附着于配置驱动语言定义"的差异化能力，快速验证层是"模型写配置 →
 > 自动验证闭环"的前提（见 `tests/fuzz/README.md`）。现状与实测口径见
-> `docs/gaps/gap-verification-engineering.md` 与 CHANGELOG 块 11（本档不复述数字）。
+> `docs/gaps/gap-verification-engineering.md` 与 CHANGELOG 块 11（本档不复述数字）；
+> 语义层耗时结构见 `docs/gaps/gap-semantic-performance.md`（elaborate 主导）。
 > 下一热点 = 宏 splice 的"自述判据"渲染；packrat **失败**记忆化已回退（失败尝试也递增
 > `sibling_counter` ⇒ path 编号变，需先重构计数语义）。
 
@@ -140,6 +141,10 @@
 
 ### P3.4 增量 check（语义失效传播）
 
+> **0.1.5 调研（2026-11-12）**：先测「warm + 解析层增量 + **全量**语义」上限——实测
+> parse 仅占 check 22.6%（tv80）/ 39%（picorv32），elaborate 占 61%/42% ⇒ 真正瓶颈在语义层；
+> 先做纯 Python 构建优化（`docs/gaps/gap-semantic-performance.md`），语义失效模型仍 v0.2 核心。
+>
 > 用户需求：check 也需**激活等待机制**——只扫激活区域与被涉及的链上文件（5 万行实测
 > check 45s；增量是"编辑→亚秒反馈"的必经路径）。底座非从零：elaboration 的 module_index /
 > connections / signal_graph 就是失效传播的图基础。三类链（定义/实例化/信号）→ 失效集 =
@@ -162,6 +167,9 @@
 > `docs/references.md`）。**形态 = PyO3 热路径下沉，不是全量重写**：Python 壳保留（配置
 > 驱动/插件/可模型性是差异化资产），Rust 下沉**引擎通用算法**（lexer 扫描 / 解析器骨架 /
 > doc 布局）——语言知识仍在 TOML/插件层，`check_hardcode` 硬约束不破。
+> **0.1.5 调研结论（2026-11-12）**：PyO3 **暂缓**——format 路径 parse 占 ~86%（潜在收益大），
+> 但 check 路径 parse 仅 23–39%，且纯 Python 算法收益尚未吃（见
+> `docs/gaps/gap-semantic-performance.md` 候选 1–3）；触发 = 优化后 format 仍 ≥2x 目标。
 > 前置：解析器接口稳定（P3.1 已交付）+ 算法层收益先吃干净（P3.4 是零语言风险收益，
 > 顺序不能反）。
 

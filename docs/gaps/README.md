@@ -64,6 +64,7 @@
 | `gap-language-pack-scope.md` | 语言包范围与 yaml 边界（规模/SV/增强语法）+ C 包接受域现状 / 渲染保真现状 / `enabled` 档位边界 |
 | `gap-language-penetration.md` | 语言知识渗透（引擎里实现了语言语义；词法/结构面实测快照 + 三条判据） |
 | `gap-semantic-elaboration-boundaries.md` | 语义/插件契约（elaboration/单例/inject） |
+| `gap-semantic-performance.md` | 语义层性能（check 耗时结构 2026-11-12 实测：elaborate 42–61% / parse 23–39%；端口源 per-port 全树扫描、41k 次渲染、树遍历热点；0.1.5 候选方向与 PyO3 暂缓判据） |
 | `gap-c-semantic-base.md` | C 语义基座（符号表/作用域/声明顺序：`(myint)x` 截断丢内容、`myint *b;` 不可分、`sizeof` 宽进、引擎语义钩子空转；落点三案 + parser 接口四选一 + 待拍板 8 条） |
 | `gap-c-preprocessor-scope.md` | C 预处理器范围基线（标准宏与指令全集三表 + 扩展排除表 + tpc 承载面与 4 处机制级缺口 + 首片 A/B；作者 2026-10-17 定"只考虑 C 标准中的宏"） |
 | `gap-preprocessor-macro-timeline.md` | 预处理器宏展开时序（T1）：宏定义前/`#undef`/include 内定义顺序；两复现形态、事件表/终表机制缺口、A1 host 时序 + A2 include 预展开方案与判据/止损 |

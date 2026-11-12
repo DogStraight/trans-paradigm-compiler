@@ -21,6 +21,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 > 未发布变更（下一版）。
 
+### Added
+- **0.1.5 调研（测量轮，2026-11-12）**：实测 check 耗时结构——tv80（22,604 tokens）parse
+  22.6% / elaborate **60.6%** / analyze 9.1%，合计 30.25s；picorv32 parse 39.0% /
+  elaborate 42.0% / analyze 19.1%，合计 14.15s；format（tv80 CLI 14.59s）中 parse 约
+  **86%**。热点：端口驱动源 per-port 全树扫描（`_port_src_from_procs` 60 次调用 /
+  47.4s profiled）、41,288 次子树渲染（34.1s cum）、`iter_children` 3.3M 次生成器调用。
+  结论落档 `docs/gaps/gap-semantic-performance.md`（0.1.5 候选 1–5 + 每条判据/止损 +
+  PyO3 暂缓判据）；ROADMAP P2.3/P3.4/P3.5 同步指针。无代码变更；0.1.5 范围待作者拍板。
+
 ## [0.1.4] - 2026-11-12
 
 > **合并发布说明**：本版 = 两个未发布主线的合并——0.1.3（刻度 1 / 主线 1：C 包框架
