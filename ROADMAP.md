@@ -54,8 +54,8 @@
 > 标准的语法，而非一次性做全量（`token_ext` / `directive_handlers` / `[grammar] files`
 > + `inject` + `requires` 链，零引擎新机制）。已交付面（结构/档位/边界）见
 > `grammar/c/README.md`，边界档案见 `docs/gaps/gap-language-pack-scope.md`。
-> 阶段 3/4/5 与切片 1b 的交付证据在 CHANGELOG 与 gap 档（`gap-c-real-corpus.md` 已收口、
-> `gap-c-semantic-base.md` 残片见 TODO），本档只留**未完成项**。
+> 阶段 3/4/5 与切片 1b 的交付证据在 CHANGELOG 与 `grammar/c/README.md`（C 真实语料门禁
+> 已收口，见 CHANGELOG #52），本档只留**未完成项**。
 
 - [ ] **注入机制 ③/④**（作者给的**分型**，不是实现清单；缺哪类等真需求）：
       · **③ 具体路径修改**——只有软路径：`inject_replace_rule` 是 production 的字符串子串
@@ -88,7 +88,9 @@
 > `docs/gaps/gap-verification-engineering.md` 与 CHANGELOG 块 11（本档不复述数字）；
 > 语义层耗时结构见 `docs/gaps/gap-semantic-performance.md`（elaborate 主导）。
 > 下一热点 = 宏 splice 的"自述判据"渲染；packrat **失败**记忆化已回退（失败尝试也递增
-> `sibling_counter` ⇒ path 编号变，需先重构计数语义）。
+> `sibling_counter` ⇒ path 编号变，需先重构计数语义）。**已否**：atom FIRST 预过滤
+> （verilog 真实语料回归）、全量 packrat（parser 写状态）——只做 atom 局部 memo；证据在
+> CHANGELOG 块 2（原 gap 档随收口删除）。
 
 - [ ] 失败记忆化前置：重构 `sibling_counter` 计数语义（让失败尝试不改变 path 编号）
 - [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）

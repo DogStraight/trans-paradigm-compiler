@@ -1,6 +1,6 @@
 """tests/e2e/eval_diag_baseline_c.py — C 真实语料诊断计数基线（判据 5 门禁采集器）。
 
-Doc: docs/gaps/gap-c-real-corpus.md（门禁方案/判据） / tests/policy/test_diag_baseline_c.py
+Doc: docs/gaps/gap-language-pack-scope.md（C 包接受域/门禁清单） / tests/policy/test_diag_baseline_c.py
 
 语料 = `tests/e2e/samples/real_c_ref/ref`（cJSON 1.7.19 + zlib 1.3.2 核心 6 文件；
 归属/许可见同目录 `CREDITS.md`），include 面 = `ref` + `stubs` 最小系统头。

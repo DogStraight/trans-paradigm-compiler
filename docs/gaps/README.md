@@ -58,21 +58,17 @@
 |------|------|
 | `gap-tpc-check-external-checker.md` | tpc-check 外部 checker 插件协议（接入 veryl/verible/slang + 自管场景；ROADMAP P2.6） |
 | `gap-comment-string-span-consistency.md` | 注释/字符串跨度判定两套实现（词法捕获器 A 侧：块标量折叠/触发谓词未闭环；预处理器行级状态机 B 侧：字符串内定界符误判、注释后同行指令不识别，接受） |
-| `gap-parser-backtracking.md` | parser 回溯成本与 atom 位置级 memo（块 2 收口：cJSON 57.6s→2.98s；atom memo + 规则级 FIRST 早拒） |
 | `gap-parser-linter-approximation.md` | parser/linter 错误处理近似（无恢复 + 启发式） |
 | `gap-formatter-line-behavior.md` | formatter 行行为边界（宽度折行/保留行/对齐/幂等） |
 | `gap-language-pack-scope.md` | 语言包范围与 yaml 边界（规模/SV/增强语法）+ C 包接受域现状 / 渲染保真现状 / `enabled` 档位边界 |
 | `gap-language-penetration.md` | 语言知识渗透（引擎里实现了语言语义；词法/结构面实测快照 + 三条判据） |
 | `gap-semantic-elaboration-boundaries.md` | 语义/插件契约（elaboration/单例/inject） |
 | `gap-semantic-performance.md` | 语义层性能（check 耗时结构 2026-11-12 实测：elaborate 42–61% / parse 23–39%；端口源 per-port 全树扫描、41k 次渲染、树遍历热点；0.1.5 候选方向与 PyO3 暂缓判据） |
-| `gap-c-semantic-base.md` | C 语义基座（符号表/作用域/声明顺序：`(myint)x` 截断丢内容、`myint *b;` 不可分、`sizeof` 宽进、引擎语义钩子空转；落点三案 + parser 接口四选一 + 待拍板 8 条） |
-| `gap-c-preprocessor-scope.md` | C 预处理器范围基线（标准宏与指令全集三表 + 扩展排除表 + tpc 承载面与 4 处机制级缺口 + 首片 A/B；作者 2026-10-17 定"只考虑 C 标准中的宏"） |
-| `gap-preprocessor-macro-timeline.md` | 预处理器宏展开时序（T1）：宏定义前/`#undef`/include 内定义顺序；两复现形态、事件表/终表机制缺口、A1 host 时序 + A2 include 预展开方案与判据/止损 |
-| `gap-c-typedef-cast.md` | C typedef 名强转（G4）：解析前符号判定的调查与方案（最小矩阵/真实语料实测、M1/站点/符号来源三类缺口、B=parser 内符号表推荐 / A=raw 过渡 / C·D 否；待作者拍板引擎契约扩展） |
-| `gap-c-real-corpus.md` | C 真实语料接入与误报基线（#43 调查轮：候选语料/许可、harness 前置、实测误报面、两类 linter FP 最小复现、方案 A/B/C 与门禁判据草案） |
+| `gap-c-semantic-base.md` | C 语义基座（**已收口**：parser `_ScopeStack` + analyze 期 `c_symbols`；历史/决策见 ADR-0024 与 CHANGELOG #49–#57） |
+| `gap-c-preprocessor-scope.md` | C 预处理器范围基线（A1/A2 已交付；本档只留现行范围裁定 + 扩展排除 + 4 处机制级边界） |
 | `gap-verification-engineering.md` | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
-| `gap-engine-abstraction-audit.md` | 引擎能力面抽象审查（能力×语言矩阵 + 第二语言复用判据；刻度 7→9 完成后执行，日常循环顺带补行） |
-| `gap-fragment-mode.md` | 片段模式 P0（记号模式 / island rewrite 原型：显式记号、bytes identity、死分支/假记号 fail-closed；P1 声明面/能力位待批准） |
+| `gap-engine-abstraction-audit.md` | 引擎能力面审查台账（T3 完成：能力×语言矩阵 + 每条证据；ADR-0022 指定台账） |
+| `gap-fragment-mode.md` | 片段模式（P0/P1 已落地；本档现为**契约/退出判据**，过程历史见 CHANGELOG/git log） |
 | `gap-unit-graph.md` | unit graph 内置化（块 5 已实现：多入口多根森林 + `check` 多入参 + `--json` 图出口；边 kind = 语言包词汇（`[[unit_graph.edges]]`，能力 `unit_graph.edges.v2`）；P2 自动推 roots 留档） |
 | `gap-incremental-parse.md` | 增量解析（块 7 P1 最小前置：同文件**单顶层单元**重解析 + 保守回退 + 编辑器接口；跨文件语义传播/常驻 watch 归 v0.2 P3.4） |
 | `gap-feature-scatter.md` | 功能散点与上游契约耦合（一处功能 N 处登记；P-A/P-B/P-C + 步 2 收敛目标与接受边界） |

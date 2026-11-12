@@ -21,6 +21,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 > 未发布变更（下一版）。
 
+### Changed
+- **gap 档收口清理（2026-11-12）**：按"只记当前仍成立的结论"删除 4 个已收口且已被替代的
+  档：`gap-c-typedef-cast`（#49 已实施，决策在 ADR-0024）、`gap-preprocessor-macro-timeline`
+  （#51/#52 已收口，结果在 CHANGELOG）、`gap-parser-backtracking`（块 2 收口，已否结论
+  atom FIRST 预过滤/全量 packrat 移入 ROADMAP P2.3）、`gap-c-real-corpus`（门禁已收口，
+  判据在 `tests/policy/test_diag_baseline_c.py`）。保留 4 个"已收口但仍是现状边界/台账/契约"
+  的档（`gap-c-semantic-base`、`gap-c-preprocessor-scope`、`gap-fragment-mode`、
+  `gap-engine-abstraction-audit`）并更新登记描述；同步 `docs/gaps/README.md`、ROADMAP、
+  `gap-semantic-performance`、C 语料门禁脚本的 `Doc:` 反向引用。
+
 ### Added
 - **0.1.5 刻度（9 块，2026-11-12 按调研 + gap 纳入调查立）**：1 性能基线 + 常驻测试面
   （含 C 真实语料解析耗时）；2 语义层优化①（端口源单遍索引 + L1 残余①顺带）；

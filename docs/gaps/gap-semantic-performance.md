@@ -90,7 +90,7 @@ format（tv80，CLI 含进程启动）：**14.59s** ≈ 宏展开 0.82 + 词法 
 | `gap-formatter-line-behavior` | 同部件（renderer） | 只纳入相邻的 **layout schema**（块 6）；空档 7/8（注释邻接 / framework 级判据）**不纳入** |
 | `gap-tpc-check-external-checker` | 近目标（工具化） | **块 7**（gap 档协议已备；P2.6） |
 | `gap-verification-engineering` | 同目标（验证/吞吐基础设施） | 项 1（fuzz 接受域统计对拍）与项 7（覆盖薄区 transform/renderer）进**块 8**；项 2–4 接受不改 |
-| `gap-parser-backtracking` / `gap-c-real-corpus`（解析回溯余量） | 近目标（性能） | 块 1 把 **C 真实语料解析耗时**纳入基线；优化（atom FIRST 预过滤，须带宏/占位兜底）**不纳入本期**（0.1.6 候选） |
+| 解析回溯余量（原 `gap-parser-backtracking` / `gap-c-real-corpus` 已按收口删除） | 近目标（性能） | 块 1 把 **C 真实语料解析耗时**纳入基线；优化（atom FIRST 预过滤，须带宏/占位兜底）**不纳入本期**（0.1.6 候选；证据 CHANGELOG 块 2 / #52） |
 | `gap-semantic-elaboration-boundaries` | 同部件（elaboration） | 仅作块 2/3 的**边界约束**（Elaboration 深度/宽度/CDC 为接受范围，不纳入） |
 | 其余（`gap-c-*` 已收口、`gap-feature-scatter`、`gap-engine-abstraction-audit`、`gap-fragment-mode`、本档本体） | — | 不纳入（已收口 / 非本期目标） |
 

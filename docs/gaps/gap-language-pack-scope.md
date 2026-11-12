@@ -189,3 +189,5 @@ render → 与源比对，七条：
 - 门禁：`tools/c_acceptance.py`、`tools/render_coverage.py`、
   `tests/languages/c/test_c_render_fidelity.py`、`tests/languages/c/test_c_standard_tiers.py`
 - `docs/references.md`「C 语言文法参照」（外部参照源）
+
+- C 真实语料门禁：`tests/policy/test_diag_baseline_c.py`（已收口，证据 CHANGELOG #52）

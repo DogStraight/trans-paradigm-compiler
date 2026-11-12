@@ -197,3 +197,4 @@ hideset 按 **Prosser 交集**口径（名字 token ∩ 实参/闭括号；替�
 - 接受面：`tools/c_acceptance.py`（**49 条 / 接受 49 / 空洞 0**；两条预处理用例按"被消费且无异常"接受，**不代表已真实实现**——口径见 ⑭）
 - 门禁：`tests/engine/preprocessor/`（预处理器面）、`tests/languages/c/`（C 包）
 - 相邻档：`docs/gaps/gap-c-semantic-base.md`（C 语义基座）、`docs/gaps/gap-language-pack-scope.md`（C 包接受域/档位）
+- 已否：第二套宏展开算法（hideset 重扫描仍是唯一实现；原 T1 宏时序档已按收口删除，证据见 CHANGELOG #51）

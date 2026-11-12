@@ -1,6 +1,6 @@
 """C 真实语料诊断计数基线门禁 —— 误报面不得无声增长（退出判据 5）。
 
-Doc: docs/gaps/gap-c-real-corpus.md（门禁方案 A/判据 1–7）、tests/e2e/eval_diag_baseline_c.py
+Doc: docs/gaps/gap-language-pack-scope.md（C 包接受域/门禁清单）、tests/e2e/eval_diag_baseline_c.py
 
 语料 = `tests/e2e/samples/real_c_ref/`（cJSON 1.7.19 + zlib 1.3.2 核心文件；
 归属/许可见 CREDITS.md）。口径与 verilog 先例同构：**只许减不许增**。
