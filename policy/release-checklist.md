@@ -1,12 +1,14 @@
 # 发布 SOP（release checklist）
 
-> 每次发布走一遍。0.1.0 = Alpha（classifier "3 - Alpha"）；发布定义见 TODO P2.2。
+> 每次发布走一遍。0.1.0 = Alpha（classifier "3 - Alpha"）；版本规划与增量记录见
+> `CHANGELOG.md`「版本增量」节（版本串 = 最近一次发布/正在切的版本）。
 > 发布基线 = "主包纯净可综合"（可综合子集进主包 + 仿真进 plugins/sim）。
 
 ## 0. 发布前置（git 侧）
 
 - [ ] 工作区干净：`git status --short` 无未提交/未跟踪改动（临时脚本除外）
-- [ ] CHANGELOG 已归拢：`[0.1.0] - YYYY-MM-DD` 段含首版条目（首版后：Unreleased → 新版本段）
+- [ ] CHANGELOG 已归拢：`## 版本增量` 表 + 待发布版本段（发布日把 `- 待发布（YYYY-MM-DD）`
+      改成发布日期）；**未发布的中间版本不单开段**（例：0.1.3 未单独发布，增量并入 0.1.4）
 - [ ] TODO 发布收尾项全部勾选（P2.2 硬缺口）
 - [ ] `docs/gaps/` 未闭环项复核：是否仍成立 / 已被实现——**已实现直接删条目**
       （不写"已修复"注记）；方案细节与代码不符的删细节只留方向
@@ -24,7 +26,7 @@ python -m pytest tests/ -q --cov --cov-report=term # 覆盖率 ≥ fail_under（
 > `python tools/ci_rehearsal.py`。结论三态 **PASS / FAIL / INCOMPLETE**——
 > **SKIP（本机缺 pyright 等）与「一步都没跑」都不算绿**，整体判 INCOMPLETE 并 exit 2。
 > ⚠ CI 的触发是 `push.branches` + `pull_request`，**推 tag 不触发 CI**；长期不推送期间
-> 门禁等于没跑（已实测累积 4 类红，见 `TODO.md`「测试基础设施」）——**打标前必须先跑本工具**。
+> 门禁等于没跑（已实测累积 4 类红）——**打标前必须先跑本工具**。
 
 ## 2. 版本号核对
 
@@ -95,6 +97,7 @@ python -m twine upload dist/*   # 需 PyPI 凭证（__token__）
 
 ## 8. 发布后
 
-- [ ] CHANGELOG 顶部开新 `## [Unreleased]` 段
+- [ ] `CHANGELOG.md`「版本增量」表：该版状态改为"已发布（YYYY-MM-DD）"；顶部开新
+      `## [Unreleased]` 段（下次发布切段）
 - [ ] 更新 docs/README.md / MODEL_INDEX（若新增知识单元）
 - [ ] 通知/记录（CHANGELOG 首版条目已含基线：pytest 数 / e2e 数 / lint recall）

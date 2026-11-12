@@ -1,7 +1,7 @@
 # Gap — 验证与工程边界（sample-driven / 吞吐 / IDE / 增量 / hash / 覆盖）
 
 - 状态：接受（技术权衡/门禁事实）+ 已跟踪（incremental → ROADMAP P3.x）
-- 关联：ROADMAP P2.3 / P3.4（P3.2 解析层最小面已交付，见 `gap-incremental-parse.md`；P3.1 span 绑定已实施——0.1.2 阶段 0）
+- 关联：ROADMAP P2.3 / P3.4（P3.2 解析层最小面已交付，见 `gap-incremental-parse.md`；P3.1 span 绑定已实施——阶段 0（早期））
 - 参照：编译器的增量编译/LSP 服务模型
 
 ## 边界是什么
@@ -21,7 +21,7 @@
 5. **增量解析：解析层已交付最小面**（0.1.4 块 7）：同文件片段级增量重解析
    （`parser/incremental.py`；tv80 语句级 67x）。**边界**：只做解析层、单文件、符号门控语言
    回退、无持久化/常驻 watch——见 `gap-incremental-parse.md`「诚实边界」。**增量 check
-   （语义失效传播）** 仍是 ROADMAP P3.4（v0.2 core）；span 绑定（P3.1）已实施（0.1.2 阶段 0）。
+   （语义失效传播）** 仍是 ROADMAP P3.4（v0.2 core）；span 绑定（P3.1）已实施（阶段 0（早期））。
 6. **Transform 包装实例名带 hash 后缀**（摩擦）：未显式命名时 `u_spi_master_acb99d` 由
    `md5(模块名 + 接口 + 类型 + role)[:6]` 生成（`grammar/verilog/plugins/typed_ports/_transform.py`；
    impl 绑定可给显式实例名覆盖）——同输入**可复现**（确定性派生名），非"不稳定"；摩擦点：

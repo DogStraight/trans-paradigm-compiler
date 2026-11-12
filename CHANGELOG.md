@@ -3,7 +3,25 @@
 All notable changes are listed in reverse chronological order.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## 版本增量
+
+> **本仓版本增量的唯一记录处**（逐条变更仍见下方各版本段；版本号本身 =
+> `pyproject.toml` + `core/__init__.py`，`tests/engine/core/test_version.py` 锁定）。
+> 发布顺序：0.1.0 → 0.1.1 → 0.1.2 → **0.1.3（未单独发布）** → **0.1.4**。
+
+| 版本 | 主线 | 状态 | 增量指向 |
+|------|------|------|----------|
+| 0.1.4 | 刻度 2 / 主线 2：工具化 + 高性能（12 块） | **待发布**（2026-11-12 切段） | 下方 `[0.1.4]` 段 |
+| 0.1.3 | 刻度 1 / 主线 1：C 包框架缺口 9/9 + T1–T3 | **未单独发布**，增量全部并入 0.1.4 | `[0.1.4]` 段开头说明 |
+| 0.1.2 | 发布（2026-10-25） | 已发布 | `[0.1.2]` 段 |
+| 0.1.1 | 发布（2026-09-09） | 已发布 | `[0.1.1]` 段 |
+| 0.1.0 | Alpha（2026-08-22） | 已发布 | `[0.1.0]` 段 |
+
+## [0.1.4] - 待发布（2026-11-12）
+
+> **合并发布说明**：本版 = 两个未发布主线的合并——0.1.3（刻度 1 / 主线 1：C 包框架
+> 缺口 9/9 + T1–T3）**从未单独发布**，其增量全部并入本版；0.1.4（刻度 2 / 主线 2：
+> 工具化 + 高性能 12 块）为本版正文。版本增量索引见上节「版本增量」。
 
 ### Added
 - **EDGE_KINDS 改语言侧声明面（审计 D，作者裁定 2026-11-05）**：kind 词汇归语言包——
@@ -232,6 +250,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   新增 0/变大 0；`check_hardcode --strict-*` 绿。
 
 ### Changed
+- **发布前收口（2026-11-12）：0.1.3（未单独发布）并入 0.1.4**：刻度 1 / 主线 1（C 包
+  框架缺口 9/9 + T1–T3）从未单独发布，其增量与刻度 2 / 主线 2（12 块工具化 + 高性能）
+  合并为 0.1.4。`CHANGELOG.md` 顶部新增「版本增量」唯一索引（版本 → 主线 → 状态 → 段指向），
+  `[Unreleased]` 切为 `[0.1.4] - 待发布（2026-11-12）`；版本串 `0.1.2 → 0.1.4`
+  （`pyproject.toml` + `core/__init__.py`，`test_version.py` 锁定）。
+  · 构建：`python -m build` → wheel **331 entries** / grammar TOML **148**（verilog 80 /
+  c 50 / c4 11 / yaml 7）；sdist **413 entries**（含 pyproject/README/LICENSE）；无
+  data-files 扁平化。独立 venv 安装冒烟：`tpc --version` → 0.1.4，format 0 /
+  lint(err→1) / lint(ok→0) / check 0，仓库外目录运行正常；`dist/SHA256SUMS.txt` 更新
+  （whl `05bffb56…`、sdist `154f5901…`），旧 0.1.0/0.1.1/0.1.3 工件清出 `dist/`。
+  · 排练：`ci_rehearsal` **16/16 PASS（含 wheel）**、pyright **0 errors**；全量
+  `pytest tests` **4587 passed / 7 skipped**；结构 S **829**（新增 0 / 变大 0）；
+  `--audit-map` 健康 OK。
+  · 文档同步：`PROGRESS.md`（发布前状态 + 0.1.3 并入分界线）、`ROADMAP.md`（主线 2
+  收口 → 0.1.5 待排期）、`docs/README.md`（版本增量单一来源行）、
+  `policy/release-checklist.md`（切段口径 + 去 TODO 旧引用）、
+  `docs/gaps/gap-verification-engineering.md`（去错误版本归属）。
+  · 顺带修 D9：`tools/affected_tests.py` 用 `PurePosixPath` 取路径段（跨平台门禁 E4）。
+  · **未执行**：tag / 推送 / PyPI 上传（等作者发布指令）。
 - **动态测试入口（按改动选测，日常快反馈档；审查侧 2026-11-11 定 P1）**：新增
   `tools/affected_tests.py` + 显式映射表 `tests/affected_map.toml`（可审计工件：改表出现在
   git diff 里，而非 pytest 插件式隐式魔法）。按 `git diff HEAD` + 未跟踪文件映射到测试子集：

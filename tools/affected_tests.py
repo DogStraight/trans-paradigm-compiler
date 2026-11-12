@@ -32,7 +32,7 @@ import time
 import tomllib
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 _REPO_ROOT = str(ROOT)
@@ -157,7 +157,9 @@ def _lang_runs(rule: dict, lang: str) -> list[tuple[str, ...]]:
 
 def _language_runs(path: str, map_data: dict) -> tuple[list[tuple[str, ...]], str] | None:
     """`grammar/<lang>/...` → (语言包测试 + smoke, 理由)；未知语言包 → None。"""
-    parts = path.split("/")
+    # git 输出是 POSIX 相对路径：用 PurePosixPath 取段，避免 Windows 上与 os 分隔符
+    # 假设打架（D9 跨平台门禁 E4：路径字面量 '/' split）。
+    parts = PurePosixPath(path).parts
     lang = parts[1] if len(parts) > 1 else ""
     if not lang or not (ROOT / "tests" / "languages" / lang).is_dir():
         return None
