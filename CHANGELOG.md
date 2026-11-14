@@ -38,9 +38,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   → Linux 的 `structural_score.py --compare` 直接 `[SKIP]` SystemExit 红（实测 run
   43622599533：Windows 3 个 test job 绿、Linux 3 个红）；Windows 则因默认 pwsh **不传播
   中间命令非零退出码**，`[FAIL] compute_cyclomatic_complexity` 后仍被 `feature_sites compare`
-  的成功码覆盖成绿（假绿）。修法：CI 安装并钉 `brokk-bifrost==0.11.4`（与结构基线录制版本
-  一致）跑 D2；Install package / Policy checks / Structural-scatter 等多命令步骤统一
-  `shell: bash`（`-e` 语义）；`policy/bifrost_audit.md` 记 CI 例外。
+  的成功码覆盖成绿（假绿）。修法：CI 在 **Windows** 安装并钉 `brokk-bifrost==0.11.4`
+  （与结构基线录制版本一致）跑 D2 结构 ratchet；Linux runner 上该版本 `--tool` 报
+  `MCP initialization failed: connection closed: initialize request`（同轮实测），故
+  Linux 只跑 `feature_sites`（不依赖 bifrost），结构比较限 Windows 且不静默跳过；
+  Install package / Policy checks / Scatter 等多命令步骤统一 `shell: bash`（`-e` 语义）；
+  `policy/bifrost_audit.md` 记 CI 例外与平台限制。
 - **CI test 矩阵 yaml 回归（同日修）**：首轮远程 CI 暴露 `nightly.yml` 步骤名里的 `>10%`
   让 **yaml 包的 plain scalar
   不接受词中 `%`**，`tests/languages/yaml/test_yaml_plain.py::TestRealWorkflowFiles` 解析

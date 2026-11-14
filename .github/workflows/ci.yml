@@ -36,10 +36,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[test]"
 
-      - name: Install external structural auditor (bifrost 0.11.4)
+      - name: Install external structural auditor (bifrost 0.11.4, Windows)
         # D2 结构 ratchet 依赖 bifrost（policy/bifrost_audit.md，基线由 0.11.4 录）。
-        # 此前 CI 未装：Linux 上 structural_score 直接 SystemExit 红；Windows 上
-        # pwsh 不传播非零 ⇒ 结构性假绿。装 + 吞退出码两处一起修。
+        # 只在 Windows 装：0.11.4 的 Linux wheel 在 runner 上 `--tool` 报
+        # "MCP initialization failed"（实测 run 43626467517），故 D2 结构比较
+        # 只在 Windows 执行；Linux 仍跑 feature_sites（不依赖 bifrost）。
+        if: runner.os == 'Windows'
         shell: bash
         run: |
           python -m pip install "brokk-bifrost==0.11.4"
@@ -106,14 +108,19 @@ jobs:
           # 异常卫生：宽异常必须写理由、禁裸 except（模型最高频的静默缺陷）
           python policy/check_exception_hygiene.py --strict
 
-      - name: Structural / scatter ratchet (D2 门禁)
-        # 结构欠账分与功能散点：**新增即回归**（不是"总分下降就算过"——那样会把
-        # 欠账洗掉）。口径见 policy/structural_budget.md、gap-feature-scatter.md。
-        # shell: bash —— 上一轮 CI 暴露：Windows pwsh 下 structural_score 报 FAIL 后
-        # 仍被 feature_sites 的成功退出码覆盖成绿（中间失败被吞）；统一 -e 语义。
+      - name: Structural ratchet (D2; bifrost, Windows-only)
+        # 结构欠账分：**新增即回归**（不是"总分下降就算过"）。口径见
+        # policy/structural_budget.md。依赖外部 bifrost（见上一步注：0.11.4
+        # 的 Linux wheel 在 runner 上不可用 ⇒ 只在 Windows 执行，勿静默跳过）。
+        if: runner.os == 'Windows'
         shell: bash
         run: |
           python tools/structural_score.py --compare
+
+      - name: Scatter ratchet (D2; 各平台)
+        # 功能散点：与 bifrost 无关，Linux/Windows 都跑（同一份 Python 统计）。
+        shell: bash
+        run: |
           python tools/feature_sites.py compare
 
       - name: Redundant-code ratchet (D10 kept 基线)

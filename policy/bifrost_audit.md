@@ -1,10 +1,14 @@
 # Bifrost 外部审计规程（按需/人工跑，不进日常门禁）
 
-> **CI 例外（2026-11-15）**：`.github/workflows/ci.yml` 的 test job 安装
+> **CI 例外（2026-11-15）**：`.github/workflows/ci.yml` 的 test job 在 **Windows** 安装
 > `brokk-bifrost==0.11.4`（与结构基线录制版本一致），**只**为
-> `tools/structural_score.py --compare`（D2 结构 ratchet）提供外部裁判；
-> 审计类扫描仍按需/人工，不进日常门禁。此前 CI 未装：Linux 上直接 SystemExit 红，
-> Windows 上因 pwsh 不传播中间退出码而假绿——已同时修（安装 + `shell: bash`）。
+> `tools/structural_score.py --compare`（D2 结构 ratchet）提供外部裁判；审计类扫描仍按需/人工，
+> 不进日常门禁。此前 CI 未装：Linux 上直接 SystemExit 红，Windows 上因 pwsh 不传播中间退出码
+> 而假绿——已同时修（安装 + `shell: bash`）。
+> **平台限制（实测 run 43626467517）**：0.11.4 的 Linux wheel 在 GitHub runner 上
+> `--tool` 报 `MCP initialization failed: connection closed: initialize request` ⇒ D2 结构
+> 比较只在 Windows leg 执行；Linux leg 仍跑 `feature_sites compare`（同一份 Python 统计）。
+> 本机（Windows）与 `ci_rehearsal` 两条路都跑完整 D2。
 >
 > 定位：**外部裁判**（Brokk 的静态分析工具箱，Apache-2.0 开放核心，Rust）。
 > 仓内门禁管"行为正确性与一致性"（测试 / 真实语料对拍 / 诊断基线 / 隔离档）；
