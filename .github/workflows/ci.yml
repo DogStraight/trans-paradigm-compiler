@@ -29,9 +29,21 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package (editable + test deps)
+        # bash：Windows 默认 pwsh 不传播中间命令的非零退出码（只认最后一条），
+        # 多命令步骤必须统一 bash -e 语义，否则中间门禁失败会被吞（D2 已实证）。
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[test]"
+
+      - name: Install external structural auditor (bifrost 0.11.4)
+        # D2 结构 ratchet 依赖 bifrost（policy/bifrost_audit.md，基线由 0.11.4 录）。
+        # 此前 CI 未装：Linux 上 structural_score 直接 SystemExit 红；Windows 上
+        # pwsh 不传播非零 ⇒ 结构性假绿。装 + 吞退出码两处一起修。
+        shell: bash
+        run: |
+          python -m pip install "brokk-bifrost==0.11.4"
+          bifrost --version
 
       - name: Run full test suite with coverage gate (Linux)
         # 2026-11-12 实测：`-n auto --cov` 在 4 核 runner 上，真实语料 diag 基线
@@ -77,6 +89,7 @@ jobs:
           python -m pytest -m smoke -q
 
       - name: Policy checks (约定即门禁)
+        shell: bash  # 多命令步骤：bash -e（Windows 默认 pwsh 会吞中间失败）
         # --strict-doc：R3（Doc: 头）升 gate——引擎新文件必须带 Doc: 反向引用
         # --strict-import：R4 升 gate——引擎代码不得直接 import grammar.<lang>
         #   插件（P2.5 插件回调能力化完成：pipeline 直连已清零）
@@ -96,6 +109,9 @@ jobs:
       - name: Structural / scatter ratchet (D2 门禁)
         # 结构欠账分与功能散点：**新增即回归**（不是"总分下降就算过"——那样会把
         # 欠账洗掉）。口径见 policy/structural_budget.md、gap-feature-scatter.md。
+        # shell: bash —— 上一轮 CI 暴露：Windows pwsh 下 structural_score 报 FAIL 后
+        # 仍被 feature_sites 的成功退出码覆盖成绿（中间失败被吞）；统一 -e 语义。
+        shell: bash
         run: |
           python tools/structural_score.py --compare
           python tools/feature_sites.py compare

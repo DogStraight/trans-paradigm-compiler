@@ -1,5 +1,11 @@
 # Bifrost 外部审计规程（按需/人工跑，不进日常门禁）
 
+> **CI 例外（2026-11-15）**：`.github/workflows/ci.yml` 的 test job 安装
+> `brokk-bifrost==0.11.4`（与结构基线录制版本一致），**只**为
+> `tools/structural_score.py --compare`（D2 结构 ratchet）提供外部裁判；
+> 审计类扫描仍按需/人工，不进日常门禁。此前 CI 未装：Linux 上直接 SystemExit 红，
+> Windows 上因 pwsh 不传播中间退出码而假绿——已同时修（安装 + `shell: bash`）。
+>
 > 定位：**外部裁判**（Brokk 的静态分析工具箱，Apache-2.0 开放核心，Rust）。
 > 仓内门禁管"行为正确性与一致性"（测试 / 真实语料对拍 / 诊断基线 / 隔离档）；
 > Bifrost 管**结构面信号**：改动影响面、到达的测试、循环内昂贵操作、异常吞吃、

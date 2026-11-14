@@ -34,7 +34,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   （此前 tag 推不触发任何工作流）；加 `workflow_dispatch` 便于手动验证。本地
   `-n auto`/`timeout=120` 不变。
   验证：workflow YAML 可解析；本地 `pytest tests/policy -n 2 --timeout=600 --junitxml` 718 passed。
-  首轮远程 CI 暴露另一处真缺陷：`nightly.yml` 步骤名里的 `>10%` 让 **yaml 包的 plain scalar
+- **CI D2 结构 ratchet 在 runner 上假红/假绿（2026-11-15 修）**：CI 未安装外部 `bifrost`
+  → Linux 的 `structural_score.py --compare` 直接 `[SKIP]` SystemExit 红（实测 run
+  43622599533：Windows 3 个 test job 绿、Linux 3 个红）；Windows 则因默认 pwsh **不传播
+  中间命令非零退出码**，`[FAIL] compute_cyclomatic_complexity` 后仍被 `feature_sites compare`
+  的成功码覆盖成绿（假绿）。修法：CI 安装并钉 `brokk-bifrost==0.11.4`（与结构基线录制版本
+  一致）跑 D2；Install package / Policy checks / Structural-scatter 等多命令步骤统一
+  `shell: bash`（`-e` 语义）；`policy/bifrost_audit.md` 记 CI 例外。
+- **CI test 矩阵 yaml 回归（同日修）**：首轮远程 CI 暴露 `nightly.yml` 步骤名里的 `>10%`
+  让 **yaml 包的 plain scalar
   不接受词中 `%`**，`tests/languages/yaml/test_yaml_plain.py::TestRealWorkflowFiles` 解析
   真实 workflow 失败（CI 6 个 test job 全红，junit 工件定位）；已改步骤名避开 `%`，
   该字符集边界归 yaml 包（触发 = 真实 workflow/配置出现词中 `%` 时补 lexer 字符集）。
