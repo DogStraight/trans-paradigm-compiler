@@ -3,10 +3,17 @@ name: CI
 on:
   push:
     branches: [main, master, dev, feature]
+    # 发布 tag 也跑 CI：此前推 tag 不触发任何工作流，0.1.4 的发布提交只靠本地
+    # ci_rehearsal 验证（2026-11-12 实测：两个 release push 的 CI test 矩阵被
+    # xdist worker 超时挂起 6h 后取消，发布因此少了远程复核）。
+    tags: ["v*"]
   pull_request:
+  workflow_dispatch:   # 手动触发（验证 CI 修复/重跑，不必造 push）
 
 jobs:
   test:
+    # 防 6h 挂起（GitHub 默认 job 超时 360min）：任何一步真挂住，90 分钟内必红。
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -26,16 +33,39 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[test]"
 
-      - name: Run full test suite with coverage gate
-        # -n auto：pytest-xdist 进程级并行（test extra 已含；global_state
-        # 进程内隔离天然兼容）。实测 ~3x 加速（300s → 110s，16 逻辑核）。
-        # PYTHONHASHSEED=0：日常档固定哈希种子（失败可复现）；随机种子巡检
-        # 档在 nightly（Python 默认每进程随机）——集合/字典序敏感的问题只在
-        # 随机种子下暴露，两档互补。
+      - name: Run full test suite with coverage gate (Linux)
+        # 2026-11-12 实测：`-n auto --cov` 在 4 核 runner 上，真实语料 diag 基线
+        # 测试（setup ~72s/本地，争抢下 >120s）触发 pytest-timeout 的 thread
+        # 方法 → worker 崩溃（"Not properly terminated"）→ xdist 挂到 job 超时。
+        # 修法：CI 降到 -n 2（内存/CPU 争抢减半）+ timeout 600 + POSIX 用
+        # signal 方法（线程方法在 xdist 下会杀 worker）+ step 级 60min 兜底。
+        # 本地 addopts 的 -n auto / timeout=120 不变。
+        if: runner.os == 'Linux'
+        timeout-minutes: 60
         env:
           PYTHONHASHSEED: "0"
         run: |
-          python -m pytest tests -q -n auto --cov
+          python -m pytest tests -q -n 2 --timeout=600 --timeout-method=signal \
+            --cov --junitxml=pytest-results.xml --durations=10
+
+      - name: Run full test suite with coverage gate (Windows)
+        # Windows 无 SIGALRM ⇒ signal 方法不可用；thread 方法 + 600s 阈值，
+        # 配合 -n 2 降争抢，避免长耗时真实语料测试被 120s 误杀。
+        if: runner.os == 'Windows'
+        timeout-minutes: 60
+        env:
+          PYTHONHASHSEED: "0"
+        run: |
+          python -m pytest tests -q -n 2 --timeout=600 `
+            --cov --junitxml=pytest-results.xml --durations=10
+
+      - name: Upload pytest results (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results-${{ matrix.os }}-${{ matrix.python-version }}
+          path: pytest-results.xml
+          if-no-files-found: ignore
 
       - name: Shuffled-order smoke (跨文件顺序敏感早发现)
         # 文件级乱序（固定种子 → 可复现）：文件间顺序依赖的隔离缺口当场变红，

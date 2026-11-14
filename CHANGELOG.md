@@ -21,6 +21,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 > 未发布变更（下一版）。
 
+### Fixed
+- **CI test 矩阵 6h 挂起（2026-11-12 实测，2026-11-15 修）**：两个 0.1.4 release push 的 CI
+  `test` 矩阵在 `Run full test suite` 步骤挂满 6h 后被取消（run 43199053783 / 43199334331；
+  wheel-install 矩阵全绿，nightly 顺序档 11-12~14 全 PASS）。日志根因：
+  `tests/policy/test_diag_baseline{,_c}.py` 的真实语料 setup 本地 ~72s、4 核 runner 并行争抢下
+  >120s → pytest-timeout 的 thread 方法杀 worker（`[gw2] node down: Not properly terminated`）
+  → xdist master 一直等，直到 job 默认 360min 超时；发布因此只有本地 `ci_rehearsal` 证据。
+  修法：CI test 步骤改 `-n 2 + --timeout=600`（Linux 另加 `--timeout-method=signal`，
+  Windows 无 SIGALRM 保持 thread）+ job/step `timeout-minutes`（90/60）兜底 + 失败上传
+  `pytest-results.xml`；nightly job 加 120min 超时；`push.tags: v*` 使发布 tag 也触发 CI
+  （此前 tag 推不触发任何工作流）；加 `workflow_dispatch` 便于手动验证。本地
+  `-n auto`/`timeout=120` 不变。
+  验证：workflow YAML 可解析；本地 `pytest tests/policy -n 2 --timeout=600 --junitxml` 718 passed。
+
 ### Changed
 - **gap 档收口清理（2026-11-12）**：按"只记当前仍成立的结论"删除 4 个已收口且已被替代的
   档：`gap-c-typedef-cast`（#49 已实施，决策在 ADR-0024）、`gap-preprocessor-macro-timeline`

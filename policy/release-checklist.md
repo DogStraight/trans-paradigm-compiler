@@ -25,8 +25,11 @@ python -m pytest tests/ -q --cov --cov-report=term # 覆盖率 ≥ fail_under（
 > 或**一条命令**跑完 CI 的全部步骤（含 pyright strict / edge / fuzz / wheel 安装冒烟）：
 > `python tools/ci_rehearsal.py`。结论三态 **PASS / FAIL / INCOMPLETE**——
 > **SKIP（本机缺 pyright 等）与「一步都没跑」都不算绿**，整体判 INCOMPLETE 并 exit 2。
-> ⚠ CI 的触发是 `push.branches` + `pull_request`，**推 tag 不触发 CI**；长期不推送期间
-> 门禁等于没跑（已实测累积 4 类红）——**打标前必须先跑本工具**。
+> ⚠ CI 触发 = `push`（`branches` + **`tags: v*`**，2026-11-15 起）+ `pull_request`；
+> tag 推现在也会触发一次 CI。**但不得把"CI 有跑"当成"门禁已过"**：2026-11-12 实测两个
+> release push 的 CI test 矩阵在 xdist 并行下被 pytest-timeout thread 杀 worker → 挂 6h
+> 后取消（wheel-install 全绿、nightly 顺序档全绿）；已修为 `-n 2 + timeout 600 +
+> Linux signal + job/step 超时 + junit 工件`。**打标前仍必须先跑本工具（ci_rehearsal）。**
 
 ## 2. 版本号核对
 

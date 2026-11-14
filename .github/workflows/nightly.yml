@@ -16,6 +16,8 @@ on:
 
 jobs:
   long-run:
+    # 防挂起（GitHub 默认 360min）：夜跑整体应在 ~40min 内完成，120min 兜底。
+    timeout-minutes: 120
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
