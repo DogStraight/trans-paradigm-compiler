@@ -34,6 +34,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   （此前 tag 推不触发任何工作流）；加 `workflow_dispatch` 便于手动验证。本地
   `-n auto`/`timeout=120` 不变。
   验证：workflow YAML 可解析；本地 `pytest tests/policy -n 2 --timeout=600 --junitxml` 718 passed。
+  首轮远程 CI 暴露另一处真缺陷：`nightly.yml` 步骤名里的 `>10%` 让 **yaml 包的 plain scalar
+  不接受词中 `%`**，`tests/languages/yaml/test_yaml_plain.py::TestRealWorkflowFiles` 解析
+  真实 workflow 失败（CI 6 个 test job 全红，junit 工件定位）；已改步骤名避开 `%`，
+  该字符集边界归 yaml 包（触发 = 真实 workflow/配置出现词中 `%` 时补 lexer 字符集）。
 
 ### Changed
 - **gap 档收口清理（2026-11-12）**：按"只记当前仍成立的结论"删除 4 个已收口且已被替代的

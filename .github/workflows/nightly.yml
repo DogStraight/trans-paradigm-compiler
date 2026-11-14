@@ -40,7 +40,7 @@ jobs:
         run: |
           python tests/edge/run_edge.py
 
-      - name: 性能基线 ratchet（校准归一化；>10% 回归 / 场景集变化即红）
+      - name: 性能基线 ratchet（校准归一化；回归超 10 个百分点 / 场景集变化即红）
         # 口径见 tests/perf/README.md：不放进 PR CI（计时噪声假红）；夜间跑真实场景。
         run: |
           python tests/perf/run_perf.py --compare
