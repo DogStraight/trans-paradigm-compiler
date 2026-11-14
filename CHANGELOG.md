@@ -47,8 +47,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **CI test 矩阵 yaml 回归（同日修）**：首轮远程 CI 暴露 `nightly.yml` 步骤名里的 `>10%`
   让 **yaml 包的 plain scalar
   不接受词中 `%`**，`tests/languages/yaml/test_yaml_plain.py::TestRealWorkflowFiles` 解析
-  真实 workflow 失败（CI 6 个 test job 全红，junit 工件定位）；已改步骤名避开 `%`，
-  该字符集边界归 yaml 包（触发 = 真实 workflow/配置出现词中 `%` 时补 lexer 字符集）。
+  真实 workflow 失败（CI 6 个 test job 全红，junit 工件定位）；随后又暴露同一根因的第二形态
+  （step name 中的 ASCII `;`，run 43629673113）。**根治**：`grammar/yaml/base/_token.toml`
+  的 `[plain].continuation` 补 `"%"` 与 `";"`（真实 plain scalar 合法字符；`%` 行首指令
+  语义不变），`test_yaml_plain.py` 增两例（含中文/括号混合）锁住；两个 workflow 不改语义。
 
 ### Changed
 - **gap 档收口清理（2026-11-12）**：按"只记当前仍成立的结论"删除 4 个已收口且已被替代的

@@ -57,6 +57,16 @@ class TestPlainValueForms:
         ast = _parse("hash: abc#def\n", yaml)
         assert ast.sub_node[0].value.content == "abc#def"
 
+    def test_percent_inside_word(self, yaml):
+        """100%——ASCII % 是合法 plain scalar 字符（CI workflow step name 实测）。"""
+        ast = _parse("name: 回归超 10%\n", yaml)
+        assert ast.sub_node[0].value.content == "回归超 10%"
+
+    def test_semicolon_inside_word(self, yaml):
+        """a;b——ASCII ; 是合法 plain scalar 字符（workflow step name 实测）。"""
+        ast = _parse("name: run (D2; windows)\n", yaml)
+        assert ast.sub_node[0].value.content == "run (D2; windows)"
+
     def test_trailing_comment(self, yaml):
         """' #' 前终止，注释独立。"""
         ast = _parse("port: 8080 # note\n", yaml)
